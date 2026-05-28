@@ -1,0 +1,162 @@
+package queue
+
+import (
+	"context"
+	"encoding/json"
+	"time"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+)
+
+const (
+	WorkQueue  = "pages"
+	DeadFanout = "pages_dlx"
+	DeadQueue  = "pages_dead"
+	ResultsEx  = "page_checked"
+	QReport    = "q.report"
+	QArchive   = "q.archive"
+	QAggregate = "q.aggregate"
+)
+
+type PageJob struct {
+	JobID      string `json:"job_id"`
+	URL        string `json:"url"`
+	Depth      int    `json:"depth"`
+	RetryCount int    `json:"retry_count"`
+}
+
+// JSON-encoded result + SEO fields avoid importing store/seo here (would cycle)
+type PageChecked struct {
+	JobID   string          `json:"job_id"`
+	URL     string          `json:"url"`
+	Depth   int             `json:"depth"`
+	IsAlive bool            `json:"is_alive"`
+	Result  json.RawMessage `json:"result"`
+	SEO     json.RawMessage `json:"seo"`
+}
+
+type Queue struct {
+	conn *amqp.Connection
+	ch   *amqp.Channel
+}
+
+func New(url string) (*Queue, error) {
+	conn, err := amqp.Dial(url)
+	if err != nil {
+		return nil, err
+	}
+	ch, err := conn.Channel()
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	q := &Queue{conn: conn, ch: ch}
+	if err := q.declareTopology(); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return q, nil
+}
+
+func (q *Queue) Close() error {
+	return q.conn.Close()
+}
+
+// idempotent — safe to run every startup
+func (q *Queue) declareTopology() error {
+	// dead-letter side
+	if err := q.ch.ExchangeDeclare(DeadFanout, "fanout", true, false, false, false, nil); err != nil {
+		return err
+	}
+	if _, err := q.ch.QueueDeclare(DeadQueue, true, false, false, false, nil); err != nil {
+		return err
+	}
+	if err := q.ch.QueueBind(DeadQueue, "", DeadFanout, false, nil); err != nil {
+		return err
+	}
+
+	// work queue → dead-letters into DeadFanout on nack(requeue=false)
+	workArgs := amqp.Table{"x-dead-letter-exchange": DeadFanout}
+	if _, err := q.ch.QueueDeclare(WorkQueue, true, false, false, false, workArgs); err != nil {
+		return err
+	}
+
+	// results fanout + bound consumer queues
+	if err := q.ch.ExchangeDeclare(ResultsEx, "fanout", true, false, false, false, nil); err != nil {
+		return err
+	}
+	for _, name := range []string{QReport, QArchive, QAggregate} {
+		if _, err := q.ch.QueueDeclare(name, true, false, false, false, nil); err != nil {
+			return err
+		}
+		if err := q.ch.QueueBind(name, "", ResultsEx, false, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (q *Queue) PublishPageJob(job PageJob) error {
+	body, err := json.Marshal(job)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// default exchange ("") + routing key = queue name routes straight to that queue
+	return q.ch.PublishWithContext(ctx,
+		"", WorkQueue, false, false,
+		amqp.Publishing{
+			ContentType:  "application/json",
+			DeliveryMode: amqp.Persistent,
+			Body:         body,
+		},
+	)
+}
+
+func (q *Queue) PublishResult(r PageChecked) error {
+	body, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// fanout ignores routing key
+	return q.ch.PublishWithContext(ctx,
+		ResultsEx, "", false, false,
+		amqp.Publishing{
+			ContentType:  "application/json",
+			DeliveryMode: amqp.Persistent,
+			Body:         body,
+		},
+	)
+}
+
+// Consume opens its own channel (per concurrency rule) with prefetch set for backpressure.
+// Manual ack throughout: caller acks via d.Ack(false) / d.Nack(false, requeue).
+func (q *Queue) Consume(queueName string, prefetch int) (<-chan amqp.Delivery, *amqp.Channel, error) {
+	ch, err := q.conn.Channel()
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := ch.Qos(prefetch, 0, false); err != nil {
+		ch.Close()
+		return nil, nil, err
+	}
+	deliveries, err := ch.Consume(
+		queueName,
+		"",    // consumer tag (auto)
+		false, // autoAck
+		false, // exclusive
+		false, // noLocal
+		false, // noWait
+		nil,
+	)
+	if err != nil {
+		ch.Close()
+		return nil, nil, err
+	}
+	return deliveries, ch, nil
+}

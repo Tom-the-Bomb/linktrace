@@ -132,4 +132,13 @@ func (c *Cache) MarkSeen(jobID, url string) (bool, error) {
 }
 
 // # of URLS that have been seen / job
-func (c *Cache) SeenCount(jobID string) error {
+func (c *Cache) SeenCount(jobID string) (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	size, err := c.rdb.SCard(ctx, seenKey(jobID)).Result()
+	if err != nil {
+		return 0, err
+	}
+	return int(size), nil
+}

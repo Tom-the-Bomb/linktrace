@@ -18,3 +18,5 @@ web/.env
 .idea/
 .vscode/
 *.swp
+
+guide

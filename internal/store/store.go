@@ -53,13 +53,19 @@ type SEOAudit struct {
 	KeywordInTitle        bool
 	KeywordInH1           bool
 	KeywordInURL          bool
-	Issues                []string
+	Issues                []Issue
 	Score                 int
 }
 
 type KeywordCount struct {
 	Term  string `json:"term"`
 	Count int    `json:"count"`
+}
+
+type Issue struct {
+	Code     string `json:"code"`
+	Message  string `json:"message"`
+	Severity string `json:"severity"` // "error" | "warning" | "info"
 }
 
 type CategoryReport struct {
@@ -74,7 +80,7 @@ type Store struct {
 	db *sql.DB
 }
 
-func nullIfEmpty(s string) interface{} {
+func nullIfEmpty(s string) any {
 	if s == "" {
 		return nil
 	}
