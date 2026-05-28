@@ -1,0 +1,20 @@
+# --- secrets / local environment ---
+.env
+*.local
+
+# --- Go ---
+/bin/
+*.exe
+*.test
+*.out
+
+# --- frontend (React + Vite) ---
+web/node_modules/
+web/dist/
+web/.env
+
+# --- editor / OS ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
