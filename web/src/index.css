@@ -1,0 +1,142 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    background: #06080f;
+    color: theme('colors.paper');
+    min-height: 100dvh;
+    font-feature-settings: 'ss01', 'cv11';
+  }
+  /* the display serif gets a subtle italic-like axis when used at big sizes */
+  .display {
+    font-family: theme('fontFamily.display');
+    font-optical-sizing: auto;
+    font-variation-settings:
+      'opsz' 100,
+      'SOFT' 100,
+      'WONK' 0;
+    letter-spacing: -0.02em;
+  }
+
+  /* slow drifting blobs for the hero, staggered durations + offsets so they never align */
+  @keyframes blob-drift-a {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+    33% {
+      transform: translate(40px, -30px) scale(1.08);
+    }
+    66% {
+      transform: translate(-30px, 50px) scale(0.95);
+    }
+  }
+  @keyframes blob-drift-b {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+    50% {
+      transform: translate(-60px, 40px) scale(1.1);
+    }
+  }
+  @keyframes blob-drift-c {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+    33% {
+      transform: translate(-40px, -50px) scale(1.05);
+    }
+    66% {
+      transform: translate(50px, 30px) scale(0.92);
+    }
+  }
+  .bg-blob-a {
+    animation: blob-drift-a 22s ease-in-out infinite;
+  }
+  .bg-blob-b {
+    animation: blob-drift-b 28s ease-in-out infinite;
+  }
+  .bg-blob-c {
+    animation: blob-drift-c 25s ease-in-out infinite;
+  }
+
+  /* respect users who don't want motion */
+  @media (prefers-reduced-motion: reduce) {
+    .bg-blob-a,
+    .bg-blob-b,
+    .bg-blob-c {
+      animation: none;
+    }
+  }
+
+  /* blinking cursor for the typing placeholder. steps() gives a true on/off blink
+     (no fade), matching a real terminal cursor. */
+  @keyframes cursor-blink {
+    0%,
+    49% {
+      opacity: 1;
+    }
+    50%,
+    100% {
+      opacity: 0;
+    }
+  }
+  .cursor-blink {
+    animation: cursor-blink 1.06s steps(2, jump-none) infinite;
+  }
+}
+
+@layer components {
+  /* card: a single hairline rule + soft shadow, no heavy borders, no rounded squircles */
+  .card {
+    @apply relative border border-ink-500/70 bg-ink-700/60 shadow-card backdrop-blur-sm;
+  }
+  .panel {
+    @apply border-y border-ink-500/70 bg-ink-700/40;
+  }
+  .hairline {
+    @apply border-t border-ink-500/70;
+  }
+  .eyebrow {
+    @apply font-mono text-[10px] uppercase tracking-widest text-accent;
+  }
+  .section-num {
+    @apply font-mono text-[10px] uppercase tracking-widest text-ink-300;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[11px] font-medium;
+  }
+  /* standard text input: hairline border, mono text, accent focus ring */
+  .input {
+    @apply border border-ink-500 bg-ink-800 font-mono text-paper placeholder:text-ink-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40;
+  }
+  /* low-emphasis mono action: lights up to accent on hover */
+  .btn-ghost {
+    @apply font-mono text-[10px] uppercase tracking-widest text-ink-300 transition hover:text-accent;
+  }
+  /* tables stay flat, hairline rows, lowercase tracked headers */
+  .data-table {
+    @apply min-w-full text-sm;
+  }
+  .data-table thead tr {
+    @apply border-b border-ink-500/70 text-left text-[10px] uppercase tracking-widest text-ink-300;
+  }
+  .data-table thead th {
+    @apply py-3 pr-3 font-mono font-normal;
+  }
+  .data-table tbody tr {
+    @apply border-b border-ink-500/40 transition-colors last:border-0 hover:bg-ink-600/40;
+  }
+  .data-table tbody td {
+    @apply py-3 pr-3;
+  }
+}

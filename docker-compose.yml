@@ -10,6 +10,7 @@ services:
       MYSQL_USER: ${MYSQL_USER:-linktrace}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-linktrace}
     volumes:
+      - mysql_data:/var/lib/mysql
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
       test:
@@ -35,6 +36,8 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 5s
@@ -51,3 +54,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+volumes:
+  mysql_data:
+  rabbitmq_data:

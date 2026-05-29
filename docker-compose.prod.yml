@@ -1,0 +1,118 @@
+# Production stack: infra + Go services + Caddy (TLS + static frontend + API proxy).
+# Run on the droplet with:
+#     docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Security note: only Caddy publishes ports (80/443). MySQL/Redis/RabbitMQ and the
+# API are reachable ONLY on the internal docker network — never from the internet.
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: linktrace-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-linktrace}
+      MYSQL_USER: ${MYSQL_USER:-linktrace}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # schema.sql only runs on a FRESH volume (first boot). See guide for re-applying.
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: linktrace-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-linktrace}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: linktrace-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: linktrace-api
+    restart: unless-stopped
+    environment:
+      MYSQL_DSN: "${MYSQL_USER:-linktrace}:${MYSQL_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-linktrace}?parseTime=true"
+      REDIS_ADDR: "redis:6379"
+      RABBIT_URL: "amqp://${RABBITMQ_USER:-linktrace}:${RABBITMQ_PASS}@rabbitmq:5672/"
+      HTTP_ADDR: ":8080"
+      FRONTEND_ORIGIN: "https://${DOMAIN}"
+      COOKIE_SECURE: "true"
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: linktrace-worker
+    restart: unless-stopped
+    environment:
+      MYSQL_DSN: "${MYSQL_USER:-linktrace}:${MYSQL_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-linktrace}?parseTime=true"
+      REDIS_ADDR: "redis:6379"
+      RABBIT_URL: "amqp://${RABBITMQ_USER:-linktrace}:${RABBITMQ_PASS}@rabbitmq:5672/"
+      WORKER_COUNT: "${WORKER_COUNT:-50}"
+      MAX_PAGES: "${MAX_PAGES:-10000}"
+      MAX_DEPTH: "${MAX_DEPTH:-20}"
+      MAX_PER_CATEGORY: "${MAX_PER_CATEGORY:-1000}"
+      RATE_PER_MIN: "${RATE_PER_MIN:-1000}"
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  caddy:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        VITE_API_BASE: /api
+    container_name: linktrace-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - caddy_data:/data      # persists TLS certs across restarts (avoids LE rate limits)
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  mysql_data:
+  rabbitmq_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

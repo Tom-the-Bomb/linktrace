@@ -1,0 +1,24 @@
+# Global options. ACME_EMAIL is where Let's Encrypt sends cert-expiry notices.
+{
+	email {$ACME_EMAIL}
+}
+
+# DOMAIN is injected by docker-compose (e.g. linktrace.example.com).
+# Caddy automatically obtains + renews an HTTPS certificate for it.
+{$DOMAIN} {
+	encode gzip zstd
+
+	# API: strip the /api prefix, then forward to the Go service.
+	# /api/check  ->  api:8080/check
+	handle_path /api/* {
+		reverse_proxy api:8080
+	}
+
+	# Frontend: serve the built SPA. try_files falls back to index.html so
+	# client-side routes (react-router) work on hard refresh / deep links.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

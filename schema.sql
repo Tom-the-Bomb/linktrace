@@ -1,7 +1,7 @@
 
 CREATE TABLE IF NOT EXISTS users (
     id BINARY(16) PRIMARY KEY,
-    email VARCHAR(255) NOT NULL UNIQUE,
+    username VARCHAR(64) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS jobs (
         'crawling',
         'checking',
         'complete',
-        'failed'
+        'failed',
+        'stopped'
     ) DEFAULT 'pending',
     total_pages INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -58,7 +59,7 @@ CREATE TABLE IF NOT EXISTS seo_audits (
     h1_count INT DEFAULT 0,
     h2_count INT DEFAULT 0,
     h3_count INT DEFAULT 0,
-    canonical_url TEXT,
+    canonical TEXT,
     og_tags JSON,
     twitter_tags JSON,
     jsonld_count INT DEFAULT 0,
@@ -84,15 +85,44 @@ CREATE TABLE IF NOT EXISTS site_audits (
     job_id BINARY(16) PRIMARY KEY,
     robots_found BOOLEAN DEFAULT FALSE,
     robots_disallow_all BOOLEAN DEFAULT FALSE,
-    crawled_pages INT DEFAULT 0,
+    crawl_delay INT DEFAULT 0,
     sitemap_found BOOLEAN DEFAULT FALSE,
     sitemap_url TEXT,
     sitemap_url_count INT DEFAULT 0,
     sitemap_urls JSON,
     is_https BOOLEAN DEFAULT FALSE,
+    https_redirect BOOLEAN DEFAULT FALSE,
     cert_valid BOOLEAN DEFAULT FALSE,
-    www_canonical BOOLEAN DEFAULT FALSE,
+    www_canonical VARCHAR(20) DEFAULT 'inconsistent',
     checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (job_id) REFERENCES jobs(id)
+);
+
+-- 1 row per discovered internal link: source page -> target page; powers the graph view
+CREATE TABLE IF NOT EXISTS links (
+    job_id BINARY(16) NOT NULL,
+    source_url TEXT NOT NULL,
+    target_url TEXT NOT NULL,
+    -- short hashes let us index TEXT columns cheaply for de-dupe
+    source_hash CHAR(40) AS (SHA1(source_url)) STORED,
+    target_hash CHAR(40) AS (SHA1(target_url)) STORED,
+
+    PRIMARY KEY (job_id, source_hash, target_hash),
+    FOREIGN KEY (job_id) REFERENCES jobs(id),
+    INDEX idx_job (job_id)
+);
+
+-- 1 row per (job, URL category): rolled-up rot% and avg SEO score, rewritten by the aggregator
+CREATE TABLE IF NOT EXISTS category_reports (
+    job_id BINARY(16) NOT NULL,
+    category VARCHAR(255) NOT NULL,
+    total_pages INT DEFAULT 0,
+    rotten_pages INT DEFAULT 0,
+    avg_seo_score INT DEFAULT 0,
+    pattern VARCHAR(32),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (job_id, category),
     FOREIGN KEY (job_id) REFERENCES jobs(id)
 );

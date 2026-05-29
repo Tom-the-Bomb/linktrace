@@ -1,3 +1,5 @@
+// Package crawler extracts internal links from crawled HTML and canonicalizes URLs so the
+// same page is never queued twice. Private helpers live in utils.go.
 package crawler
 
 import (
@@ -7,24 +9,34 @@ import (
 	"golang.org/x/net/html"
 )
 
-func resolve(base *url.URL, href string) string {
-	u, err := base.Parse(href)
+// NormalizeURL parses a raw URL string and returns its canonical form. Exported so callers
+// outside this package (the API seeding the frontier from a sitemap, the seed URL itself)
+// can match the same canonical form the crawler uses when it discovers links in HTML.
+// Returns the input unchanged if parsing fails.
+func NormalizeURL(raw string) string {
+	u, err := url.Parse(raw)
 	if err != nil {
-		return ""
+		return raw
 	}
-	// skip mailto:, tel:, javascript:, etc.
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return ""
-	}
-	// ensure same domain
-	if u.Host != base.Host {
-		return ""
-	}
-	// /a and /a#section are the same page
-	u.Fragment = ""
-	return u.String()
+	return canonicalize(u, false)
 }
 
+// CanonicalKey returns the dedup key for a URL: its normal canonical form with the entire
+// query string dropped. Every URL sharing a path collapses to one key regardless of its
+// query params — /endpoint, /endpoint?a=1, and /endpoint?a=1&b=2 are all the same page.
+// This governs deduplication ONLY; the crawler still fetches and records the first real URL
+// it saw (query intact), so we never request a stripped URL that might 404. Returns input
+// unchanged if parsing fails.
+func CanonicalKey(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	return canonicalize(u, true)
+}
+
+// ExtractLinks parses page HTML and returns the deduped, canonicalized, same-host links it
+// discovers in <a href>. Off-host, non-http, and asset/framework paths are dropped.
 func ExtractLinks(body []byte, base *url.URL) []string {
 	doc, err := html.Parse(bytes.NewReader(body))
 	if err != nil {
@@ -50,17 +62,4 @@ func ExtractLinks(body []byte, base *url.URL) []string {
 	}
 	walk(doc)
 	return dedupe(links)
-}
-
-// removes duplicate URLs, preserve order
-func dedupe(in []string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, s := range in {
-		if !seen[s] {
-			seen[s] = true
-			out = append(out, s)
-		}
-	}
-	return out
 }

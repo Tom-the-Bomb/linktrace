@@ -1,3 +1,6 @@
+// Package cache wraps Redis for the crawler's transient state: live progress counters, the
+// per-job seen-set, per-domain rate limits, category caps, cancellation flags, and sessions.
+// Key builders and small helpers live in utils.go.
 package cache
 
 import (
@@ -14,7 +17,9 @@ type Cache struct {
 
 const progressTTL = 2 * time.Hour
 const seenTTL = 1 * time.Hour
+const sessionTTL = 7 * 24 * time.Hour
 
+// New connects to Redis at addr and pings it to verify the connection.
 func New(addr string) (*Cache, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr: addr,
@@ -34,52 +39,65 @@ func (c *Cache) Close() error {
 	return c.rdb.Close()
 }
 
-func progressKey(id string) string {
-	return "progress:" + id
-}
-
-func seenKey(id string) string {
-	return "seen:" + id
-}
-
-func ratelimitKey(domain string) string {
-	return "ratelimit:" + domain
-}
-
-// adds `delta` to `field` of the progress hash for `jobID` and resets the TTL
-func (c *Cache) bump(jobId, field string, delta int64) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+// CreateSession maps a session id to a user id, expiring after sessionTTL.
+func (c *Cache) CreateSession(sid, userID string) error {
+	ctx, cancel := c.ctx()
 	defer cancel()
+	return c.rdb.Set(ctx, sessionKey(sid), userID, sessionTTL).Err()
+}
 
-	if err := c.rdb.HIncrBy(ctx, progressKey(jobId), field, delta).Err(); err != nil {
+// LookupSession returns the user id for a session id, or "" if missing/expired.
+// redis.Nil is treated as "no session", not an error (same pattern as sql.ErrNoRows).
+func (c *Cache) LookupSession(sid string) (string, error) {
+	ctx, cancel := c.ctx()
+	defer cancel()
+	userID, err := c.rdb.Get(ctx, sessionKey(sid)).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	return userID, err
+}
+
+// DeleteSession invalidates a session immediately (logout).
+func (c *Cache) DeleteSession(sid string) error {
+	ctx, cancel := c.ctx()
+	defer cancel()
+	return c.rdb.Del(ctx, sessionKey(sid)).Err()
+}
+
+// IncDiscovered bumps the discovered counter; called each time a new page is queued.
+func (c *Cache) IncDiscovered(jobID string) error {
+	return c.bump(jobID, "discovered", 1)
+}
+
+// IncChecked bumps the checked counter plus healthy or rotten; called once per crawled page.
+func (c *Cache) IncChecked(jobID string, isAlive bool) error {
+	if err := c.bump(jobID, "checked", 1); err != nil {
 		return err
 	}
-	return c.rdb.Expire(ctx, progressKey(jobId), progressTTL).Err()
+	field := "rotten"
+	if isAlive {
+		field = "healthy"
+	}
+	return c.bump(jobID, field, 1)
 }
 
-// called each time a NEW page is added to the queue
-func (c *Cache) IncDiscovered(jJobID string) error {
-	return c.bump(jJobID, "discovered", 1)
-}
-
-// reads all 4 counters at once and returns them in a map obj
+// GetProgress reads all four progress counters (discovered/checked/healthy/rotten) at once.
 func (c *Cache) GetProgress(jobID string) (map[string]int, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := c.ctx()
 	defer cancel()
 
 	vals, err := c.rdb.HGetAll(ctx, progressKey(jobID)).Result()
-
 	if err != nil {
 		return nil, err
 	}
 
 	out := map[string]int{
 		"discovered": 0,
-		"queued":     0,
-		"crawled":    0,
-		"errored":    0,
+		"checked":    0,
+		"healthy":    0,
+		"rotten":     0,
 	}
-
 	for k, v := range vals {
 		if i, err := strconv.Atoi(v); err == nil {
 			out[k] = i
@@ -88,52 +106,76 @@ func (c *Cache) GetProgress(jobID string) (map[string]int, error) {
 	return out, nil
 }
 
-// redis ratelimit system
-// checks whether or not our workers are still permitted to make requests to `domain`
-// increments per-domain counter and returns false once the limit is exceeded (per minute)
+// allowScript atomically increments the per-domain counter and, on the first hit, sets the
+// one-minute window. Doing INCR+EXPIRE in one Lua eval avoids the race where a crash between
+// the two commands leaves a counter that never expires (throttling that domain forever).
+var allowScript = redis.NewScript(`
+local n = redis.call('INCR', KEYS[1])
+if n == 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return n
+`)
+
+// Allow reports whether workers may still hit domain this minute, incrementing its counter.
+// Returns false once perMinute is exceeded within the rolling one-minute window.
 func (c *Cache) Allow(domain string, perMinute int) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := c.ctx()
 	defer cancel()
 
-	n, err := c.rdb.Incr(ctx, ratelimitKey(domain)).Result()
+	n, err := allowScript.Run(ctx, c.rdb, []string{ratelimitKey(domain)}, 60).Int64()
 	if err != nil {
 		return false, err
-	}
-
-	if n == 1 {
-		// first request, set the 1 min clock for TTL before deleting redis key
-		if err := c.rdb.Expire(
-			ctx,
-			ratelimitKey(domain),
-			time.Minute,
-		).Err(); err != nil {
-			return false, err
-		}
 	}
 	return n <= int64(perMinute), nil
 }
 
-// avoids re-crawling already seen URLs by adding them to a set
-// if not seen, add to queue
+// MarkSeen adds url to the job's seen-set, returning true if it wasn't already present.
 func (c *Cache) MarkSeen(jobID, url string) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := c.ctx()
 	defer cancel()
 
 	// added = 0 if seen else 1
 	added, err := c.rdb.SAdd(ctx, seenKey(jobID), url).Result()
-
 	if err != nil {
 		return false, err
 	}
-
 	_ = c.rdb.Expire(ctx, seenKey(jobID), seenTTL).Err()
-
 	return added == 1, nil
 }
 
-// # of URLS that have been seen / job
+// Cancel marks jobID as cancelled. Workers see this on the next processPage tick and bail.
+func (c *Cache) Cancel(jobID string) error {
+	ctx, cancel := c.ctx()
+	defer cancel()
+	return c.rdb.Set(ctx, cancelKey(jobID), "1", seenTTL).Err()
+}
+
+// IsCancelled reports whether jobID's cancel flag is set.
+func (c *Cache) IsCancelled(jobID string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	n, err := c.rdb.Exists(ctx, cancelKey(jobID)).Result()
+	return err == nil && n > 0
+}
+
+// IncCategory atomically bumps the per-category counter for jobID and returns the NEW count, so
+// the worker can enforce a soft cap (return value > MaxPerCategory ⇒ this enqueue overflowed).
+// One Redis hash per job: catcount:{job} -> { "/blog": n, "/products": m, ... }
+func (c *Cache) IncCategory(jobID, category string) (int, error) {
+	ctx, cancel := c.ctx()
+	defer cancel()
+	n, err := c.rdb.HIncrBy(ctx, catCountKey(jobID), category, 1).Result()
+	if err != nil {
+		return 0, err
+	}
+	_ = c.rdb.Expire(ctx, catCountKey(jobID), seenTTL).Err()
+	return int(n), nil
+}
+
+// SeenCount returns how many distinct URLs have been seen for jobID.
 func (c *Cache) SeenCount(jobID string) (int, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := c.ctx()
 	defer cancel()
 
 	size, err := c.rdb.SCard(ctx, seenKey(jobID)).Result()

@@ -1,0 +1,18 @@
+# ---- build stage: compile the Vite/React app to static files ----
+FROM node:22-alpine AS build
+WORKDIR /app
+
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+
+COPY web/ ./
+# VITE_API_BASE is baked in at build time. "/api" makes the frontend call the same
+# origin it's served from; Caddy reverse-proxies /api/* to the Go API below.
+ARG VITE_API_BASE=/api
+ENV VITE_API_BASE=$VITE_API_BASE
+RUN npm run build
+
+# ---- run stage: Caddy serves static files AND reverse-proxies the API ----
+FROM caddy:2-alpine
+COPY --from=build /app/dist /srv
+COPY Caddyfile /etc/caddy/Caddyfile

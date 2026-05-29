@@ -1,3 +1,6 @@
+// Package queue owns the RabbitMQ topology and typed publish/consume helpers: a work queue
+// with a dead-letter exchange, plus a results fanout bound to per-consumer queues (report,
+// archive, aggregate). The topology declaration lives in utils.go.
 package queue
 
 import (
@@ -33,6 +36,7 @@ type PageChecked struct {
 	IsAlive bool            `json:"is_alive"`
 	Result  json.RawMessage `json:"result"`
 	SEO     json.RawMessage `json:"seo"`
+	Links   []string        `json:"links,omitempty"` // outbound internal links discovered on this page
 }
 
 type Queue struct {
@@ -62,40 +66,7 @@ func (q *Queue) Close() error {
 	return q.conn.Close()
 }
 
-// idempotent — safe to run every startup
-func (q *Queue) declareTopology() error {
-	// dead-letter side
-	if err := q.ch.ExchangeDeclare(DeadFanout, "fanout", true, false, false, false, nil); err != nil {
-		return err
-	}
-	if _, err := q.ch.QueueDeclare(DeadQueue, true, false, false, false, nil); err != nil {
-		return err
-	}
-	if err := q.ch.QueueBind(DeadQueue, "", DeadFanout, false, nil); err != nil {
-		return err
-	}
-
-	// work queue → dead-letters into DeadFanout on nack(requeue=false)
-	workArgs := amqp.Table{"x-dead-letter-exchange": DeadFanout}
-	if _, err := q.ch.QueueDeclare(WorkQueue, true, false, false, false, workArgs); err != nil {
-		return err
-	}
-
-	// results fanout + bound consumer queues
-	if err := q.ch.ExchangeDeclare(ResultsEx, "fanout", true, false, false, false, nil); err != nil {
-		return err
-	}
-	for _, name := range []string{QReport, QArchive, QAggregate} {
-		if _, err := q.ch.QueueDeclare(name, true, false, false, false, nil); err != nil {
-			return err
-		}
-		if err := q.ch.QueueBind(name, "", ResultsEx, false, nil); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
+// PublishPageJob enqueues a page to crawl onto the work queue.
 func (q *Queue) PublishPageJob(job PageJob) error {
 	body, err := json.Marshal(job)
 	if err != nil {

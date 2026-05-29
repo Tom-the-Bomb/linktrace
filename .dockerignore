@@ -1,0 +1,27 @@
+# Keep build contexts small + reproducible.
+.git
+.gitignore
+*.md
+guide/
+
+# Go
+/bin/
+*.exe
+*.test
+*.out
+
+# Frontend — never copy local installs/builds; the image rebuilds them.
+web/node_modules/
+web/dist/
+web/.env
+
+# Secrets / local env
+.env
+.env.*
+!.env.production.example
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

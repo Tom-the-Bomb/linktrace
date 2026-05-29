@@ -1,14 +1,11 @@
+// Package checker fetches a URL and classifies the outcome as alive or a specific kind of
+// rot (DNS, timeout, SSL, soft-404, 4xx/5xx, redirect loop). Helpers live in utils.go.
 package checker
 
 import (
-	"crypto/tls"
-	"crypto/x509"
-	"errors"
 	"io"
-	"net"
 	"net/http"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -40,12 +37,12 @@ type Checker struct {
 	client *http.Client
 }
 
-// new checker: max 10 redirects, timeout after `timeout`
+// New returns a Checker whose client times out after timeout and follows at most 10 redirects.
 func New(timeout time.Duration) *Checker {
 	return &Checker{
 		client: &http.Client{
 			Timeout: timeout,
-			// via is the list fo requests already made in the chain
+			// via is the list of requests already made in the chain
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 10 {
 					return http.ErrUseLastResponse
@@ -56,72 +53,13 @@ func New(timeout time.Duration) *Checker {
 	}
 }
 
-func classifyNetworkError(err error) string {
-	// DNS resolution failure
-	var dnsErr *net.DNSError
-	if errors.As(err, &dnsErr) {
-		return ErrDNS
-	}
-
-	// timeout
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
-		return ErrTimeout
-	}
-
-	// TLS / certificate issue
-	var certErr x509.CertificateInvalidError
-	var hostErr x509.HostnameError
-	var recErr tls.RecordHeaderError
-
-	if errors.As(err, &certErr) || errors.As(err, &hostErr) || errors.As(err, &recErr) {
-		return ErrSSL
-	}
-
-	// syscall socket error
-	if errors.Is(err, syscall.ECONNREFUSED) {
-		return ErrConnRefused
-	}
-
-	if errors.Is(err, syscall.ECONNRESET) {
-		return ErrConnReset
-	}
-
-	if strings.Contains(err.Error(), "redirect") {
-		return ErrRedirectLoop
-	}
-
-	return ErrConnRefused
-}
-
-// status code = OK but page content is empty/error-like
-func isSoft404(body []byte) bool {
-	lower := strings.ToLower(string(body))
-	// TODO: use smarter (ML-based?) approach
-	phrases := []string{
-		"page not found",
-		"404 not found",
-		"this page doesn't exist",
-		"page has been removed",
-		"error 404",
-		"content not found",
-		"page cannot be found",
-	}
-
-	for _, p := range phrases {
-		if strings.Contains(lower, p) {
-			return true
-		}
-	}
-	return false
-}
-
+// Check fetches rawURL and returns its liveness + classified error type. For healthy HTML it
+// also returns the response body (capped at 1 MB) for downstream SEO analysis.
 func (c *Checker) Check(rawURL string) CheckResult {
 	start := time.Now()
 	res := CheckResult{FinalURL: rawURL}
 
 	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
-
 	if err != nil {
 		// malformed URL (unreachable)
 		res.ErrorType = ErrDNS

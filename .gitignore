@@ -1,5 +1,8 @@
 # --- secrets / local environment ---
 .env
+.env.*
+!.env.example
+!.env.production.example
 *.local
 
 # --- Go ---
@@ -18,5 +21,3 @@ web/.env
 .idea/
 .vscode/
 *.swp
-
-guide
