@@ -135,7 +135,6 @@ func (w *worker) processPage(d amqp.Delivery) {
 
 	log.Printf("[worker] crawling depth=%d %s", job.Depth, job.URL)
 
-	// 1. per-domain rate limit
 	allowed, err := w.cache.Allow(hostOf(job.URL), w.cfg.RatePerMin)
 	if err != nil {
 		log.Printf("[worker] ratelimit error: %v", err)
@@ -148,10 +147,9 @@ func (w *worker) processPage(d amqp.Delivery) {
 		return
 	}
 
-	// 2. fetch + classify
 	res := w.chk.Check(job.URL)
 
-	// 3. transient failure: republish with incremented retry count (so the count persists)
+	// transient failure: republish with incremented retry count
 	if isTransient(res.ErrorType) {
 		if job.RetryCount < maxRetries {
 			log.Printf("[worker] retry %d/%d (%s) %s", job.RetryCount+1, maxRetries, res.ErrorType, job.URL)
@@ -172,9 +170,8 @@ func (w *worker) processPage(d amqp.Delivery) {
 		return
 	}
 
-	// 4. definitive outcome.
-	// ORDERING: enqueue child links (bumps `discovered`) BEFORE publishing result (bumps `checked`)
-	// so the completion rule (checked >= discovered) holds.
+	// enqueue children (bumps `discovered`) before publishing the result (bumps `checked`)
+	// so the completion rule checked >= discovered holds
 	var links []string
 	if res.IsAlive && len(res.Body) > 0 {
 		links = w.enqueueLinks(job, res)
@@ -227,15 +224,9 @@ func (w *worker) publishResult(job queue.PageJob, res checker.CheckResult, links
 	}
 }
 
-// enqueueLinks expands the crawl frontier and returns only the children this page actually
-// DISCOVERED, links the MarkSeen check claimed as new. This makes the recorded edges a strict
-// BFS tree (one parent per page = the page that first reached it), not the full HTML link soup
-// (nav menus produce a near-complete hairball otherwise).
-//
-// Three caps are enforced here so a sprawling site doesn't burn its whole budget on one section:
-//  1. depth  , child depth > MaxDepth is skipped outright
-//  2. global , once SeenCount reaches MaxPages, no more enqueues
-//  3. per-cat, each URL category (first path segment) gets its own MaxPerCategory budget
+// enqueueLinks expands the frontier and returns only the children this page first discovered,
+// so recorded edges form a strict BFS tree (one parent per page) rather than the full link soup.
+// Three caps bound a sprawling crawl: depth (MaxDepth), global (MaxPages), per-category (MaxPerCategory).
 func (w *worker) enqueueLinks(job queue.PageJob, res checker.CheckResult) []string {
 	base, err := url.Parse(res.FinalURL)
 	if err != nil {
@@ -258,21 +249,18 @@ func (w *worker) enqueueLinks(job queue.PageJob, res checker.CheckResult) []stri
 			}
 			break
 		}
-		// Dedupe on the value-agnostic key so /post?id=1 and /post?id=2 collapse to one
-		// page, but keep crawling the first real link we saw.
+		// dedupe on the value-agnostic key so /post?id=1 and /post?id=2 collapse to one page
 		isNew, err := w.cache.MarkSeen(job.JobID, crawler.CanonicalKey(link))
 		if err != nil || !isNew {
 			continue
 		}
 
-		// per-category soft cap, increment first, then drop if we'd overflow.
-		// the bump still costs cache memory but prevents this URL from being crawled.
+		// per-category soft cap: increment first, then drop if it would overflow
 		if w.cfg.MaxPerCategory > 0 {
 			cat := categoryOf(link)
 			count, err := w.cache.IncCategory(job.JobID, cat)
 			if err == nil && count > w.cfg.MaxPerCategory {
 				if count == w.cfg.MaxPerCategory+1 {
-					// only log the first overflow per category so we don't spam
 					log.Printf("[worker] category cap hit (%d) for %s, skipping further URLs in it", w.cfg.MaxPerCategory, cat)
 				}
 				continue
@@ -290,8 +278,7 @@ func (w *worker) enqueueLinks(job queue.PageJob, res checker.CheckResult) []stri
 	return discovered
 }
 
-// runConsumer drains queueName one-at-a-time and invokes handle. nil -> ack, error -> dead-letter
-// (result messages can't be fixed by replay; bounded retries are the production refinement).
+// runConsumer drains queueName one at a time: handle returning nil acks, an error dead-letters.
 func runConsumer(q *queue.Queue, queueName string, wg *sync.WaitGroup,
 	handle func(queue.PageChecked) error) (*amqp.Channel, error) {
 
@@ -326,9 +313,7 @@ type reportBuilder struct {
 }
 
 func (rb *reportBuilder) handle(msg queue.PageChecked) error {
-	// User pressed Stop after this page was fetched but before its result was persisted.
-	// Drop the message on the floor — preserves whatever was already saved as the final
-	// snapshot and avoids racing with handleCancel's status update.
+	// cancelled mid-flight: drop the message, preserving whatever was already saved
 	if rb.cache.IsCancelled(msg.JobID) {
 		return nil
 	}
@@ -353,7 +338,7 @@ func (rb *reportBuilder) handle(msg queue.PageChecked) error {
 		}
 	}
 
-	// persist outbound edges for the graph view (INSERT IGNORE dedupes on the DB side)
+	// persist outbound edges for the graph view (INSERT IGNORE dedupes DB-side)
 	for _, target := range msg.Links {
 		if err := rb.store.InsertLink(msg.JobID, msg.URL, target); err != nil {
 			log.Printf("[report] insert link failed: %v", err)
@@ -368,10 +353,8 @@ func (rb *reportBuilder) handle(msg queue.PageChecked) error {
 	return rb.maybeComplete(msg.JobID)
 }
 
-// maybeComplete marks the job done once `checked` catches up to `discovered` (worker ordering).
-// Won't resurrect a stopped job — the cancel guard above means we shouldn't even reach this
-// for a cancelled job, but the IsCancelled check here is belt-and-suspenders for the race
-// where a result was in-flight at cancel time.
+// maybeComplete marks the job done once `checked` catches up to `discovered`. The IsCancelled
+// guard is belt-and-suspenders for a result that was in-flight at cancel time.
 func (rb *reportBuilder) maybeComplete(jobID string) error {
 	if rb.cache.IsCancelled(jobID) {
 		return nil
@@ -420,7 +403,7 @@ func (ac *archiveChecker) handle(msg queue.PageChecked) error {
 }
 
 // aggregator buckets pages by URL category and rewrites the category_reports row each tick.
-// In-memory tallies are simplest given a single aggregator instance; scale = move to Redis.
+// In-memory tallies are fine given a single aggregator instance.
 type aggregator struct {
 	store *store.Store
 	cache *cache.Cache
@@ -440,8 +423,7 @@ func newAggregator(st *store.Store, ca *cache.Cache) *aggregator {
 }
 
 func (ag *aggregator) handle(msg queue.PageChecked) error {
-	// Skip the tally + DB write if the user cancelled. Also free the per-job stats map
-	// so cancelled jobs don't squat on memory until the worker restarts.
+	// cancelled: skip the write and free the per-job stats so it doesn't squat on memory
 	if ag.cache.IsCancelled(msg.JobID) {
 		ag.mu.Lock()
 		delete(ag.stats, msg.JobID)

@@ -3,10 +3,9 @@ import { useEffect, useState } from 'react';
 const DEMO_DOMAINS = ['example.com', 'vercel.com', 'github.com', 'linear.app', 'nytimes.com'];
 
 // useTypingPlaceholder animates a rotating, type-and-delete demo domain for the hero's input
-// placeholder. Pass active=false (input focused or non-empty) to freeze it.
+// placeholder. active=false (input focused or non-empty) freezes it.
 export function useTypingPlaceholder(active: boolean): string {
-  // start the animation with the first domain ALREADY fully typed, so on first paint
-  // the user sees "example.com" instead of an empty/typing field.
+  // start with the first domain already typed so first paint shows "example.com", not an empty field
   const [text, setText] = useState(DEMO_DOMAINS[0]);
   useEffect(() => {
     if (!active) return;
@@ -24,7 +23,7 @@ export function useTypingPlaceholder(active: boolean): string {
         charIdx++;
         if (charIdx >= word.length) phase = 'holding';
       } else if (phase === 'holding') {
-        delay = 2800; // pause at full word — long enough for the reader to register it
+        delay = 2800; // pause at full word, long enough to register
         phase = 'deleting';
       } else {
         charIdx--;
@@ -32,7 +31,7 @@ export function useTypingPlaceholder(active: boolean): string {
         if (charIdx <= 0) {
           domainIdx = (domainIdx + 1) % DEMO_DOMAINS.length;
           phase = 'typing';
-          delay = 2500; // symmetric pause when empty — cursor blinks in the void
+          delay = 2500; // symmetric pause when empty
         }
       }
       setText(word.slice(0, charIdx));

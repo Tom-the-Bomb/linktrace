@@ -14,19 +14,16 @@ import (
 
 // classifyNetworkError maps a transport-level error to one of the rot ErrType constants.
 func classifyNetworkError(err error) string {
-	// DNS resolution failure
 	var dnsErr *net.DNSError
 	if errors.As(err, &dnsErr) {
 		return ErrDNS
 	}
 
-	// timeout
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
 		return ErrTimeout
 	}
 
-	// TLS / certificate issue
 	var certErr x509.CertificateInvalidError
 	var hostErr x509.HostnameError
 	var recErr tls.RecordHeaderError
@@ -35,7 +32,6 @@ func classifyNetworkError(err error) string {
 		return ErrSSL
 	}
 
-	// syscall socket error
 	if errors.Is(err, syscall.ECONNREFUSED) {
 		return ErrConnRefused
 	}
@@ -65,17 +61,12 @@ var soft404Phrases = []string{
 }
 
 // isSoft404 reports whether a 2xx page is actually an error page (status OK, body says 404).
-//
-// We only scan visible <body> text — skipping <head>, <script>, <style>, <template>,
-// <noscript>. SPA shells (Next.js, Vite, etc.) routinely inline i18n JSON or error-
-// boundary copy containing "page not found" inside <script> tags; matching the raw
-// HTML would soft-404 the entire site. visibleBodyText reduces the page to what an
-// actual reader would see, so the heuristic only fires when the rendered page itself
-// says it's missing.
+// Only visible <body> text is scanned: SPA shells inline error copy like "page not found"
+// inside <script> tags, so matching raw HTML would soft-404 the whole site.
 func isSoft404(body []byte) bool {
 	text, ok := visibleBodyText(body)
 	if !ok {
-		// parse failed — fall back to the raw-body scan rather than miss obvious 404s
+		// parse failed: fall back to a raw-body scan rather than miss obvious 404s
 		text = strings.ToLower(string(body))
 	}
 	for _, p := range soft404Phrases {

@@ -13,8 +13,8 @@ func nullIfEmpty(s string) any {
 	return s
 }
 
-// seoAuditColumns is the shared SELECT list for seo_audits, kept in sync with scanSEOAudit's
-// Scan order so GetSEOAudit and ListSEOAudits can reuse one decode path.
+// seoAuditColumns is the shared SELECT list for seo_audits; its column order must match
+// scanSEOAudit's Scan order so GetSEOAudit and ListSEOAudits reuse one decode path.
 const seoAuditColumns = `url, title, title_length, meta_description,
 	meta_description_length, h1_count, h2_count, h3_count,
 	canonical, og_tags, twitter_tags, jsonld_count,

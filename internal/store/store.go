@@ -106,8 +106,7 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// CreateJob inserts a job, owned by userID (or anonymous when userID == "").
-// nil userID -> UUID_TO_BIN(NULL) -> SQL NULL, which is the "no owner" case.
+// CreateJob inserts a job owned by userID, or anonymous (SQL NULL) when userID == "".
 func (s *Store) CreateJob(id, url, userID string) error {
 	var uid any
 	if userID != "" {
@@ -457,13 +456,9 @@ type HistoryEntry struct {
 	Runs        []HistoryRun `json:"runs"`
 }
 
-// ListUserHistory returns one row per site the user has crawled (most recent first),
-// each with the full list of individual runs (most recent first within the group) so the
-// frontend can render an expandable list under a domain with multiple crawls.
-//
-// Single pass over every job the user owns, sorted by (url, created_at DESC); we group
-// in Go because that's cleaner than emitting JSON arrays from MySQL. Cheap as long as
-// users have ≲ thousands of jobs (which they will).
+// ListUserHistory returns one row per site the user has crawled (most recent first), each
+// with its individual runs, so the frontend can render an expandable list per domain.
+// Rows are grouped in Go from a single (url, created_at DESC) query.
 func (s *Store) ListUserHistory(userID string) ([]HistoryEntry, error) {
 	rows, err := s.db.Query(`
 		SELECT BIN_TO_UUID(id), url, created_at

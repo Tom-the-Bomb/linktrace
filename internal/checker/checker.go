@@ -42,7 +42,6 @@ func New(timeout time.Duration) *Checker {
 	return &Checker{
 		client: &http.Client{
 			Timeout: timeout,
-			// via is the list of requests already made in the chain
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 10 {
 					return http.ErrUseLastResponse
@@ -61,7 +60,6 @@ func (c *Checker) Check(rawURL string) CheckResult {
 
 	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
 	if err != nil {
-		// malformed URL (unreachable)
 		res.ErrorType = ErrDNS
 		return res
 	}
@@ -79,7 +77,6 @@ func (c *Checker) Check(rawURL string) CheckResult {
 
 	res.StatusCode = resp.StatusCode
 	res.ContentType = resp.Header.Get("Content-Type")
-	// url after redirect
 	res.FinalURL = resp.Request.URL.String()
 
 	// read body up to 1 MB
@@ -90,16 +87,14 @@ func (c *Checker) Check(rawURL string) CheckResult {
 		res.ErrorType = ErrServer5xx
 	case resp.StatusCode >= 400:
 		res.ErrorType = ErrHTTP4xx
-	default:
-		// 2xx/3xx
+	default: // 2xx/3xx
 		isHTML := strings.Contains(res.ContentType, "text/html")
 		if isHTML && isSoft404(body) {
 			res.ErrorType = ErrSoft404
 		} else {
 			res.IsAlive = true
 			if isHTML {
-				// use content for SEO analysis
-				res.Body = body
+				res.Body = body // kept for downstream SEO analysis
 			}
 		}
 	}

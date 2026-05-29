@@ -3,7 +3,6 @@ import { type Tone, scoreStrokeColour, scoreTextColour, toneColour } from '../li
 import { SectionHeader } from './SectionHeader';
 
 // Featured gauge + headline metric on the left, supporting stats + issues on the right.
-// Asymmetric on purpose, magazine cover, not dashboard tiles.
 export function OverallReport({ report }: { report: Report }) {
   const { total_pages, healthy, rotten, avg_seo_score } = report.overall;
   const top_issues = report.overall.top_issues ?? [];

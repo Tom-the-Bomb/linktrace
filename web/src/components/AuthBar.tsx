@@ -5,11 +5,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../context/AuthContext';
 
-// Top-right corner widget. Reads routing state directly so it doesn't need props
-// to know where it is or where to go.
-//
-// Anonymous: a single "log in / register" link that routes to /auth.
-// Logged in: the username itself is the menu button — click it to reveal history + logout.
+// Top-right corner widget. Anonymous: a "log in / register" link to /auth. Logged in: the
+// username is the menu button, revealing history + logout.
 export function AuthBar() {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();

@@ -9,10 +9,8 @@ import (
 	"golang.org/x/net/html"
 )
 
-// NormalizeURL parses a raw URL string and returns its canonical form. Exported so callers
-// outside this package (the API seeding the frontier from a sitemap, the seed URL itself)
-// can match the same canonical form the crawler uses when it discovers links in HTML.
-// Returns the input unchanged if parsing fails.
+// NormalizeURL returns the canonical form of a raw URL, so the API's seed matches the form
+// the crawler produces for discovered links. Returns the input unchanged if parsing fails.
 func NormalizeURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -21,12 +19,9 @@ func NormalizeURL(raw string) string {
 	return canonicalize(u, false)
 }
 
-// CanonicalKey returns the dedup key for a URL: its normal canonical form with the entire
-// query string dropped. Every URL sharing a path collapses to one key regardless of its
-// query params — /endpoint, /endpoint?a=1, and /endpoint?a=1&b=2 are all the same page.
-// This governs deduplication ONLY; the crawler still fetches and records the first real URL
-// it saw (query intact), so we never request a stripped URL that might 404. Returns input
-// unchanged if parsing fails.
+// CanonicalKey returns a URL's dedup key: the canonical form with the query string dropped,
+// so /endpoint, /endpoint?a=1, and /endpoint?a=1&b=2 collapse to one page. Dedup only; the
+// crawler still fetches the first real URL it saw (query intact). Input unchanged if unparseable.
 func CanonicalKey(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -45,7 +40,6 @@ func ExtractLinks(body []byte, base *url.URL) []string {
 
 	var links []string
 	var walk func(*html.Node)
-	// recursively DFS the HTML tree to extract <a href="..."> -> absolute URL
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode && n.Data == "a" {
 			for _, attr := range n.Attr {

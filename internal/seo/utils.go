@@ -118,8 +118,7 @@ func findIssues(a *Audit) []Issue {
 		add("og_missing", "No Open Graph tags", SeverityInfo)
 	}
 
-	// Twitter cards fall back to Open Graph when missing, so this is informational —
-	// only signal when a site has overridden nothing for Twitter specifically.
+	// Twitter cards fall back to Open Graph, so a missing one is only informational
 	if len(a.TwitterTags) == 0 {
 		add("twitter_missing", "No Twitter card tags", SeverityInfo)
 	}

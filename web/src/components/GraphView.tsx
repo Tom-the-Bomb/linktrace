@@ -28,8 +28,7 @@ function nodeColour(n: GraphNode): string {
   return '#fb7185';
 }
 
-// cap on zoom-to-fit so sparse graphs (a single node, a tiny crawl) don't blow up to fill
-// the whole viewport with one dot.
+// cap on zoom-to-fit so a sparse graph doesn't blow up to fill the viewport with one dot
 const MAX_ZOOM = 2.5;
 
 // node size scales with depth, homepage is biggest, leaves smallest
@@ -52,10 +51,8 @@ export function GraphView({ data, onSelect }: Props) {
   const [hovered, setHovered] = useState<GraphNode | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
-  // Manual pointer handling: the library's onNodeClick/onNodeHover don't fire reliably
-  // when we override the canvas painter, so we do hit-testing ourselves against the
-  // simulation positions via `screen2GraphCoords`. Tooltip position is written direct
-  // to the DOM so it tracks at 60fps without re-rendering React on every mousemove.
+  // Manual hit-testing: the library's onNodeClick/onNodeHover are unreliable once we override
+  // the canvas painter. Tooltip position writes straight to the DOM so it tracks without re-rendering.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -122,9 +119,8 @@ export function GraphView({ data, onSelect }: Props) {
     return () => obs.disconnect();
   }, []);
 
-  // Single mutable graph the library owns across renders. We merge incoming `data` into it:
-  // existing nodes keep their object identity (and the x/y/vx/vy the simulation wrote on them),
-  // so the layout doesn't reset every poll tick.
+  // One mutable graph the library owns across renders. Merging into it keeps existing nodes'
+  // identity (and their simulation-written x/y/vx/vy) so the layout doesn't reset each poll.
   const graphRef = useRef<{ nodes: FgNode[]; links: FgLink[] }>({ nodes: [], links: [] });
   const [, forceRender] = useState(0);
 
@@ -166,8 +162,7 @@ export function GraphView({ data, onSelect }: Props) {
       const fg = fgRef.current;
       if (!fg) return;
       fg.zoomToFit(400, 40);
-      // zoomToFit has no max-zoom, so a tiny graph (e.g. a single node) zooms in until the
-      // node fills the viewport. Clamp once the fit animation lands, keeping it centered.
+      // zoomToFit has no max-zoom, so clamp a tiny graph once the fit animation lands
       setTimeout(() => {
         if (fgRef.current && fgRef.current.zoom() > MAX_ZOOM) {
           fgRef.current.zoom(MAX_ZOOM, 200);
@@ -202,16 +197,14 @@ export function GraphView({ data, onSelect }: Props) {
           linkDirectionalParticles={0}
           linkWidth={0.5}
           cooldownTicks={120}
-          // We paint nodes ourselves so the visible radius matches `nodeRadius(depth)`
-          // and lines up with the hit-testing we do on the container.
+          // paint nodes ourselves so the visible radius matches nodeRadius(depth) and the hit-testing
           nodeCanvasObject={(node, ctx) => {
             const n = node as FgNode;
             if (n.x === undefined || n.y === undefined) return;
             const r = nodeRadius(n.depth);
             const colour = nodeColour(n);
 
-            // root (depth 0) gets a hollow halo and a small inner dot so the seed page
-            // reads visually as the entry point, not just another link.
+            // root (depth 0) gets a hollow halo so the seed page reads as the entry point
             if (n.depth === 0) {
               ctx.lineWidth = 1.2;
               ctx.strokeStyle = colour;
@@ -271,8 +264,7 @@ function scoreColour(n: GraphNode): string {
   return 'text-rose-300';
 }
 
-// Strip protocol + host so the tooltip reads as a clean path like "/about/team",
-// matching the landing-page backdrop where nodes are paths to begin with.
+// pathOnly strips protocol + host so the tooltip reads as a clean path like "/about/team".
 function pathOnly(url: string): string {
   try {
     const u = new URL(url);

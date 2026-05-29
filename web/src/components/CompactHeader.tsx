@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { AuthBar } from './AuthBar';
 
 interface CompactHeaderProps {
-  // jobId is optional — empty/undefined on /history (where no job is loaded)
+  // jobId is absent on /history (no job loaded)
   jobId?: string;
   url: string;
   setUrl: (s: string) => void;
@@ -51,9 +51,7 @@ export function CompactHeader({
           <button
             type="submit"
             disabled={submitting}
-            // fixed width on both axes so the "crawl" -> "…" swap during submit can't
-            // change layout. shrink-0 + flex-none guards against the form's flex algo
-            // squishing the button when the input has long text.
+            // fixed size + shrink-0 so the "crawl" -> "…" swap during submit can't shift layout
             className="h-[34px] w-[80px] shrink-0 bg-accent font-mono text-[11px] uppercase tracking-widest text-ink-900 transition hover:bg-accent-soft disabled:opacity-50"
           >
             {submitting ? '…' : 'crawl'}

@@ -82,9 +82,7 @@ function HistoryRow({
         onClick={multi ? onToggle : undefined}
         className={`group grid grid-cols-12 items-center gap-4 py-4 pr-4 transition hover:bg-ink-700/30 ${multi ? 'cursor-pointer' : ''}`}
       >
-        {/* chevron column — interactive when multi-run, blank otherwise to keep alignment.
-            chevron color is driven by the parent's `group` hover so it lights up when
-            you mouse anywhere on the row, matching the row's clickable feel. */}
+        {/* chevron column: blank when single-run to keep alignment; lights up on row hover via `group` */}
         <div className="col-span-1 flex justify-center">
           {multi ? (
             <ChevronRight
@@ -93,8 +91,7 @@ function HistoryRow({
             />
           ) : null}
         </div>
-        {/* wrapper takes the 5-col grid slot; the <a> is inline-block + max-w-full so
-            its hover hit-box is only as wide as the visible text, not the whole cell. */}
+        {/* <a> is inline-block + max-w-full so its hover hit-box is only as wide as the text */}
         <div className="col-span-5 min-w-0">
           <a
             href={entry.url}

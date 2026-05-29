@@ -92,8 +92,7 @@ func canonicalize(u *url.URL, dropQuery bool) string {
 	u.Host = strings.ToLower(u.Host)
 	u.Fragment = ""
 
-	// canonical root path is "/" — without this, "https://x.com" and "https://x.com/"
-	// canonicalise differently and never collide in the seen-set or coverage gap.
+	// canonical root path is "/", else "https://x.com" and "https://x.com/" never collide
 	if u.Path == "" {
 		u.Path = "/"
 	}
@@ -129,11 +128,9 @@ func resolve(base *url.URL, href string) string {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return ""
 	}
-	// ensure same domain (case-insensitive host comparison)
 	if !strings.EqualFold(u.Host, base.Host) {
 		return ""
 	}
-	// skip CDN/framework/asset paths, auto-generated, never real pages
 	if isUnwantedPath(u.Path) {
 		return ""
 	}

@@ -3,9 +3,8 @@ import { type FormEvent, useState } from 'react';
 import { ApiError } from '../api';
 import { useAuth } from '../context/AuthContext';
 
-// Map server responses to a friendly sentence. Backend already returns a sensible
-// {error: "..."} body — we mostly forward that but override per status when the message
-// could be clearer (e.g. 401 phrased differently for login vs register).
+// Map server responses to a friendly sentence: mostly forward the backend's {error} body,
+// overriding per status where a clearer message helps (e.g. 401 differs for login vs register).
 function friendlyError(err: unknown, mode: 'login' | 'register'): string {
   if (err instanceof ApiError) {
     switch (err.status) {

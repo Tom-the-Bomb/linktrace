@@ -135,7 +135,6 @@ func (c *Cache) MarkSeen(jobID, url string) (bool, error) {
 	ctx, cancel := c.ctx()
 	defer cancel()
 
-	// added = 0 if seen else 1
 	added, err := c.rdb.SAdd(ctx, seenKey(jobID), url).Result()
 	if err != nil {
 		return false, err
@@ -159,9 +158,8 @@ func (c *Cache) IsCancelled(jobID string) bool {
 	return err == nil && n > 0
 }
 
-// IncCategory atomically bumps the per-category counter for jobID and returns the NEW count, so
-// the worker can enforce a soft cap (return value > MaxPerCategory ⇒ this enqueue overflowed).
-// One Redis hash per job: catcount:{job} -> { "/blog": n, "/products": m, ... }
+// IncCategory atomically bumps the per-category counter for jobID and returns the new count, so
+// the worker can enforce a soft cap (return value > MaxPerCategory means this enqueue overflowed).
 func (c *Cache) IncCategory(jobID, category string) (int, error) {
 	ctx, cancel := c.ctx()
 	defer cancel()

@@ -1,5 +1,4 @@
-// Typed wrappers around the LinkTrace REST API. Types mirror the Go handler responses;
-// keeping them in sync is what makes the UI safe to refactor.
+// Typed wrappers around the LinkTrace REST API; types mirror the Go handler responses.
 
 const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080';
 

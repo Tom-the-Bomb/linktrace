@@ -9,12 +9,12 @@ import (
 
 const CookieName = "sid"
 
-// secureCookie controls the cookie Secure attribute. Off by default so local HTTP
-// dev keeps working; set COOKIE_SECURE=true in any HTTPS deployment (see docker-compose.prod.yml).
+// secureCookie controls the cookie Secure attribute: off by default so local HTTP dev works,
+// enabled by COOKIE_SECURE=true in HTTPS deployments.
 var secureCookie = os.Getenv("COOKIE_SECURE") == "true"
 
-// NewSessionID returns 32 cryptographically random bytes as hex. Opaque, unguessable.
-// MUST use crypto/rand; math/rand is predictable and unsafe for security tokens.
+// NewSessionID returns 32 random bytes as hex: an opaque, unguessable token. Uses crypto/rand,
+// since math/rand is predictable and unsafe for security tokens.
 func NewSessionID() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {

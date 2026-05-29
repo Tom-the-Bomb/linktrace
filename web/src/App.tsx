@@ -7,15 +7,8 @@ import HistoryPage from './pages/HistoryPage';
 import HomePage from './pages/HomePage';
 import JobReportPage from './pages/JobReportPage';
 
-// Routing shell. Every page renders inside the flex column so the Footer pins to
-// the bottom of the viewport for short pages and below the content for long ones.
-//
-// Routes:
-//   /             home + crawl form
-//   /auth         login / register (redirects away if already logged in)
-//   /history      protected — past crawls (redirects to /auth if anonymous)
-//   /jobs/:jobId  live progress + final report (anonymous-friendly)
-//   *             anything else → /
+// Routing shell. Every page renders inside the flex column so the Footer pins to the bottom
+// for short pages and sits below the content for long ones.
 export default function App() {
   return (
     <div className="flex min-h-dvh flex-col">

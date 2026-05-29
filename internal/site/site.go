@@ -37,7 +37,7 @@ func Run(rawRoot string) Audit {
 	}
 	log.Printf("[site] auditing %s", root.Host)
 
-	// 1. robots.txt: yields disallow + crawl-delay + sitemap hints
+	// robots.txt: yields disallow + crawl-delay + sitemap hints
 	log.Printf("[site] fetching robots.txt for %s", root.Host)
 	found, disallow, delay, sitemaps := fetchRobots(root)
 	a.RobotsFound, a.RobotsDisallowAll, a.CrawlDelay = found, disallow, delay
@@ -48,7 +48,7 @@ func Run(rawRoot string) Audit {
 		log.Printf("[site] no robots.txt at %s", root.Host)
 	}
 
-	// 2. sitemap.xml: prefer one named in robots, else try the conventional location
+	// sitemap.xml: prefer one named in robots, else the conventional location
 	sitemapURL := root.Scheme + "://" + root.Host + "/sitemap.xml"
 	if len(sitemaps) > 0 {
 		sitemapURL = sitemaps[0]
@@ -64,7 +64,7 @@ func Run(rawRoot string) Audit {
 		log.Printf("[site] sitemap not found / unparseable at %s", sitemapURL)
 	}
 
-	// 3. HTTPS / cert / www
+	// HTTPS / cert / www
 	log.Printf("[site] checking HTTPS + cert for %s", root.Host)
 	a.IsHTTPS, a.HTTPSRedirect, a.CertValid = checkHTTPS(root.Host)
 	log.Printf("[site] https=%v, http→https=%v, cert=%v", a.IsHTTPS, a.HTTPSRedirect, a.CertValid)
@@ -82,9 +82,9 @@ type CoverageGap struct {
 	SitemapDead []string `json:"sitemap_dead"` // in sitemap and crawled, but rotten
 }
 
-// ComputeCoverageGap is pure set arithmetic. Both sides run through crawler.NormalizeURL —
-// the SAME canonical form crawled URLs were stored under — so trivial differences (tracking
-// params, trailing slash, host case) don't masquerade as orphans or missed pages.
+// ComputeCoverageGap is pure set arithmetic. Both sides run through crawler.NormalizeURL (the
+// same canonical form crawled URLs were stored under) so trailing-slash/host-case differences
+// don't masquerade as orphans or missed pages.
 func ComputeCoverageGap(sitemapURLs, crawledURLs, rottenURLs []string) CoverageGap {
 	inSitemap := make(map[string]bool, len(sitemapURLs))
 	for _, u := range sitemapURLs {

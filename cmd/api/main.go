@@ -62,15 +62,14 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware(cfg.FrontendOrigin))
-	r.Use(auth.Optional(s.cache)) // tags requests with the user id if logged in; never blocks
+	r.Use(auth.Optional(s.cache)) // tags the request with a user id if logged in; never blocks
 
-	// auth
 	r.Post("/auth/register", s.handleRegister)
 	r.Post("/auth/login", s.handleLogin)
 	r.Post("/auth/logout", s.handleLogout)
 	r.Get("/auth/me", s.handleMe)
 
-	// crawl (anonymous-friendly; Optional middleware tags ownership if a cookie is present)
+	// crawl endpoints are anonymous-friendly; Optional tags ownership when a cookie is present
 	r.Post("/check", s.handleCreate)
 	r.Post("/check/{id}/cancel", s.handleCancel)
 	r.Get("/check/{id}", s.handleStatus)
@@ -79,12 +78,10 @@ func main() {
 	r.Get("/check/{id}/graph", s.handleGraph)
 	r.Get("/check/{id}/seo", s.handleSEODetail)
 
-	// history requires a session
 	r.With(auth.Require(s.cache)).Get("/history", s.handleHistory)
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r}
 
-	// run the server in a goroutine so main can wait for a signal and shut down cleanly
 	go func() {
 		log.Printf("API listening on %s", cfg.HTTPAddr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -106,7 +103,7 @@ type createRequest struct {
 	URL string `json:"url"`
 }
 
-// POST /check, validate the URL, create the job row, seed the crawl, return 202.
+// handleCreate (POST /check) validates the URL, creates the job row, seeds the crawl, returns 202.
 func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var req createRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.URL == "" {
@@ -118,9 +115,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url must be an absolute http(s) URL"})
 		return
 	}
-	// Normalise the seed through the SAME canonical form the crawler uses on extracted
-	// links — otherwise the seed entry in the seen-set won't match the normalised form
-	// the crawler later produces, and the homepage gets crawled twice.
+	// normalise through the same canonical form used on extracted links, else the homepage crawls twice
 	seed := crawler.NormalizeURL(u.String())
 
 	id := uuid.NewString()
@@ -131,15 +126,12 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("[api] new job %s for %s (%s)", id[:8], seed, ownerLabel)
 
-	// auth.UserID is "" for anonymous, the store turns that into NULL.
 	if err := s.store.CreateJob(id, seed, owner); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not create job"})
 		return
 	}
 
-	// Domain-level audit runs before the crawl so we can honour robots.txt.
-	// site.Run does a handful of HTTP calls (~1-2s) so /check is no longer instant;
-	// acceptable trade for not crawling sites that asked us not to.
+	// runs before the crawl so we can honour robots.txt (costs ~1-2s of HTTP up front)
 	siteAudit := toStoreSiteAudit(site.Run(seed))
 	if err := s.store.SaveSiteAudit(id, siteAudit); err != nil {
 		log.Printf("[api] save site audit: %v", err)
@@ -154,9 +146,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	_ = s.store.UpdateJobStatus(id, "crawling")
 	log.Printf("[api] job %s seeding queue with %s", id[:8], seed)
 
-	// seed the frontier: mark+count BEFORE publishing so the seed is counted exactly once.
-	// MarkSeen is keyed on the value-agnostic canonical key (see crawler.CanonicalKey) while
-	// we publish the real seed URL.
+	// mark+count before publishing so the seed is counted exactly once
 	if _, err := s.cache.MarkSeen(id, crawler.CanonicalKey(seed)); err != nil {
 		log.Printf("[api] MarkSeen seed: %v", err)
 	}
@@ -166,19 +156,13 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// NOTE: we deliberately do NOT enqueue sitemap URLs as crawl jobs.
-	// The crawl is a pure BFS from the seed homepage so the recorded link tree reflects
-	// actual site structure. The sitemap is just kept around (in site_audits.sitemap_urls)
-	// so the coverage_gap report can compare "what we reached via BFS" vs "what the site
-	// claims it has" — sitemap pages we never reached become legitimate "missed" entries,
-	// which is the whole point of the coverage gap.
-
+	// sitemap URLs are deliberately not enqueued: the crawl stays a pure BFS from the
+	// homepage, and unreached sitemap pages become the coverage_gap report's "missed" entries.
 	writeJSON(w, http.StatusAccepted, map[string]string{"job_id": id, "status": "crawling"})
 }
 
-// POST /check/{id}/cancel, flip the Redis cancel flag + mark the job stopped.
-// All worker consumers (page fetch + result/archive/aggregate) check IsCancelled and
-// silently ack remaining messages, so the queue drains without burning HTTP/DB work.
+// handleCancel (POST /check/{id}/cancel) sets the Redis cancel flag and marks the job stopped;
+// worker consumers check IsCancelled and silently ack the rest so the queue drains cheaply.
 func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
@@ -196,8 +180,7 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[api] job %s STOPPED by user", id[:8])
-	// Set DB status immediately. Cancelled page jobs ack-skip without bumping `checked`,
-	// so maybeComplete would never fire and the row would otherwise stay 'crawling' forever.
+	// cancelled jobs never bump `checked`, so maybeComplete won't fire; set status here
 	_ = s.store.UpdateJobStatus(id, "stopped")
 	writeJSON(w, http.StatusOK, map[string]string{"job_id": id, "status": "stopped"})
 }
@@ -311,17 +294,15 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 
 	overall := computeOverall(pages, audits)
 	if cats == nil {
-		cats = []store.CategoryReport{} // JSON [] not null so the frontend can .length safely
+		cats = []store.CategoryReport{} // [] not null so the frontend can .length safely
 	}
 
-	// site-level sections (best-effort, log + continue on individual failures so a missing
-	// site_audit row doesn't kill the whole report)
+	// site-level sections are best-effort: log and continue so one missing row doesn't kill the report
 	siteAudit, err := s.store.GetSiteAudit(id)
 	if err != nil {
 		log.Printf("site audit lookup: %v", err)
 	}
-	// Pointers so a failed lookup serializes as null (the frontend hides that panel) rather
-	// than a misleading all-zeros section.
+	// pointer so a failed lookup serializes as null (panel hidden) instead of all-zeros
 	var crawlStats *store.CrawlStats
 	if cs, err := s.store.GetCrawlStats(id); err != nil {
 		log.Printf("crawl stats lookup: %v", err)
@@ -334,7 +315,7 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	} else {
 		siteSEO = &ss
 	}
-	// coverage gap: sitemap urls vs crawled urls (rotten ones flagged separately)
+	// coverage gap: sitemap URLs vs crawled URLs
 	var gap *site.CoverageGap
 	if siteAudit != nil {
 		crawledURLs := make([]string, 0, len(pages))
@@ -424,7 +405,7 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 	edges := make([]graphEdge, 0, len(links))
 	for _, l := range links {
-		// drop edges that point at URLs we never reached, they'd render as orphan dots
+		// drop edges to URLs we never reached; they'd render as orphan dots
 		if _, ok := urlSet[l.Target]; !ok {
 			continue
 		}

@@ -19,8 +19,7 @@ interface HeroProps {
 // cards, all over the interactive CrawlGraphBackdrop canvas.
 export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
   const [focused, setFocused] = useState(false);
-  // animation pauses both when there's text AND when the input is focused, so the user's
-  // real caret doesn't compete with our fake one.
+  // pause the animation when focused or non-empty so our fake caret doesn't fight the real one
   const placeholder = useTypingPlaceholder(url === '' && !focused);
   return (
     <div className="relative flex-1 overflow-hidden">
@@ -28,8 +27,7 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
         <CrawlGraphBackdrop />
       </div>
 
-      {/* layout wrappers are click-through so the canvas behind catches taps in their empty space.
-          3-col grid lets the version sit dead-centre while the wordmark and auth bar pin the sides. */}
+      {/* wrappers are click-through so the canvas behind catches taps in empty space */}
       <header className="pointer-events-none relative z-10 grid grid-cols-3 items-center gap-4 px-6 py-4 sm:px-10 [&_*]:pointer-events-auto">
         <Link to="/#" className="flex items-center gap-2 justify-self-start" aria-label="Go to home">
           <Link2 className="h-4 w-4 text-accent" strokeWidth={2.25} />
@@ -72,12 +70,9 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
               placeholder=""
               className="w-full border border-ink-500 bg-ink-800/80 py-6 pl-6 pr-44 font-mono text-base text-paper shadow-card backdrop-blur-sm placeholder:text-ink-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40 sm:text-lg"
             />
-            {/* fake placeholder: animated demo domain + blinking cursor on the RIGHT
-                (touching the last char). Vanishes the moment the user focuses the input
-                so our cursor doesn't compete with the real caret. */}
+            {/* fake placeholder: animated demo domain + blinking cursor; vanishes on focus */}
             {url === '' && !focused && (
-              // [&_*]:!pointer-events-none overrides the section's [&_span]:pointer-events-auto
-              // selector — without it the placeholder spans intercept clicks meant for the input.
+              // override the section's [&_span]:pointer-events-auto so these spans don't eat input clicks
               <div className="pointer-events-none absolute left-6 top-1/2 flex -translate-y-1/2 items-center gap-px font-mono text-base text-ink-400/60 sm:text-lg [&_*]:!pointer-events-none">
                 <span>{placeholder}</span>
                 <span className="cursor-blink inline-block h-[1.2em] w-[2px] bg-accent/60" />
