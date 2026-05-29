@@ -7,10 +7,12 @@ import { useAuth } from '../context/AuthContext';
 import { CompactHeader } from '../components/CompactHeader';
 import { History } from '../components/History';
 import { useCreateCrawl } from '../hooks/useCreateCrawl';
+import { useSeo } from '../hooks/useSeo';
 
 // /history route. Protected by <Protected> at the route level so this component
 // can assume the user is logged in.
 export default function HistoryPage() {
+  useSeo({ title: 'Crawl history', path: '/history', noindex: true });
   const navigate = useNavigate();
   const { user } = useAuth();
   const [newUrl, setNewUrl] = useState('');

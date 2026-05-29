@@ -53,8 +53,8 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
         </h1>
 
         <p className="mt-8 max-w-xl text-center text-base leading-relaxed text-ink-300 sm:text-lg">
-          Type a domain. We BFS-crawl every page, classify the dead ones, score the SEO of the
-          living, and render the whole site as a graph you can wander.
+          Enter a domain. Find broken links, score your on-page SEO, and explore your whole site as
+          an interactive graph.
         </p>
 
         <form onSubmit={onSubmit} className="mt-14 w-full max-w-2xl">

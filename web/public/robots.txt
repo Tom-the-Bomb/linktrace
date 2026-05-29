@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /auth
+Disallow: /history
+Disallow: /jobs/
+
+Sitemap: https://linktrace.tomthebomb.dev/sitemap.xml

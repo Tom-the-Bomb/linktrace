@@ -5,10 +5,12 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { AuthForm } from '../components/AuthForm';
 import { useAuth } from '../context/AuthContext';
+import { useSeo } from '../hooks/useSeo';
 
 // Full-page sign-in route at /auth. After success → /. If the user is already logged
 // in (e.g. they navigated here by typing the URL), redirect away.
 export default function AuthPage() {
+  useSeo({ title: 'Sign in', path: '/auth', noindex: true });
   const navigate = useNavigate();
   const { user, loading } = useAuth();
 

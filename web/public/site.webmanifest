@@ -1,0 +1,14 @@
+{
+  "name": "LinkTrace",
+  "short_name": "LinkTrace",
+  "description": "Enter a domain. Find broken links, score your on-page SEO, and explore your whole site as an interactive graph.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#06080f",
+  "theme_color": "#06080f",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "maskable" },
+    { "src": "/apple-touch-icon.png", "type": "image/png", "sizes": "180x180" }
+  ]
+}

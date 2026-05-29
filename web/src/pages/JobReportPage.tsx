@@ -14,6 +14,7 @@ import {
   getStatus,
 } from '../api';
 import { useCreateCrawl } from '../hooks/useCreateCrawl';
+import { useSeo } from '../hooks/useSeo';
 import { isTerminalStatus } from '../lib/status';
 import { Categories } from '../components/Categories';
 import { CompactHeader } from '../components/CompactHeader';
@@ -46,6 +47,14 @@ export default function JobReportPage() {
   // "new crawl" input in the compact header; the hook handles create + navigate.
   const [newUrl, setNewUrl] = useState('');
   const { submit, submitting, error: createError } = useCreateCrawl();
+
+  // Per-job pages are transient/anonymous-friendly — title tracks the crawled
+  // domain once known, but they stay out of the index.
+  useSeo({
+    title: status?.url ? `Report · ${status.url}` : 'Crawl report',
+    path: `/jobs/${jobId}`,
+    noindex: true,
+  });
 
   // Live polling: every tick fetches the full quartet so partial results stream in.
   // setTimeout-recursion (not setInterval) prevents stacked overlapping requests.
