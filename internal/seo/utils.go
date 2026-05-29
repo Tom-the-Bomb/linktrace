@@ -31,6 +31,17 @@ func getAttr(n *html.Node, key string) string {
 	return ""
 }
 
+// hasAttr is presence-only: distinguishes "attribute missing" from "attribute set to empty".
+// Matters for alt — alt="" is the valid "decorative image" signal, NOT the same as no alt.
+func hasAttr(n *html.Node, key string) bool {
+	for _, attr := range n.Attr {
+		if attr.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
 // handleMeta reads a <meta> element into the audit: description, viewport, robots noindex,
 // and Open Graph / Twitter card tags.
 func handleMeta(a *Audit, n *html.Node) {
@@ -91,19 +102,25 @@ func findIssues(a *Audit) []Issue {
 		add("meta_desc_too_short", "Meta description shorter than 50 characters", SeverityInfo)
 	}
 
+	// H1: exactly 1 per page is the established SEO baseline (Google/Moz/Ahrefs).
 	if a.H1Count == 0 {
 		add("h1_missing", "Missing H1 heading", SeverityError)
 	} else if a.H1Count > 1 {
 		add("h1_multiple", "Multiple H1 headings", SeverityError)
 	}
 
+	// H2: at least 1 is essential for scannable structure; 2+ is the typical recommendation.
+	// No upper bound — long-form content legitimately has many H2s.
 	switch {
 	case a.H2Count == 0:
 		add("h2_missing", "No H2 headings", SeverityWarning)
-	case a.H2Count < 3:
-		add("h2_too_few", "Fewer than 3 H2 headings", SeverityInfo)
-	case a.H2Count > 5:
-		add("h2_too_many", "More than 5 H2 headings", SeverityInfo)
+	case a.H2Count < 2:
+		add("h2_too_few", "Fewer than 2 H2 headings", SeverityInfo)
+	}
+
+	// H3: optional but recommended for sub-sectioning under H2s. Info-level only.
+	if a.H3Count == 0 {
+		add("h3_missing", "No H3 headings", SeverityInfo)
 	}
 
 	if a.Canonical == "" {
@@ -129,6 +146,26 @@ func findIssues(a *Audit) []Issue {
 
 	if a.Noindex {
 		add("noindex", "Page is marked noindex", SeverityError)
+	}
+
+	// <html lang="..."> is a small but real SEO + a11y signal; absent is info-only.
+	if a.HTMLLang == "" {
+		add("html_lang_missing", "Missing <html lang> attribute", SeverityInfo)
+	}
+
+	// Image hygiene — only flag when there ARE images, otherwise the rule fires on every
+	// text-only page.
+	if a.ImagesTotal > 0 {
+		altRatio := float64(a.ImagesWithAlt) / float64(a.ImagesTotal)
+		if altRatio < 0.9 {
+			add("img_missing_alt",
+				"Images missing alt attribute (accessibility + SEO)", SeverityWarning)
+		}
+		dimRatio := float64(a.ImagesWithDims) / float64(a.ImagesTotal)
+		if dimRatio < 0.8 {
+			add("img_missing_dims",
+				"Images missing width/height (causes layout shift)", SeverityInfo)
+		}
 	}
 
 	if a.PrimaryKeyword != "" {

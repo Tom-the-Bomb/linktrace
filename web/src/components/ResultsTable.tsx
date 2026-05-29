@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react';
 
+import { ArrowDown, ArrowUp, Search } from 'lucide-react';
+
 import type { PageRow } from '../api';
 import { scoreTextColour } from '../lib/colours';
 
 type Filter = 'all' | 'rotten' | 'healthy';
+type SortKey = 'depth' | 'seo';
+type SortDir = 'asc' | 'desc';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 20;
 
 // Flat hairline table. Clicking a row opens the SEO drawer.
 export function ResultsTable({
@@ -16,6 +20,9 @@ export function ResultsTable({
   onSelect: (url: string) => void;
 }) {
   const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('depth');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [page, setPage] = useState(1);
 
   const counts = useMemo(() => {
@@ -24,21 +31,52 @@ export function ResultsTable({
   }, [rows]);
 
   const filtered = useMemo(() => {
-    if (filter === 'all') return rows;
-    if (filter === 'rotten') return rows.filter((r) => !r.is_alive);
-    return rows.filter((r) => r.is_alive);
-  }, [rows, filter]);
+    let r = rows;
+    if (filter === 'rotten') r = r.filter((x) => !x.is_alive);
+    else if (filter === 'healthy') r = r.filter((x) => x.is_alive);
+    const q = query.trim().toLowerCase();
+    if (q) r = r.filter((x) => x.url.toLowerCase().includes(q));
+    return r;
+  }, [rows, filter, query]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const sorted = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      if (sortKey === 'seo') {
+        // Pages without an SEO score always sink to the bottom, regardless of direction.
+        if (a.seo_score === null) return b.seo_score === null ? 0 : 1;
+        if (b.seo_score === null) return -1;
+        return (a.seo_score - b.seo_score) * dir;
+      }
+      return (a.depth - b.depth) * dir;
+    });
+  }, [filtered, sortKey, sortDir]);
+
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const current = Math.min(page, pageCount);
   const paged = useMemo(
-    () => filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE),
-    [filtered, current],
+    () => sorted.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE),
+    [sorted, current],
   );
 
-  // Reset to the first page whenever the filter changes the result set.
+  // Reset to the first page whenever the filter or search changes the result set.
   function selectFilter(f: Filter) {
     setFilter(f);
+    setPage(1);
+  }
+
+  function onQueryChange(v: string) {
+    setQuery(v);
+    setPage(1);
+  }
+
+  function selectSort(key: SortKey) {
+    setSortKey(key);
+    setPage(1);
+  }
+
+  function toggleDir() {
+    setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     setPage(1);
   }
 
@@ -53,16 +91,55 @@ export function ResultsTable({
           </span>
           <span className="display text-2xl font-light tabular-nums">{rows.length}</span>
         </div>
-        <div className="flex">
-          {(['all', 'healthy', 'rotten'] as Filter[]).map((f) => (
-            <FilterChip
-              key={f}
-              active={filter === f}
-              onClick={() => selectFilter(f)}
-              label={f}
-              count={counts[f]}
+        <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
+          <div className="relative w-full max-w-xs sm:w-64">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-ink-400"
+              aria-hidden="true"
             />
-          ))}
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => onQueryChange(e.target.value)}
+              placeholder="search endpoint"
+              className="w-full border border-ink-500/70 bg-ink-800 py-1.5 pl-9 pr-3 font-mono text-xs text-paper placeholder:text-ink-400 focus:border-accent focus:outline-none"
+            />
+          </div>
+          <div className="flex items-center">
+            <span className="mr-2 font-mono text-[10px] uppercase tracking-widest text-ink-300">
+              sort
+            </span>
+            {(['depth', 'seo'] as SortKey[]).map((k) => (
+              <SortChip
+                key={k}
+                active={sortKey === k}
+                onClick={() => selectSort(k)}
+                label={k}
+              />
+            ))}
+            <button
+              onClick={toggleDir}
+              aria-label={sortDir === 'asc' ? 'sort ascending' : 'sort descending'}
+              className="-ml-px border border-ink-500/70 px-2 py-1.5 text-ink-300 transition hover:bg-ink-600/40 hover:text-paper"
+            >
+              {sortDir === 'asc' ? (
+                <ArrowUp className="size-3.5" aria-hidden="true" />
+              ) : (
+                <ArrowDown className="size-3.5" aria-hidden="true" />
+              )}
+            </button>
+          </div>
+          <div className="flex">
+            {(['all', 'healthy', 'rotten'] as Filter[]).map((f) => (
+              <FilterChip
+                key={f}
+                active={filter === f}
+                onClick={() => selectFilter(f)}
+                label={f}
+                count={counts[f]}
+              />
+            ))}
+          </div>
         </div>
       </header>
 
@@ -118,8 +195,8 @@ export function ResultsTable({
       {pageCount > 1 && (
         <footer className="flex items-center justify-between gap-3 border-t border-ink-500/70 px-6 py-3">
           <span className="font-mono text-[10px] uppercase tracking-widest text-ink-300">
-            {(current - 1) * PAGE_SIZE + 1}–{Math.min(current * PAGE_SIZE, filtered.length)} of{' '}
-            {filtered.length}
+            {(current - 1) * PAGE_SIZE + 1}–{Math.min(current * PAGE_SIZE, sorted.length)} of{' '}
+            {sorted.length}
           </span>
           <div className="flex items-center gap-5">
             <PageButton onClick={() => setPage(current - 1)} disabled={current <= 1}>
@@ -178,6 +255,27 @@ function FilterChip({
     >
       <span>{label}</span>
       <span className="text-[10px] opacity-60">{count}</span>
+    </button>
+  );
+}
+
+function SortChip({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`border border-ink-500/70 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest transition first:border-r-0 ${
+        active ? 'bg-accent text-ink-900' : 'text-ink-300 hover:bg-ink-600/40 hover:text-paper'
+      }`}
+    >
+      {label}
     </button>
   );
 }

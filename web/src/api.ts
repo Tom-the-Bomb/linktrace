@@ -193,6 +193,18 @@ export interface SEODetail {
   h1_count: number;
   h2_count: number;
   h3_count: number;
+  h4_count: number;
+  h5_count: number;
+  h6_count: number;
+  images_total: number;
+  images_with_alt: number;
+  images_with_dims: number;
+  images_lazy_loaded: number;
+  images_responsive: number;
+  links_internal: number;
+  links_external: number;
+  links_nofollow: number;
+  html_lang: string;
   canonical: string;
   og_tags: Record<string, string> | null;
   twitter_tags: Record<string, string> | null;

@@ -129,6 +129,9 @@ function SeoBody({ detail }: { detail: SEODetail }) {
           <HeadingTile label="h1" count={detail.h1_count} flagWhen={(n) => n !== 1} />
           <HeadingTile label="h2" count={detail.h2_count} />
           <HeadingTile label="h3" count={detail.h3_count} />
+          <HeadingTile label="h4" count={detail.h4_count} />
+          <HeadingTile label="h5" count={detail.h5_count} />
+          <HeadingTile label="h6" count={detail.h6_count} />
         </div>
       </Section>
 
@@ -146,8 +149,30 @@ function SeoBody({ detail }: { detail: SEODetail }) {
             ok={!!detail.twitter_tags && Object.keys(detail.twitter_tags).length > 0}
           />
           <Signal label="indexable" ok={!detail.noindex} />
+          <Signal label={`html lang${detail.html_lang ? ` · ${detail.html_lang}` : ''}`} ok={!!detail.html_lang} />
         </ul>
       </Section>
+
+      {detail.images_total > 0 && (
+        <Section label={`images · ${detail.images_total}`}>
+          <ul className="divide-y divide-ink-500/60 border-y border-ink-500/60">
+            <CountSignal label="alt text" count={detail.images_with_alt} total={detail.images_total} />
+            <CountSignal label="width/height" count={detail.images_with_dims} total={detail.images_total} />
+            <CountSignal label="lazy loaded" count={detail.images_lazy_loaded} total={detail.images_total} />
+            <CountSignal label="responsive (srcset)" count={detail.images_responsive} total={detail.images_total} />
+          </ul>
+        </Section>
+      )}
+
+      {detail.links_internal + detail.links_external > 0 && (
+        <Section label="links">
+          <ul className="divide-y divide-ink-500/60 border-y border-ink-500/60">
+            <RawStat label="internal" value={detail.links_internal} />
+            <RawStat label="external" value={detail.links_external} />
+            <RawStat label="nofollow" value={detail.links_nofollow} />
+          </ul>
+        </Section>
+      )}
 
       {detail.primary_keyword && (
         <Section label="keywords">
@@ -264,6 +289,32 @@ function Signal({ label, ok }: { label: string; ok: boolean }) {
       <span className={`font-mono text-xs ${ok ? 'text-emerald-300' : 'text-rose-300'}`}>
         {ok ? '● present' : '○ missing'}
       </span>
+    </li>
+  );
+}
+
+// CountSignal: "X of Y (NN%)" with colour bucketed by ratio. Used for image hygiene.
+function CountSignal({ label, count, total }: { label: string; count: number; total: number }) {
+  const ratio = total > 0 ? count / total : 0;
+  const pct = Math.round(ratio * 100);
+  const colour =
+    ratio >= 0.9 ? 'text-emerald-300' : ratio >= 0.5 ? 'text-amber-300' : 'text-rose-300';
+  return (
+    <li className="flex items-center justify-between py-2.5">
+      <span className="font-mono text-xs text-paper/80">{label}</span>
+      <span className={`font-mono text-xs tabular-nums ${colour}`}>
+        {count}/{total} <span className="text-ink-400">({pct}%)</span>
+      </span>
+    </li>
+  );
+}
+
+// RawStat: plain count, no ratio. Used for link breakdowns where there's no "good" target.
+function RawStat({ label, value }: { label: string; value: number }) {
+  return (
+    <li className="flex items-center justify-between py-2.5">
+      <span className="font-mono text-xs text-paper/80">{label}</span>
+      <span className="font-mono text-xs tabular-nums text-ink-200">{value}</span>
     </li>
   );
 }

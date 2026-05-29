@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { Search } from 'lucide-react';
 import ForceGraph2D, { type ForceGraphMethods } from 'react-force-graph-2d';
 
 import type { GraphData, GraphNode } from '../api';
@@ -49,7 +50,15 @@ export function GraphView({ data, onSelect }: Props) {
   const fgRef = useRef<ForceGraphMethods<GraphNode> | undefined>(undefined);
   const [size, setSize] = useState({ width: 800, height: 520 });
   const [hovered, setHovered] = useState<GraphNode | null>(null);
+  const [query, setQuery] = useState('');
   const tooltipRef = useRef<HTMLDivElement>(null);
+
+  // case-insensitive substring match on the node URL; empty query = no highlight mode
+  const normalizedQuery = query.trim().toLowerCase();
+  const hasQuery = normalizedQuery.length > 0;
+  function matchesQuery(n: FgNode): boolean {
+    return n.url.toLowerCase().includes(normalizedQuery);
+  }
 
   // Manual hit-testing: the library's onNodeClick/onNodeHover are unreliable once we override
   // the canvas painter. Tooltip position writes straight to the DOM so it tracks without re-rendering.
@@ -119,39 +128,57 @@ export function GraphView({ data, onSelect }: Props) {
     return () => obs.disconnect();
   }, []);
 
-  // One mutable graph the library owns across renders. Merging into it keeps existing nodes'
-  // identity (and their simulation-written x/y/vx/vy) so the layout doesn't reset each poll.
-  const graphRef = useRef<{ nodes: FgNode[]; links: FgLink[] }>({ nodes: [], links: [] });
-  const [, forceRender] = useState(0);
+  // Graph wrapper kept in state so each poll hands ForceGraph2D a NEW object reference —
+  // mutating a stable ref made the library short-circuit and skip large updates (e.g. final
+  // batch of nodes when the crawl completes), which only un-stuck itself on remount.
+  // The inner FgNode/FgLink objects are preserved across ticks so the simulation-written
+  // x/y/vx/vy survive and the layout doesn't reset.
+  const [graph, setGraph] = useState<{ nodes: FgNode[]; links: FgLink[] }>({
+    nodes: [],
+    links: [],
+  });
+  // mirror of `graph` for synchronous reads from the pointer hit-test handler
+  const graphRef = useRef(graph);
 
   useEffect(() => {
-    const g = graphRef.current;
-    const byId = new Map(g.nodes.map((n) => [n.id, n]));
-
-    // add new nodes; update mutable status fields on existing ones
-    for (const incoming of data.nodes ?? []) {
-      const existing = byId.get(incoming.id);
-      if (existing) {
-        existing.is_alive = incoming.is_alive;
-        existing.status_code = incoming.status_code;
-        existing.error_type = incoming.error_type;
-        existing.seo_score = incoming.seo_score;
-      } else {
-        g.nodes.push({ ...incoming });
+    setGraph((prev) => {
+      const byId = new Map(prev.nodes.map((n) => [n.id, n]));
+      let nodesChanged = false;
+      const nodes = prev.nodes.slice();
+      for (const incoming of data.nodes ?? []) {
+        const existing = byId.get(incoming.id);
+        if (existing) {
+          existing.is_alive = incoming.is_alive;
+          existing.status_code = incoming.status_code;
+          existing.error_type = incoming.error_type;
+          existing.seo_score = incoming.seo_score;
+        } else {
+          const n = { ...incoming };
+          nodes.push(n);
+          byId.set(n.id, n);
+          nodesChanged = true;
+        }
       }
-    }
 
-    // de-dupe edges by (source, target); only push truly new ones
-    const edgeKeys = new Set(g.links.map((l) => `${l.source}->${l.target}`));
-    for (const e of data.edges ?? []) {
-      const k = `${e.source}->${e.target}`;
-      if (!edgeKeys.has(k)) {
-        g.links.push({ source: e.source, target: e.target });
-        edgeKeys.add(k);
+      const edgeKeys = new Set(prev.links.map((l) => `${l.source}->${l.target}`));
+      let linksChanged = false;
+      const links = prev.links.slice();
+      for (const e of data.edges ?? []) {
+        const k = `${e.source}->${e.target}`;
+        if (!edgeKeys.has(k)) {
+          links.push({ source: e.source, target: e.target });
+          edgeKeys.add(k);
+          linksChanged = true;
+        }
       }
-    }
 
-    forceRender((n) => n + 1);
+      // Always return a NEW wrapper object — that's the signal ForceGraph2D uses to rebuild.
+      // If nothing structural changed, we still publish so in-place field updates (status,
+      // seo_score) reach the canvas painter on the next frame.
+      const next = nodesChanged || linksChanged ? { nodes, links } : { ...prev };
+      graphRef.current = next;
+      return next;
+    });
   }, [data]);
 
   // zoom-to-fit after the initial layout settles, then never again (would yank the view mid-crawl)
@@ -175,34 +202,55 @@ export function GraphView({ data, onSelect }: Props) {
 
   return (
     <section className="border border-ink-500/70 bg-ink-700/30">
-      <header className="flex items-center justify-between border-b border-ink-500/70 px-6 py-4">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-500/70 px-6 py-4">
         <div>
           <div className="eyebrow">site graph</div>
           <p className="mt-1 text-xs italic text-ink-300">
             Drag to pan · scroll to zoom · click a node for its audit.
           </p>
         </div>
-        <Legend />
+        <div className="flex items-center gap-4">
+          <div className="relative w-full max-w-xs sm:w-56">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-ink-400"
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="search endpoint"
+              className="w-full border border-ink-500/70 bg-ink-800 py-1.5 pl-9 pr-3 font-mono text-xs text-paper placeholder:text-ink-400 focus:border-accent focus:outline-none"
+            />
+          </div>
+          <Legend />
+        </div>
       </header>
 
       <div ref={containerRef} className="relative h-[70vh] min-h-[460px] w-full bg-ink-900/40">
         <ForceGraph2D
           ref={fgRef}
-          graphData={graphRef.current}
+          graphData={graph}
           width={size.width}
           height={size.height}
           backgroundColor="rgba(0,0,0,0)"
           nodeRelSize={1}
-          linkColor={() => 'rgba(245,239,228,0.12)'} // paper @ 12%
+          // fade links further when a search is active so the matched nodes pop visually
+          linkColor={() => (hasQuery ? 'rgba(245,239,228,0.04)' : 'rgba(245,239,228,0.12)')}
           linkDirectionalParticles={0}
           linkWidth={0.5}
           cooldownTicks={120}
-          // paint nodes ourselves so the visible radius matches nodeRadius(depth) and the hit-testing
+          // paint nodes ourselves so the visible radius matches nodeRadius(depth) and the hit-testing.
+          // When a search query is active, non-matches fade — the dimming alone is enough contrast,
+          // no extra ring on matches.
           nodeCanvasObject={(node, ctx) => {
             const n = node as FgNode;
             if (n.x === undefined || n.y === undefined) return;
             const r = nodeRadius(n.depth);
             const colour = nodeColour(n);
+            const dimmed = hasQuery && !matchesQuery(n);
+
+            ctx.globalAlpha = dimmed ? 0.15 : 1;
 
             // root (depth 0) gets a hollow halo so the seed page reads as the entry point
             if (n.depth === 0) {
@@ -215,13 +263,14 @@ export function GraphView({ data, onSelect }: Props) {
               ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
               ctx.fillStyle = colour;
               ctx.fill();
-              return;
+            } else {
+              ctx.beginPath();
+              ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+              ctx.fillStyle = colour;
+              ctx.fill();
             }
 
-            ctx.beginPath();
-            ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-            ctx.fillStyle = colour;
-            ctx.fill();
+            ctx.globalAlpha = 1;
           }}
         />
         <NodeTooltip

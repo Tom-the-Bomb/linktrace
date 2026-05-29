@@ -46,6 +46,18 @@ type SEOAudit struct {
 	H1Count               int               `json:"h1_count"`
 	H2Count               int               `json:"h2_count"`
 	H3Count               int               `json:"h3_count"`
+	H4Count               int               `json:"h4_count"`
+	H5Count               int               `json:"h5_count"`
+	H6Count               int               `json:"h6_count"`
+	ImagesTotal           int               `json:"images_total"`
+	ImagesWithAlt         int               `json:"images_with_alt"`
+	ImagesWithDims        int               `json:"images_with_dims"`
+	ImagesLazyLoaded      int               `json:"images_lazy_loaded"`
+	ImagesResponsive      int               `json:"images_responsive"`
+	LinksInternal         int               `json:"links_internal"`
+	LinksExternal         int               `json:"links_external"`
+	LinksNofollow         int               `json:"links_nofollow"`
+	HTMLLang              string            `json:"html_lang"`
 	Canonical             string            `json:"canonical"`
 	OGTags                map[string]string `json:"og_tags"`
 	TwitterTags           map[string]string `json:"twitter_tags"`
@@ -294,14 +306,23 @@ func (s *Store) InsertSEOAudit(audit SEOAudit) error {
 	_, err = s.db.Exec(
 		`INSERT INTO seo_audits (job_id, url, title, title_length,
 		meta_description, meta_description_length, h1_count,
-		h2_count, h3_count, canonical, og_tags, twitter_tags,
+		h2_count, h3_count, h4_count, h5_count, h6_count,
+		images_total, images_with_alt, images_with_dims,
+		images_lazy_loaded, images_responsive,
+		links_internal, links_external, links_nofollow, html_lang,
+		canonical, og_tags, twitter_tags,
 		jsonld_count, jsonld_types, has_viewport, noindex,
 		top_keywords, primary_keyword, keyword_in_title,
 		keyword_in_h1, keyword_in_url, issues, score)
-		VALUES (UUID_TO_BIN(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (UUID_TO_BIN(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		audit.JobID, audit.URL, audit.Title, audit.TitleLength,
 		audit.MetaDescription, audit.MetaDescriptionLength,
 		audit.H1Count, audit.H2Count, audit.H3Count,
+		audit.H4Count, audit.H5Count, audit.H6Count,
+		audit.ImagesTotal, audit.ImagesWithAlt, audit.ImagesWithDims,
+		audit.ImagesLazyLoaded, audit.ImagesResponsive,
+		audit.LinksInternal, audit.LinksExternal, audit.LinksNofollow,
+		nullIfEmpty(audit.HTMLLang),
 		nullIfEmpty(audit.Canonical), ogTags, twitterTags,
 		audit.JSONLDCount, jsonLDTypes, audit.HasViewport, audit.Noindex,
 		topKeywords, nullIfEmpty(audit.PrimaryKeyword),
