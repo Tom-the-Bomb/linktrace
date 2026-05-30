@@ -205,6 +205,17 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Redis progress counters expire after progressTTL, so a finished job reopened from
+	// history later returns 0/0. Rebuild the counts from the persisted page rows instead.
+	if prog["checked"] == 0 {
+		if cs, serr := s.store.GetCrawlStats(id); serr == nil && cs.TotalPages > 0 {
+			prog["checked"] = cs.TotalPages
+			prog["discovered"] = cs.TotalPages
+			prog["rotten"] = cs.RottenCount
+			prog["healthy"] = cs.TotalPages - cs.RottenCount
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"job_id":     job.ID,
 		"url":        job.URL,
