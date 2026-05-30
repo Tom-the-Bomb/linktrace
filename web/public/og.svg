@@ -6,13 +6,14 @@
     <line x1="120" y1="470" x2="260" y2="540" />
     <line x1="260" y1="540" x2="430" y2="500" />
     <line x1="430" y1="500" x2="560" y2="560" />
-    <line x1="980" y1="470" x2="1080" y2="540" />
+    <line x1="560" y1="560" x2="705" y2="520" />
+    <line x1="705" y1="520" x2="855" y2="555" />
     <circle cx="120" cy="470" r="6" />
     <circle cx="260" cy="540" r="6" />
     <circle cx="430" cy="500" r="6" />
     <circle cx="560" cy="560" r="6" />
-    <circle cx="980" cy="470" r="6" />
-    <circle cx="1080" cy="540" r="6" />
+    <circle cx="705" cy="520" r="6" />
+    <circle cx="855" cy="555" r="6" />
   </g>
 
   <!-- brand row: Link2 glyph + wordmark -->

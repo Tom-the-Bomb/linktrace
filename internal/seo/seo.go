@@ -33,21 +33,21 @@ type Audit struct {
 	H2Count         int
 	H3Count         int
 	// H4-H6 are tracked for completeness but have no scoring rules attached.
-	H4Count         int
-	H5Count         int
-	H6Count         int
-	Canonical       string
-	OGTags          map[string]string
-	TwitterTags     map[string]string
-	JSONLDCount     int
-	JSONLDTypes     []string
-	HasViewport     bool
-	Noindex         bool
-	TopKeywords     []KeywordCount
-	PrimaryKeyword  string
-	KeywordInTitle  bool
-	KeywordInH1     bool
-	KeywordInURL    bool
+	H4Count        int
+	H5Count        int
+	H6Count        int
+	Canonical      string
+	OGTags         map[string]string
+	TwitterTags    map[string]string
+	JSONLDCount    int
+	JSONLDTypes    []string
+	HasViewport    bool
+	Noindex        bool
+	TopKeywords    []KeywordCount
+	PrimaryKeyword string
+	KeywordInTitle bool
+	KeywordInH1    bool
+	KeywordInURL   bool
 
 	// Image stats — a11y + Core Web Vitals signals. ImagesTotal is the denominator for all.
 	ImagesTotal      int
