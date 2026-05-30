@@ -92,7 +92,7 @@ function HistoryRow({
           ) : null}
         </div>
         {/* <a> is inline-block + max-w-full so its hover hit-box is only as wide as the text */}
-        <div className="col-span-5 min-w-0">
+        <div className="col-span-4 min-w-0">
           <a
             href={entry.url}
             target="_blank"
@@ -110,7 +110,9 @@ function HistoryRow({
         <div className="col-span-2 font-mono text-[10px] text-ink-300">
           {formatDate(entry.last_crawled)}
         </div>
-        <div className="col-span-2 text-right">
+        <div className="col-span-3 flex items-center justify-end gap-3">
+          {/* runs[0] is the newest run, so its status reflects the "view latest" target */}
+          <StatusBadge status={entry.runs[0]?.status} />
           <button
             onClick={(ev) => {
               ev.stopPropagation();
@@ -156,7 +158,7 @@ function RunRow({
       <div className="col-span-1 font-mono text-[10px] tabular-nums text-ink-400">
         #{String(index).padStart(2, '0')}
       </div>
-      <div className="col-span-7 font-mono text-[11px] text-ink-300">
+      <div className="col-span-5 font-mono text-[11px] text-ink-300">
         {formatDateTime(run.created_at)}
         {isLatest && (
           <span className="ml-2 font-mono text-[9px] uppercase tracking-widest text-accent/70">
@@ -164,7 +166,8 @@ function RunRow({
           </span>
         )}
       </div>
-      <div className="col-span-4 text-right">
+      <div className="col-span-6 flex items-center justify-end gap-3">
+        <StatusBadge status={run.status} />
         <button
           onClick={(ev) => {
             ev.stopPropagation();
@@ -176,6 +179,28 @@ function RunRow({
         </button>
       </div>
     </li>
+  );
+}
+
+// border + text color per job lifecycle status; unknown statuses fall back to neutral ink.
+const STATUS_STYLES: Record<string, string> = {
+  complete: 'border-emerald-400/40 text-emerald-300',
+  crawling: 'border-accent/40 text-accent',
+  checking: 'border-accent/40 text-accent',
+  pending: 'border-ink-500/70 text-ink-300',
+  failed: 'border-rose-400/40 text-rose-300',
+  stopped: 'border-amber-400/40 text-amber-300',
+};
+
+function StatusBadge({ status }: { status?: string }) {
+  if (!status) return null;
+  const cls = STATUS_STYLES[status] ?? 'border-ink-500/70 text-ink-300';
+  return (
+    <span
+      className={`inline-block whitespace-nowrap border px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest ${cls}`}
+    >
+      {status}
+    </span>
   );
 }
 

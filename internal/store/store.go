@@ -467,6 +467,7 @@ func (s *Store) GetUserByID(id string) (*User, error) {
 type HistoryRun struct {
 	JobID     string    `json:"job_id"`
 	CreatedAt time.Time `json:"created_at"`
+	Status    string    `json:"status"`
 }
 
 type HistoryEntry struct {
@@ -482,7 +483,7 @@ type HistoryEntry struct {
 // Rows are grouped in Go from a single (url, created_at DESC) query.
 func (s *Store) ListUserHistory(userID string) ([]HistoryEntry, error) {
 	rows, err := s.db.Query(`
-		SELECT BIN_TO_UUID(id), url, created_at
+		SELECT BIN_TO_UUID(id), url, status, created_at
 		FROM jobs
 		WHERE user_id = UUID_TO_BIN(?)
 		ORDER BY url, created_at DESC`, userID)
@@ -493,9 +494,9 @@ func (s *Store) ListUserHistory(userID string) ([]HistoryEntry, error) {
 
 	byURL := map[string]*HistoryEntry{}
 	for rows.Next() {
-		var jobID, url string
+		var jobID, url, status string
 		var createdAt time.Time
-		if err := rows.Scan(&jobID, &url, &createdAt); err != nil {
+		if err := rows.Scan(&jobID, &url, &status, &createdAt); err != nil {
 			return nil, err
 		}
 		e, ok := byURL[url]
@@ -505,7 +506,7 @@ func (s *Store) ListUserHistory(userID string) ([]HistoryEntry, error) {
 			byURL[url] = e
 		}
 		e.CrawlCount++
-		e.Runs = append(e.Runs, HistoryRun{JobID: jobID, CreatedAt: createdAt})
+		e.Runs = append(e.Runs, HistoryRun{JobID: jobID, CreatedAt: createdAt, Status: status})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

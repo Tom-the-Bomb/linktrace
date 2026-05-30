@@ -237,6 +237,7 @@ export interface Me {
 export interface HistoryRun {
   job_id: string;
   created_at: string;
+  status: string; // pending | crawling | checking | complete | failed | stopped
 }
 
 export interface HistoryEntry {
