@@ -11,6 +11,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
 )
 
 type Job struct {
@@ -149,6 +150,13 @@ func (s *Store) SetTotalPages(id string, n int) error {
 
 // GetJob returns the job by id, or (nil, nil) if it doesn't exist.
 func (s *Store) GetJob(id string) (*Job, error) {
+	// A malformed id can never match a job, and feeding it to MySQL's UUID_TO_BIN()
+	// raises a query error (surfacing as a 500) rather than an empty result. Treat it
+	// as "not found" so callers return a clean 404.
+	if _, err := uuid.Parse(id); err != nil {
+		return nil, nil
+	}
+
 	var j Job
 	err := s.db.QueryRow(
 		"SELECT BIN_TO_UUID(id), url, status, total_pages, created_at, updated_at FROM jobs WHERE id = UUID_TO_BIN(?)",

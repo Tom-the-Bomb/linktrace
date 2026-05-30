@@ -35,6 +35,23 @@ func corsMiddleware(origin string) func(http.Handler) http.Handler {
 	}
 }
 
+// jobExists guards the per-job sub-resource handlers (results/report/graph): it returns
+// true when the job is present, and otherwise writes the appropriate response — 500 on a
+// lookup failure, 404 when the id is simply unknown — and returns false so the caller can
+// bail. Without this an unknown id falls through to the data queries and reads as a 500.
+func (s *Server) jobExists(w http.ResponseWriter, id string) bool {
+	job, err := s.store.GetJob(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "lookup failed"})
+		return false
+	}
+	if job == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
+		return false
+	}
+	return true
+}
+
 // toStoreSiteAudit converts the site.Audit (network struct) to store.SiteAudit (db struct).
 // Same fields, different package — keeps `store` from importing `site`.
 func toStoreSiteAudit(a site.Audit) store.SiteAudit {

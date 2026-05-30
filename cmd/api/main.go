@@ -242,6 +242,10 @@ type pageRow struct {
 func (s *Server) handleResults(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
+	if !s.jobExists(w, id) {
+		return
+	}
+
 	pages, err := s.store.ListPageResults(id)
 	if err != nil {
 		log.Printf("handleResults: ListPageResults(%s): %v", id, err)
@@ -283,6 +287,10 @@ func (s *Server) handleResults(w http.ResponseWriter, r *http.Request) {
 // GET /check/{id}/report, overall totals + per-category breakdown.
 func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+
+	if !s.jobExists(w, id) {
+		return
+	}
 
 	pages, err := s.store.ListPageResults(id)
 	if err != nil {
@@ -370,6 +378,10 @@ type graphEdge struct {
 // Edges referencing pages we never crawled (off-host, cap reached, etc.) are filtered out.
 func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+
+	if !s.jobExists(w, id) {
+		return
+	}
 
 	pages, err := s.store.ListPageResults(id)
 	if err != nil {
