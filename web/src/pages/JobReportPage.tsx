@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import {
+  ApiError,
   type GraphData,
   type PageRow,
   type Report,
@@ -13,14 +14,12 @@ import {
   getResults,
   getStatus,
 } from '../api';
-import { useCreateCrawl } from '../hooks/useCreateCrawl';
-import { useSeo } from '../hooks/useSeo';
-import { isTerminalStatus } from '../lib/status';
 import { Categories } from '../components/Categories';
 import { CompactHeader } from '../components/CompactHeader';
 import { CoverageGapPanel } from '../components/CoverageGapPanel';
 import { CrawlStatsPanel } from '../components/CrawlStatsPanel';
 import { GraphView } from '../components/GraphView';
+import { NotFound } from '../components/NotFound';
 import { OverallReport } from '../components/OverallReport';
 import { ProgressView } from '../components/ProgressView';
 import { ResultsTable } from '../components/ResultsTable';
@@ -28,6 +27,9 @@ import { SectionHeader } from '../components/SectionHeader';
 import { SeoDrawer } from '../components/SeoDrawer';
 import { SiteAuditPanel } from '../components/SiteAuditPanel';
 import { type Tab, Tabs } from '../components/Tabs';
+import { useCreateCrawl } from '../hooks/useCreateCrawl';
+import { useSeo } from '../hooks/useSeo';
+import { isTerminalStatus } from '../lib/status';
 
 // Route at /jobs/:jobId. Owns the live polling effect + all the report sections.
 // When the user submits a new crawl from this page's header, we create a new job
@@ -41,6 +43,7 @@ export default function JobReportPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [tab, setTab] = useState<Tab>('graph');
   const [drilldownUrl, setDrilldownUrl] = useState<string | null>(null);
 
@@ -66,6 +69,7 @@ export default function JobReportPage() {
     setReport(null);
     setGraph(null);
     setError(null);
+    setNotFound(false);
 
     let stop = false;
     const tick = async () => {
@@ -83,7 +87,10 @@ export default function JobReportPage() {
         setGraph(g);
         if (s.status === 'complete' || s.status === 'failed' || s.status === 'stopped') return;
       } catch (err) {
-        if (!stop) setError(String(err));
+        if (stop) return;
+        if (err instanceof ApiError && err.status === 404) setNotFound(true);
+        else setError(String(err));
+        return;
       }
       if (!stop) setTimeout(tick, 1000);
     };
@@ -117,6 +124,16 @@ export default function JobReportPage() {
   }
 
   if (!jobId) return null;
+
+  if (notFound) {
+    return (
+      <NotFound
+        eyebrow="error 404"
+        title="Report not found"
+        message="No crawl matches this ID — it may have expired or never existed. Start a new one from the home page."
+      />
+    );
+  }
 
   return (
     <>
