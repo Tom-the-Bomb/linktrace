@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react';
 
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-import { type HistoryEntry, type HistoryRun, getHistory } from '../api';
+import { type HistoryEntry, type HistoryRun, deleteJob, getHistory } from '../api';
+import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
 import { SectionHeader } from './SectionHeader';
+
+// One crawl run targeted for deletion; url + startedAt populate the confirm dialog.
+interface DeleteTarget {
+  jobId: string;
+  url: string;
+  startedAt: string;
+}
 
 // Per-site history. Single-run sites get a flat row with one "view report" button.
 // Multi-run sites get a chevron that expands a list of every individual run, each
@@ -15,6 +23,11 @@ export function History() {
   const [error, setError] = useState<string | null>(null);
   // set of URLs whose run list is currently expanded
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // the run awaiting delete confirmation, plus in-flight + error state for the dialog
+  const [pendingDelete, setPendingDelete] = useState<DeleteTarget | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     getHistory()
@@ -29,6 +42,50 @@ export function History() {
       else next.add(url);
       return next;
     });
+
+  // Drop a deleted run from the list in place: prune the run, recompute the entry's
+  // count + "latest" pointers, and remove the entry entirely if it had only that run.
+  const removeRun = (jobId: string) =>
+    setEntries((prev) =>
+      prev
+        ? prev.flatMap((e) => {
+            if (!e.runs.some((r) => r.job_id === jobId)) return [e];
+            const runs = e.runs.filter((r) => r.job_id !== jobId);
+            if (runs.length === 0) return [];
+            // runs stay newest-first, so runs[0] is the new latest
+            return [
+              {
+                ...e,
+                runs,
+                crawl_count: runs.length,
+                last_job_id: runs[0].job_id,
+                last_crawled: runs[0].created_at,
+              },
+            ];
+          })
+        : prev,
+    );
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteJob(pendingDelete.jobId);
+      removeRun(pendingDelete.jobId);
+      setPendingDelete(null);
+    } catch (e) {
+      // show the server's message ("not your job") without the "ApiError:" prefix String() adds
+      setDeleteError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  function closeDialog() {
+    setPendingDelete(null);
+    setDeleteError(null);
+  }
 
   return (
     <section>
@@ -55,9 +112,21 @@ export function History() {
               expanded={expanded.has(e.url)}
               onToggle={() => toggle(e.url)}
               onOpen={(jobId) => navigate(`/jobs/${jobId}`)}
+              onRequestDelete={setPendingDelete}
             />
           ))}
         </ul>
+      )}
+
+      {pendingDelete && (
+        <ConfirmDeleteDialog
+          url={pendingDelete.url}
+          startedAt={pendingDelete.startedAt}
+          busy={deleting}
+          error={deleteError}
+          onConfirm={confirmDelete}
+          onCancel={closeDialog}
+        />
       )}
     </section>
   );
@@ -68,11 +137,13 @@ function HistoryRow({
   expanded,
   onToggle,
   onOpen,
+  onRequestDelete,
 }: {
   entry: HistoryEntry;
   expanded: boolean;
   onToggle: () => void;
   onOpen: (jobId: string) => void;
+  onRequestDelete: (target: DeleteTarget) => void;
 }) {
   const multi = entry.crawl_count > 1;
 
@@ -111,6 +182,18 @@ function HistoryRow({
           {formatDate(entry.last_crawled)}
         </div>
         <div className="col-span-3 flex items-center justify-end gap-3">
+          {/* delete sits to the left of the status; revealed on row hover. Targets the latest
+              run (multi-run groups delete older runs individually from the RunRows below) */}
+          <DeleteButton
+            onClick={(ev) => {
+              ev.stopPropagation();
+              onRequestDelete({
+                jobId: entry.last_job_id,
+                url: entry.url,
+                startedAt: entry.runs[0]?.created_at ?? entry.last_crawled,
+              });
+            }}
+          />
           {/* runs[0] is the newest run, so its status reflects the "view latest" target */}
           <StatusBadge status={entry.runs[0]?.status} />
           <button
@@ -134,6 +217,9 @@ function HistoryRow({
               index={entry.runs.length - i} // count down so latest = N, oldest = 1
               isLatest={i === 0}
               onOpen={() => onOpen(run.job_id)}
+              onRequestDelete={() =>
+                onRequestDelete({ jobId: run.job_id, url: entry.url, startedAt: run.created_at })
+              }
             />
           ))}
         </ul>
@@ -147,14 +233,16 @@ function RunRow({
   index,
   isLatest,
   onOpen,
+  onRequestDelete,
 }: {
   run: HistoryRun;
   index: number;
   isLatest: boolean;
   onOpen: () => void;
+  onRequestDelete: () => void;
 }) {
   return (
-    <li className="grid grid-cols-12 items-center gap-4 py-2 pr-4 transition hover:bg-ink-700/30">
+    <li className="group grid grid-cols-12 items-center gap-4 py-2 pr-4 transition hover:bg-ink-700/30">
       <div className="col-span-1 font-mono text-[10px] tabular-nums text-ink-400">
         #{String(index).padStart(2, '0')}
       </div>
@@ -167,6 +255,13 @@ function RunRow({
         )}
       </div>
       <div className="col-span-6 flex items-center justify-end gap-3">
+        <DeleteButton
+          small
+          onClick={(ev) => {
+            ev.stopPropagation();
+            onRequestDelete();
+          }}
+        />
         <StatusBadge status={run.status} />
         <button
           onClick={(ev) => {
@@ -179,6 +274,31 @@ function RunRow({
         </button>
       </div>
     </li>
+  );
+}
+
+// Subtle trash affordance: hidden until the row (a `group`) is hovered or the button is
+// focused, then muted ink that lights up rose on hover. Positioned absolutely by callers so
+// it floats past the row's right edge instead of shifting the row's layout. Shared by both rows.
+function DeleteButton({
+  onClick,
+  className = '',
+  small = false,
+}: {
+  onClick: (ev: React.MouseEvent) => void;
+  className?: string;
+  // sub-dropdown run rows use a smaller icon than the top-level rows
+  small?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label="Delete crawl"
+      title="Delete crawl"
+      className={`flex items-center text-ink-400 opacity-0 transition hover:text-rose-300 focus-visible:opacity-100 group-hover:opacity-100 ${className}`}
+    >
+      <Trash2 className={small ? 'h-3.5 w-3.5 translate-x-0.5' : 'h-4 w-4'} strokeWidth={2} />
+    </button>
   );
 }
 

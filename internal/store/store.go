@@ -16,6 +16,7 @@ import (
 
 type Job struct {
 	ID         string
+	UserID     string // owner; "" for anonymous jobs
 	URL        string
 	Status     string
 	TotalPages int
@@ -148,6 +149,38 @@ func (s *Store) SetTotalPages(id string, n int) error {
 	return err
 }
 
+// DeleteJob removes a job and every row that references it. The child tables have
+// FK(job_id) -> jobs(id) with no ON DELETE CASCADE, so we delete children before the
+// parent, all inside one transaction so a partial failure leaves nothing orphaned.
+func (s *Store) DeleteJob(id string) error {
+	// A malformed id matches nothing (and would error inside UUID_TO_BIN); treat as a no-op.
+	if _, err := uuid.Parse(id); err != nil {
+		return nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once Commit succeeds
+
+	// children first, parent last
+	stmts := []string{
+		"DELETE FROM pages WHERE job_id = UUID_TO_BIN(?)",
+		"DELETE FROM seo_audits WHERE job_id = UUID_TO_BIN(?)",
+		"DELETE FROM links WHERE job_id = UUID_TO_BIN(?)",
+		"DELETE FROM category_reports WHERE job_id = UUID_TO_BIN(?)",
+		"DELETE FROM site_audits WHERE job_id = UUID_TO_BIN(?)",
+		"DELETE FROM jobs WHERE id = UUID_TO_BIN(?)",
+	}
+	for _, q := range stmts {
+		if _, err := tx.Exec(q, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // GetJob returns the job by id, or (nil, nil) if it doesn't exist.
 func (s *Store) GetJob(id string) (*Job, error) {
 	// A malformed id can never match a job, and feeding it to MySQL's UUID_TO_BIN()
@@ -158,10 +191,11 @@ func (s *Store) GetJob(id string) (*Job, error) {
 	}
 
 	var j Job
+	var userID sql.NullString // user_id is nullable for anonymous jobs
 	err := s.db.QueryRow(
-		"SELECT BIN_TO_UUID(id), url, status, total_pages, created_at, updated_at FROM jobs WHERE id = UUID_TO_BIN(?)",
+		"SELECT BIN_TO_UUID(id), BIN_TO_UUID(user_id), url, status, total_pages, created_at, updated_at FROM jobs WHERE id = UUID_TO_BIN(?)",
 		id,
-	).Scan(&j.ID, &j.URL, &j.Status, &j.TotalPages, &j.CreatedAt, &j.UpdatedAt)
+	).Scan(&j.ID, &userID, &j.URL, &j.Status, &j.TotalPages, &j.CreatedAt, &j.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -169,6 +203,7 @@ func (s *Store) GetJob(id string) (*Job, error) {
 	if err != nil {
 		return nil, err
 	}
+	j.UserID = userID.String
 	return &j, nil
 }
 

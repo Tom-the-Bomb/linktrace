@@ -72,6 +72,7 @@ func main() {
 	// crawl endpoints are anonymous-friendly; Optional tags ownership when a cookie is present
 	r.Post("/check", s.handleCreate)
 	r.Post("/check/{id}/cancel", s.handleCancel)
+	r.Delete("/check/{id}", s.handleDelete)
 	r.Get("/check/{id}", s.handleStatus)
 	r.Get("/check/{id}/results", s.handleResults)
 	r.Get("/check/{id}/report", s.handleReport)
@@ -175,6 +176,9 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
 		return
 	}
+	if !authorizeJobMutation(w, r, job) {
+		return
+	}
 	if err := s.cache.Cancel(id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "cancel failed"})
 		return
@@ -183,6 +187,45 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 	// cancelled jobs never bump `checked`, so maybeComplete won't fire; set status here
 	_ = s.store.UpdateJobStatus(id, "stopped")
 	writeJSON(w, http.StatusOK, map[string]string{"job_id": id, "status": "stopped"})
+}
+
+// handleDelete (DELETE /check/{id}) tears a job down completely. It works whether the crawl
+// is still running or already finished:
+//   - PurgeJob sets the cancel tombstone FIRST, so any of this job's messages still sitting in
+//     the shared work queue are skipped by workers (which frees them cheaply via an ack) instead
+//     of writing rows for a job we're deleting; it then clears the job's progress/seen/category
+//     Redis keys.
+//   - DeleteJob removes every persisted row (pages, audits, links, category reports, site audit,
+//     job) in one transaction.
+//
+// The cache purge runs before the DB delete so no worker can re-create rows mid-delete.
+func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	job, err := s.store.GetJob(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "lookup failed"})
+		return
+	}
+	if job == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
+		return
+	}
+	if !authorizeJobMutation(w, r, job) {
+		return
+	}
+
+	if err := s.cache.PurgeJob(id); err != nil {
+		// Non-fatal: the tombstone/keys self-expire. Log and still remove the DB rows so the
+		// user-visible delete succeeds rather than failing on a transient Redis hiccup.
+		log.Printf("[api] job %s purge cache: %v", id[:8], err)
+	}
+	if err := s.store.DeleteJob(id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete failed"})
+		return
+	}
+	log.Printf("[api] job %s DELETED by user", id[:8])
+	writeJSON(w, http.StatusOK, map[string]string{"job_id": id, "status": "deleted"})
 }
 
 // GET /check/{id}, job row (MySQL) + live progress (Redis).
@@ -220,6 +263,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"job_id":     job.ID,
 		"url":        job.URL,
 		"status":     job.Status,
+		"created_at": job.CreatedAt,
 		"discovered": prog["discovered"],
 		"checked":    prog["checked"],
 		"healthy":    prog["healthy"],

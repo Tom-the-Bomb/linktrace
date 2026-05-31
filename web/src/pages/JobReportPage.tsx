@@ -9,6 +9,7 @@ import {
   type Report,
   type Status,
   cancelCheck,
+  deleteJob,
   getGraph,
   getReport,
   getResults,
@@ -16,6 +17,7 @@ import {
 } from '../api';
 import { Categories } from '../components/Categories';
 import { CompactHeader } from '../components/CompactHeader';
+import { ConfirmDeleteDialog } from '../components/ConfirmDeleteDialog';
 import { CoverageGapPanel } from '../components/CoverageGapPanel';
 import { CrawlStatsPanel } from '../components/CrawlStatsPanel';
 import { GraphView } from '../components/GraphView';
@@ -46,6 +48,11 @@ export default function JobReportPage() {
   const [notFound, setNotFound] = useState(false);
   const [tab, setTab] = useState<Tab>('graph');
   const [drilldownUrl, setDrilldownUrl] = useState<string | null>(null);
+
+  // delete-confirmation dialog state
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // "new crawl" input in the compact header; the hook handles create + navigate.
   const [newUrl, setNewUrl] = useState('');
@@ -123,6 +130,22 @@ export default function JobReportPage() {
     void submit(newUrl);
   }
 
+  // Delete the job (stops it server-side if still running), then leave — the report no
+  // longer exists, so return to the hero.
+  async function onConfirmDelete() {
+    if (!jobId) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteJob(jobId);
+      navigate('/');
+    } catch (err) {
+      // show the server's message ("not your job") without the "ApiError:" prefix String() adds
+      setDeleteError(err instanceof Error ? err.message : String(err));
+      setDeleting(false);
+    }
+  }
+
   if (!jobId) return null;
 
   if (notFound) {
@@ -154,7 +177,7 @@ export default function JobReportPage() {
           </div>
         )}
 
-        <ProgressView status={status} />
+        <ProgressView status={status} onDelete={() => setConfirmingDelete(true)} />
 
         {report && (
           <div className="mt-16">
@@ -204,6 +227,20 @@ export default function JobReportPage() {
       </main>
 
       <SeoDrawer jobId={jobId} url={drilldownUrl} onClose={() => setDrilldownUrl(null)} />
+
+      {confirmingDelete && status && (
+        <ConfirmDeleteDialog
+          url={status.url}
+          startedAt={status.created_at}
+          busy={deleting}
+          error={deleteError}
+          onConfirm={onConfirmDelete}
+          onCancel={() => {
+            setConfirmingDelete(false);
+            setDeleteError(null);
+          }}
+        />
+      )}
     </>
   );
 }

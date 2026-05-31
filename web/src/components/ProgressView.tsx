@@ -1,10 +1,19 @@
+import { Trash2 } from 'lucide-react';
+
 import type { Status } from '../api';
 import { type Tone, toneColour } from '../lib/colours';
 import { isTerminalStatus } from '../lib/status';
 import { SectionHeader } from './SectionHeader';
 
 // Live crawl progress: oversized segmented bar + a single big number, with smaller stats on the side.
-export function ProgressView({ status }: { status: Status | null }) {
+// onDelete, when provided, renders a subtle trash button beside the status badge.
+export function ProgressView({
+  status,
+  onDelete,
+}: {
+  status: Status | null;
+  onDelete?: () => void;
+}) {
   if (!status) return null;
   const { discovered, checked, healthy, rotten, status: state, url } = status;
   const pending = Math.max(0, discovered - checked);
@@ -17,7 +26,21 @@ export function ProgressView({ status }: { status: Status | null }) {
       <SectionHeader
         number="01"
         title={state === 'stopped' ? 'Crawl stopped' : isDone ? 'Crawl complete' : 'Crawling'}
-        subtitle={url}
+        right={
+          <div className="flex items-center gap-3">
+            {url && <span className="hidden text-xs italic text-ink-300 sm:inline">{url}</span>}
+            {onDelete && (
+              <button
+                onClick={onDelete}
+                aria-label="Delete crawl"
+                title="Delete crawl"
+                className="text-ink-400 transition hover:text-rose-300"
+              >
+                <Trash2 className="h-4 w-4" strokeWidth={2} />
+              </button>
+            )}
+          </div>
+        }
       />
 
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">

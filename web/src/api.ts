@@ -8,6 +8,7 @@ export interface Status {
   job_id: string;
   url: string;
   status: JobStatus;
+  created_at: string;
   discovered: number;
   checked: number;
   healthy: number;
@@ -146,6 +147,12 @@ export function createCheck(url: string): Promise<{ job_id: string }> {
 
 export function cancelCheck(id: string): Promise<{ job_id: string; status: string }> {
   return jsonRequest(`/check/${id}/cancel`, { method: 'POST' });
+}
+
+// deleteJob removes a job and all of its data. The server also tombstones the job so an
+// in-progress crawl's workers stop and its queued work drains without resurrecting rows.
+export function deleteJob(id: string): Promise<{ job_id: string; status: string }> {
+  return jsonRequest(`/check/${id}`, { method: 'DELETE' });
 }
 
 export function getStatus(id: string): Promise<Status> {

@@ -24,7 +24,7 @@ func corsMiddleware(origin string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
@@ -33,6 +33,18 @@ func corsMiddleware(origin string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// authorizeJobMutation gates destructive actions (cancel/delete). Reads stay open — the
+// unguessable job UUID is the capability for viewing/sharing a report — but mutating a job
+// that has an owner requires being that owner. Anonymous jobs (no owner) have no identity to
+// check against, so they remain UUID-gated. Writes 403 and returns false when not allowed.
+func authorizeJobMutation(w http.ResponseWriter, r *http.Request, job *store.Job) bool {
+	if job.UserID != "" && job.UserID != auth.UserID(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "unable to perform action on a job you didn't create"})
+		return false
+	}
+	return true
 }
 
 // jobExists guards the per-job sub-resource handlers (results/report/graph): it returns
