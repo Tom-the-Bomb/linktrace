@@ -3,8 +3,7 @@ import { Link } from 'react-router-dom';
 
 import { useSeo } from '../hooks/useSeo';
 
-// Standalone 404 state. Used for /jobs/:id when the API doesn't recognise the ID,
-// and reusable for any unmatched route. Matches the hero's dark, hairline aesthetic.
+// standalone 404 state. for /jobs/:id with an unknown ID, reusable for any unmatched route.
 export function NotFound({
   eyebrow = 'error 404',
   title = 'Page not found',

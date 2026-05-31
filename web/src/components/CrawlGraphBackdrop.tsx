@@ -85,8 +85,8 @@ function scoreFor(tone: NodeTone, seed: number) {
   return lo + ((seed * 7919) % (hi - lo + 1));
 }
 
-// CrawlGraphBackdrop is the interactive node-graph canvas behind the hero: spring-anchored
-// nodes wobble, can be dragged, and reveal a tooltip on hover/drag. Purely decorative.
+// interactive node-graph canvas behind the hero: spring-anchored nodes wobble, drag,
+// tooltip on hover. purely decorative.
 export function CrawlGraphBackdrop() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nodesRef = useRef<BgNode[]>(

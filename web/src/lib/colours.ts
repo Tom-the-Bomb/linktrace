@@ -1,5 +1,5 @@
-// Shared colour mappings so the SEO score thresholds (≥80 good, ≥50 ok, else poor) and the
-// ok/bad tone live in exactly one place instead of being re-typed across every panel.
+// shared colour mappings so SEO score thresholds (>=80 good, >=50 ok, else poor) and the
+// ok/bad tone live in one place.
 
 export type Tone = 'ok' | 'bad';
 

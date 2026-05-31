@@ -3,8 +3,8 @@ import { type FormEvent, useState } from 'react';
 import { ApiError } from '../api';
 import { useAuth } from '../context/AuthContext';
 
-// Map server responses to a friendly sentence: mostly forward the backend's {error} body,
-// overriding per status where a clearer message helps (e.g. 401 differs for login vs register).
+// map server responses to a friendly message: forward the backend {error}, override per
+// status where clearer (401 differs for login vs register).
 function friendlyError(err: unknown, mode: 'login' | 'register'): string {
   if (err instanceof ApiError) {
     switch (err.status) {
@@ -30,8 +30,7 @@ function friendlyError(err: unknown, mode: 'login' | 'register'): string {
   return String(err);
 }
 
-// Inner login/register form. Toggles mode in place, same two inputs either way.
-// Used by AuthPage (full-page wrapper provides the layout chrome).
+// inner login/register form. toggles mode in place, same two inputs. used by AuthPage.
 export function AuthForm({ onDone }: { onDone?: () => void }) {
   const { login, register } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');

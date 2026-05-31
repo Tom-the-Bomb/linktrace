@@ -5,8 +5,8 @@ import { type Tone, toneColour } from '../lib/colours';
 import { isTerminalStatus } from '../lib/status';
 import { SectionHeader } from './SectionHeader';
 
-// Live crawl progress: oversized segmented bar + a single big number, with smaller stats on the side.
-// onDelete, when provided, renders a subtle trash button beside the status badge.
+// live crawl progress: big segmented bar + one big number, smaller stats on the side.
+// onDelete (optional) renders a trash button beside the status badge.
 export function ProgressView({
   status,
   onDelete,

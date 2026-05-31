@@ -8,8 +8,7 @@ import App from './App';
 import { AuthProvider } from './context/AuthProvider';
 import './index.css';
 
-// BrowserRouter must wrap AuthProvider too so the AuthBar's useNavigate works
-// when fired from inside the auth context's effect callbacks.
+// BrowserRouter wraps AuthProvider too so AuthBar's useNavigate works from auth effect callbacks.
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>

@@ -44,6 +44,7 @@ type Queue struct {
 	ch   *amqp.Channel
 }
 
+// New dials RabbitMQ, opens a channel, and declares the topology.
 func New(url string) (*Queue, error) {
 	conn, err := amqp.Dial(url)
 	if err != nil {
@@ -62,6 +63,7 @@ func New(url string) (*Queue, error) {
 	return q, nil
 }
 
+// Close closes the connection (and its channels).
 func (q *Queue) Close() error {
 	return q.conn.Close()
 }
@@ -86,6 +88,7 @@ func (q *Queue) PublishPageJob(job PageJob) error {
 	)
 }
 
+// PublishResult fans a checked-page result out to all result consumers.
 func (q *Queue) PublishResult(r PageChecked) error {
 	body, err := json.Marshal(r)
 	if err != nil {

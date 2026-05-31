@@ -2,7 +2,7 @@ import type { CrawlStats } from '../api';
 import { type Tone, toneColour } from '../lib/colours';
 import { SectionHeader } from './SectionHeader';
 
-// Crawl performance numbers, computed from page_results (no separate telemetry table).
+// crawl performance, computed from page_results (no separate telemetry table)
 export function CrawlStatsPanel({ stats }: { stats: CrawlStats }) {
   const errorPct = (stats.error_rate * 100).toFixed(1);
   const mins = Math.floor(stats.duration_seconds / 60);

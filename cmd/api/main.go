@@ -35,6 +35,7 @@ type Server struct {
 	queue *queue.Queue
 }
 
+// main wires up the store/cache/queue, mounts the routes, and serves until shutdown.
 func main() {
 	cfg := config.Load()
 
@@ -190,16 +191,10 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"job_id": id, "status": "stopped"})
 }
 
-// handleDelete (DELETE /check/{id}) tears a job down completely. It works whether the crawl
-// is still running or already finished:
-//   - PurgeJob sets the cancel tombstone FIRST, so any of this job's messages still sitting in
-//     the shared work queue are skipped by workers (which frees them cheaply via an ack) instead
-//     of writing rows for a job we're deleting; it then clears the job's progress/seen/category
-//     Redis keys.
-//   - DeleteJob removes every persisted row (pages, audits, links, category reports, site audit,
-//     job) in one transaction.
-//
-// The cache purge runs before the DB delete so no worker can re-create rows mid-delete.
+// handleDelete (DELETE /check/{id}) tears a job down, running or finished. PurgeJob sets the
+// cancel tombstone first so in-flight messages are skipped (not written), then clears the
+// job's Redis keys; DeleteJob removes every row in one tx. Purge runs before the DB delete so
+// no worker re-creates rows mid-delete.
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 

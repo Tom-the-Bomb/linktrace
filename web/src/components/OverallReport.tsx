@@ -2,7 +2,7 @@ import type { Report } from '../api';
 import { type Tone, scoreStrokeColour, scoreTextColour, toneColour } from '../lib/colours';
 import { SectionHeader } from './SectionHeader';
 
-// Featured gauge + headline metric on the left, supporting stats + issues on the right.
+// gauge + headline metric left, stats + issues right
 export function OverallReport({ report }: { report: Report }) {
   const { total_pages, healthy, rotten, avg_seo_score } = report.overall;
   const top_issues = report.overall.top_issues ?? [];
@@ -98,7 +98,7 @@ function ScoreGauge({ score }: { score: number }) {
           strokeDasharray={`${dash} ${c}`}
           className={`${strokeColour} transition-[stroke-dasharray] duration-700`}
         />
-        {/* tick marks every 10% for a more instrument-like feel */}
+        {/* tick marks every 10% */}
         {Array.from({ length: 20 }).map((_, i) => {
           const a = (i / 20) * Math.PI * 2;
           const x1 = size / 2 + Math.cos(a) * (r - 8);

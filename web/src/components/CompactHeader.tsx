@@ -16,8 +16,8 @@ interface CompactHeaderProps {
   onStopOrBack: () => void;
 }
 
-// Sticky top bar used on /history and /jobs/:id. Hosts the "new crawl" form,
-// the stop/back button (only when a job is active), and the AuthBar.
+// sticky top bar on /history and /jobs/:id. hosts the new-crawl form, the stop/back
+// button (when a job is active), and the AuthBar.
 export function CompactHeader({
   jobId,
   url,

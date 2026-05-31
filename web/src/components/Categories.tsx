@@ -21,7 +21,7 @@ function rotRatio(c: CategoryReport): number {
   return c.total_pages > 0 ? c.rotten_pages / c.total_pages : 0;
 }
 
-// Per-category breakdown rendered as a wide list, each row sized to read at a glance.
+// per-category breakdown as a wide list, each row readable at a glance
 export function Categories({ categories }: { categories: CategoryReport[] }) {
   const [filter, setFilter] = useState<Filter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('pages');
@@ -122,7 +122,7 @@ export function Categories({ categories }: { categories: CategoryReport[] }) {
   );
 }
 
-// minimalist separator between control groups in the header
+// separator between control groups
 function Divider() {
   return (
     <span aria-hidden="true" className="font-mono text-[10px] text-ink-400">
@@ -152,8 +152,8 @@ function ChipText({
   );
 }
 
-// SortChip: same look as ChipText but appends an arrow when active. Click active to flip
-// direction; click inactive to make it active (and reset direction to desc).
+// SortChip: like ChipText, adds an arrow when active. click active to flip dir; click
+// inactive to select it (resets to desc).
 function SortChip({
   k,
   label,

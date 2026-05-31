@@ -1,8 +1,8 @@
 import type { SiteAudit, SiteSEO } from '../api';
 import { SectionHeader } from './SectionHeader';
 
-// Domain-level checks (robots, sitemap, https, www) + site-wide SEO roll-ups.
-// Reads two slices of the report: site_audit (one-shot) and site_seo (aggregated counts).
+// domain checks (robots, sitemap, https, www) + site-wide SEO roll-ups.
+// reads site_audit (one-shot) and site_seo (aggregated counts).
 export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO | null }) {
   return (
     <section>

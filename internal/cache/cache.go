@@ -35,6 +35,7 @@ func New(addr string) (*Cache, error) {
 	return &Cache{rdb: rdb}, nil
 }
 
+// Close closes the Redis client.
 func (c *Cache) Close() error {
 	return c.rdb.Close()
 }

@@ -26,6 +26,7 @@ import (
 
 const maxRetries = 3
 
+// main starts the page-fetch workers and the result consumers, then waits for shutdown.
 func main() {
 	cfg := config.Load()
 
@@ -312,6 +313,7 @@ type reportBuilder struct {
 	cache *cache.Cache
 }
 
+// handle persists a checked page (rot row, SEO audit, links) and bumps progress.
 func (rb *reportBuilder) handle(msg queue.PageChecked) error {
 	// cancelled mid-flight: drop the message, preserving whatever was already saved
 	if rb.cache.IsCancelled(msg.JobID) {
@@ -380,6 +382,7 @@ type archiveChecker struct {
 	cache *cache.Cache
 }
 
+// handle looks up a Wayback snapshot for rotten pages and stores it.
 func (ac *archiveChecker) handle(msg queue.PageChecked) error {
 	if msg.IsAlive {
 		return nil
@@ -418,10 +421,12 @@ type catTally struct {
 	scoreCount int
 }
 
+// newAggregator builds an aggregator with empty per-job category tallies.
 func newAggregator(st *store.Store, ca *cache.Cache) *aggregator {
 	return &aggregator{store: st, cache: ca, stats: map[string]map[string]*catTally{}}
 }
 
+// handle tallies a page into its URL category and rewrites that category's report row.
 func (ag *aggregator) handle(msg queue.PageChecked) error {
 	// cancelled: skip the write and free the per-job stats so it doesn't squat on memory
 	if ag.cache.IsCancelled(msg.JobID) {

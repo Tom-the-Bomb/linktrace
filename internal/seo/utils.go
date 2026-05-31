@@ -75,11 +75,10 @@ func handleMeta(a *Audit, n *html.Node) {
 	}
 }
 
-// findIssues classifies SEO findings by severity:
-//
-//	error   = breaks indexing / search visibility (missing title, multiple H1, noindex)
-//	warning = suboptimal / against best practice (too-long title, missing meta desc, no canonical)
-//	info    = nice-to-have / non-critical signals (no OG tags, no JSON-LD, no viewport)
+// findIssues classifies findings by severity:
+//	error   = breaks indexing (missing title, multiple H1, noindex)
+//	warning = suboptimal (too-long title, missing meta desc, no canonical)
+//	info    = nice-to-have (no OG, no JSON-LD, no viewport)
 func findIssues(a *Audit) []Issue {
 	var issues []Issue
 	add := func(code, msg, sev string) {

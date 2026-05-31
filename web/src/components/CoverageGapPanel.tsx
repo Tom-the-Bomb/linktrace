@@ -3,8 +3,7 @@ import { useState } from 'react';
 import type { CoverageGap } from '../api';
 import { SectionHeader } from './SectionHeader';
 
-// Sitemap vs crawled URL set difference. Always renders all three sections; empty ones
-// show a 0 count in green so the reader sees the full audit at a glance.
+// sitemap vs crawled set difference. always renders all three sections; empty ones show a green 0.
 export function CoverageGapPanel({ gap }: { gap: CoverageGap }) {
   const total = gap.orphans.length + gap.not_crawled.length + gap.sitemap_dead.length;
 

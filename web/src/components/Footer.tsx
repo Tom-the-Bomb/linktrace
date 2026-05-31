@@ -1,4 +1,4 @@
-// Bottom-of-page footer. Lives in every route via the App-level layout shell.
+// bottom-of-page footer, in every route via the App layout shell
 export function Footer() {
   const links = [
     { href: 'https://github.com/Tom-the-Bomb/linktrace', label: 'github' },

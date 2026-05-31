@@ -101,8 +101,7 @@ export interface Report {
   coverage_gap: CoverageGap | null;
 }
 
-// Thrown by jsonRequest on non-2xx responses. Carries the HTTP status so callers can
-// branch (e.g. AuthForm wants to phrase 401 as "wrong password" vs. 409 as "username taken").
+// thrown on non-2xx. carries the HTTP status so callers can branch (401 vs 409).
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -112,8 +111,8 @@ export class ApiError extends Error {
   }
 }
 
-// every request goes through this so the session cookie rides along + JSON headers stay consistent.
-// credentials: 'include' is what makes the browser actually send the cookie cross-origin.
+// all requests go through this for the session cookie + JSON headers.
+// credentials: 'include' sends the cookie cross-origin.
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
@@ -121,7 +120,7 @@ async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
   });
   if (!res.ok) {
-    // Prefer the server's {"error": "..."} message; fall back to status text.
+    // prefer the server {error} message, fall back to status text
     let msg = `${res.status} ${res.statusText || 'request failed'}`;
     try {
       const body = (await res.json()) as { error?: string };
@@ -134,6 +133,7 @@ async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// POST /check: start a crawl (prepends https:// if no scheme)
 export function createCheck(url: string): Promise<{ job_id: string }> {
   if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`;
@@ -145,24 +145,28 @@ export function createCheck(url: string): Promise<{ job_id: string }> {
   });
 }
 
+// POST /check/{id}/cancel: stop a running crawl
 export function cancelCheck(id: string): Promise<{ job_id: string; status: string }> {
   return jsonRequest(`/check/${id}/cancel`, { method: 'POST' });
 }
 
-// deleteJob removes a job and all of its data. The server also tombstones the job so an
-// in-progress crawl's workers stop and its queued work drains without resurrecting rows.
+// deleteJob removes a job and its data. the server tombstones it so a running crawl's
+// workers stop and queued work drains.
 export function deleteJob(id: string): Promise<{ job_id: string; status: string }> {
   return jsonRequest(`/check/${id}`, { method: 'DELETE' });
 }
 
+// GET /check/{id}: job status + live progress counts
 export function getStatus(id: string): Promise<Status> {
   return jsonRequest(`/check/${id}`);
 }
 
+// GET /check/{id}/results: per-page rows
 export function getResults(id: string): Promise<PageRow[]> {
   return jsonRequest(`/check/${id}/results`);
 }
 
+// GET /check/{id}/report: aggregated report (overall, categories, site audit, etc)
 export function getReport(id: string): Promise<Report> {
   return jsonRequest(`/check/${id}/report`);
 }
@@ -187,6 +191,7 @@ export interface GraphData {
   edges: GraphEdge[];
 }
 
+// GET /check/{id}/graph: nodes + edges for the site graph
 export function getGraph(id: string): Promise<GraphData> {
   return jsonRequest(`/check/${id}/graph`);
 }
@@ -228,8 +233,7 @@ export interface SEODetail {
   score: number;
 }
 
-// Rotten/uncrawled pages have no audit row, return null instead of throwing on 404
-// so the drawer can render an empty state.
+// rotten/uncrawled pages have no audit row; return null on 404 so the drawer shows empty
 export async function getSEODetail(id: string, url: string): Promise<SEODetail | null> {
   const res = await fetch(`${BASE}/check/${id}/seo?url=${encodeURIComponent(url)}`);
   if (res.status === 404) return null;
@@ -255,6 +259,7 @@ export interface HistoryEntry {
   runs: HistoryRun[]; // most recent first
 }
 
+// POST /auth/register: create an account and start a session
 export function register(username: string, password: string): Promise<Me> {
   return jsonRequest('/auth/register', {
     method: 'POST',
@@ -262,6 +267,7 @@ export function register(username: string, password: string): Promise<Me> {
   });
 }
 
+// POST /auth/login: start a session
 export function login(username: string, password: string): Promise<Me> {
   return jsonRequest('/auth/login', {
     method: 'POST',
@@ -269,12 +275,13 @@ export function login(username: string, password: string): Promise<Me> {
   });
 }
 
+// POST /auth/logout: end the session
 export function logout(): Promise<{ ok: boolean }> {
   return jsonRequest('/auth/logout', { method: 'POST' });
 }
 
-// deleteAccount permanently removes the current user, all of their jobs (stopping any still
-// running), and ends the session. Requires being logged in.
+// deleteAccount removes the user, all their jobs (stopping running ones), and ends the
+// session. requires login.
 export function deleteAccount(): Promise<{ ok: boolean }> {
   return jsonRequest('/auth/account', { method: 'DELETE' });
 }
@@ -287,6 +294,7 @@ export async function getMe(): Promise<Me | null> {
   return res.json() as Promise<Me>;
 }
 
+// GET /history: the logged-in user's past crawls (auth required)
 export function getHistory(): Promise<HistoryEntry[]> {
   return jsonRequest('/history');
 }

@@ -1,7 +1,7 @@
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface Props {
-  // The crawl being deleted; url + start date are shown so the user can tell runs apart.
+  // the crawl being deleted; url + start date shown so runs are distinguishable
   url: string;
   startedAt: string;
   busy?: boolean;
@@ -10,8 +10,8 @@ interface Props {
   onCancel: () => void;
 }
 
-// Crawl-specific delete confirmation: the shared ConfirmDialog plus a website/started detail
-// block. Used by the history rows and the job report page.
+// crawl delete confirmation: ConfirmDialog plus a website/started detail block. used by
+// history rows and the report page.
 export function ConfirmDeleteDialog({ url, startedAt, busy, error, onConfirm, onCancel }: Props) {
   return (
     <ConfirmDialog

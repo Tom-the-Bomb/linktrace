@@ -1,5 +1,5 @@
-// Central SEO config. SITE_URL drives canonical + og:url and is overridable per deploy via
-// VITE_SITE_URL; the trailing slash is stripped so callers can append paths.
+// SEO config. SITE_URL drives canonical + og:url, overridable via VITE_SITE_URL; trailing
+// slash stripped so callers can append paths.
 export const SITE_URL = (import.meta.env.VITE_SITE_URL ?? 'https://linktrace.tomthebomb.dev').replace(
   /\/$/,
   '',

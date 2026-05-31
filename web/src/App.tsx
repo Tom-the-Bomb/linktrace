@@ -7,8 +7,8 @@ import HistoryPage from './pages/HistoryPage';
 import HomePage from './pages/HomePage';
 import JobReportPage from './pages/JobReportPage';
 
-// Routing shell. Every page renders inside the flex column so the Footer pins to the bottom
-// for short pages and sits below the content for long ones.
+// routing shell. pages render in the flex column so the Footer pins to the bottom on short
+// pages, below content on long ones.
 export default function App() {
   return (
     <div className="flex min-h-dvh flex-col">

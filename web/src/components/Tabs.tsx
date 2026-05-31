@@ -1,5 +1,6 @@
 export type Tab = 'graph' | 'table';
 
+// graph/table toggle for the Explore section, each chip showing its item count
 export function Tabs({
   tab,
   onChange,

@@ -116,6 +116,7 @@ func New(dsn string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
+// Close closes the database pool.
 func (s *Store) Close() error {
 	return s.db.Close()
 }

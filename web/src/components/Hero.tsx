@@ -15,8 +15,8 @@ interface HeroProps {
   error: string | null;
 }
 
-// Hero is the landing page: wordmark + auth bar, headline, the crawl input, and the feature
-// cards, all over the interactive CrawlGraphBackdrop canvas.
+// landing page: wordmark + auth bar, headline, crawl input, feature cards, over the
+// CrawlGraphBackdrop canvas.
 export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
   const [focused, setFocused] = useState(false);
   // pause the animation when focused or non-empty so our fake caret doesn't fight the real one
@@ -116,7 +116,7 @@ const FEATURES = [
   },
 ];
 
-// Features renders the three staggered "how it works" cards under the hero input.
+// three staggered how-it-works cards under the input
 function Features() {
   return (
     <div className="mt-24 grid w-full grid-cols-1 gap-6 sm:grid-cols-3">

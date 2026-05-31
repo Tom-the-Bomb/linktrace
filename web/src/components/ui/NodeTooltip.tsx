@@ -9,9 +9,8 @@ interface Props {
   position?: 'fixed' | 'absolute';
 }
 
-// Pointer-following tooltip shared by the landing-page backdrop and the report graph: a path
-// on the left and a value (SEO score / status) on the right. Position is written imperatively
-// by the caller via the forwarded ref, so React doesn't re-render on every mouse move.
+// pointer-following tooltip shared by the backdrop and report graph: path left, value
+// (SEO score/status) right. caller writes position via the ref so React doesn't re-render per move.
 export const NodeTooltip = forwardRef<HTMLDivElement, Props>(function NodeTooltip(
   { visible, path, detail, detailClass = '', position = 'absolute' },
   ref,

@@ -7,16 +7,15 @@ import { type HistoryEntry, type HistoryRun, deleteJob, getHistory } from '../ap
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
 import { SectionHeader } from './SectionHeader';
 
-// One crawl run targeted for deletion; url + startedAt populate the confirm dialog.
+// a run targeted for deletion; url + startedAt populate the confirm dialog
 interface DeleteTarget {
   jobId: string;
   url: string;
   startedAt: string;
 }
 
-// Per-site history. Single-run sites get a flat row with one "view report" button.
-// Multi-run sites get a chevron that expands a list of every individual run, each
-// with its own report link, plus a "view latest" shortcut on the right.
+// per-site history. single-run sites: flat row with one "view report". multi-run: a
+// chevron expands the run list, each with its own link, plus "view latest".
 export function History() {
   const navigate = useNavigate();
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
@@ -43,8 +42,8 @@ export function History() {
       return next;
     });
 
-  // Drop a deleted run from the list in place: prune the run, recompute the entry's
-  // count + "latest" pointers, and remove the entry entirely if it had only that run.
+  // drop a deleted run in place: prune it, recompute count + latest pointers, remove the
+  // entry if it was the only run
   const removeRun = (jobId: string) =>
     setEntries((prev) =>
       prev
@@ -75,7 +74,7 @@ export function History() {
       removeRun(pendingDelete.jobId);
       setPendingDelete(null);
     } catch (e) {
-      // show the server's message ("not your job") without the "ApiError:" prefix String() adds
+      // show server message without the ApiError: prefix
       setDeleteError(e instanceof Error ? e.message : String(e));
     } finally {
       setDeleting(false);
@@ -153,7 +152,7 @@ function HistoryRow({
         onClick={multi ? onToggle : undefined}
         className={`group grid grid-cols-12 items-center gap-4 py-4 pr-4 transition hover:bg-ink-700/30 ${multi ? 'cursor-pointer' : ''}`}
       >
-        {/* chevron column: blank when single-run to keep alignment; lights up on row hover via `group` */}
+        {/* chevron column: blank when single-run; lights up on row hover */}
         <div className="col-span-1 flex justify-center">
           {multi ? (
             <ChevronRight
@@ -182,8 +181,8 @@ function HistoryRow({
           {formatDate(entry.last_crawled)}
         </div>
         <div className="col-span-3 flex items-center justify-end gap-3">
-          {/* delete sits to the left of the status; revealed on row hover. Targets the latest
-              run (multi-run groups delete older runs individually from the RunRows below) */}
+          {/* delete left of the status, revealed on row hover. targets the latest run
+              (older runs deleted individually from the RunRows below) */}
           <DeleteButton
             onClick={(ev) => {
               ev.stopPropagation();
@@ -277,9 +276,8 @@ function RunRow({
   );
 }
 
-// Subtle trash affordance: hidden until the row (a `group`) is hovered or the button is
-// focused, then muted ink that lights up rose on hover. Positioned absolutely by callers so
-// it floats past the row's right edge instead of shifting the row's layout. Shared by both rows.
+// trash affordance: hidden until row hover/focus, muted ink that lights rose on hover.
+// absolutely positioned by callers so it doesn't shift row layout. shared by both rows.
 function DeleteButton({
   onClick,
   className = '',

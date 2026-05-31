@@ -9,7 +9,7 @@ interface Props {
   onClose: () => void;
 }
 
-// Slide-in audit panel. Fetches on URL change; closes on backdrop click or Escape.
+// slide-in audit panel. fetches on URL change; closes on backdrop click or Esc
 export function SeoDrawer({ jobId, url, onClose }: Props) {
   const [detail, setDetail] = useState<SEODetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -293,7 +293,7 @@ function Signal({ label, ok }: { label: string; ok: boolean }) {
   );
 }
 
-// CountSignal: "X of Y (NN%)" with colour bucketed by ratio. Used for image hygiene.
+// CountSignal: "X of Y (NN%)", colour bucketed by ratio. for image hygiene
 function CountSignal({ label, count, total }: { label: string; count: number; total: number }) {
   const ratio = total > 0 ? count / total : 0;
   const pct = Math.round(ratio * 100);
@@ -309,7 +309,7 @@ function CountSignal({ label, count, total }: { label: string; count: number; to
   );
 }
 
-// RawStat: plain count, no ratio. Used for link breakdowns where there's no "good" target.
+// RawStat: plain count, no ratio. for link breakdowns with no "good" target
 function RawStat({ label, value }: { label: string; value: number }) {
   return (
     <li className="flex items-center justify-between py-2.5">

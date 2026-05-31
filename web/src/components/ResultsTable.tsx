@@ -11,7 +11,7 @@ type SortDir = 'asc' | 'desc';
 
 const PAGE_SIZE = 20;
 
-// Flat hairline table. Clicking a row opens the SEO drawer.
+// flat hairline table; row click opens the SEO drawer
 export function ResultsTable({
   rows,
   onSelect,
@@ -43,7 +43,7 @@ export function ResultsTable({
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...filtered].sort((a, b) => {
       if (sortKey === 'seo') {
-        // Pages without an SEO score always sink to the bottom, regardless of direction.
+        // no-score pages always sink to the bottom, regardless of direction
         if (a.seo_score === null) return b.seo_score === null ? 0 : 1;
         if (b.seo_score === null) return -1;
         return (a.seo_score - b.seo_score) * dir;
@@ -59,7 +59,7 @@ export function ResultsTable({
     [sorted, current],
   );
 
-  // Reset to the first page whenever the filter or search changes the result set.
+  // reset to page 1 when the filter/search changes the result set
   function selectFilter(f: Filter) {
     setFilter(f);
     setPage(1);

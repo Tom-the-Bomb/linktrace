@@ -6,8 +6,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ConfirmDialog } from './ConfirmDialog';
 
-// Top-right corner widget. Anonymous: a "log in / register" link to /auth. Logged in: the
-// username is the menu button, revealing history + logout.
+// top-right widget. anonymous: a log in/register link. logged in: username is the menu
+// button (history + logout).
 export function AuthBar() {
   const { user, loading, logout, deleteAccount } = useAuth();
   const navigate = useNavigate();
@@ -43,8 +43,8 @@ export function AuthBar() {
 
   const close = () => setMenuOpen(false);
 
-  // Tear down the account, then drop back to the (now anonymous) hero. On success the user
-  // becomes null and this component re-renders to the logged-out view, unmounting the dialog.
+  // delete the account, then go to the hero. on success user becomes null and this re-renders
+  // logged-out, unmounting the dialog.
   async function onConfirmDeleteAccount() {
     setDeleting(true);
     setDeleteError(null);

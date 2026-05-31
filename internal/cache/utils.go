@@ -21,6 +21,7 @@ func (c *Cache) bump(jobID, field string, delta int64) error {
 	return c.rdb.Expire(ctx, progressKey(jobID), progressTTL).Err()
 }
 
+// redis key builders, namespaced by job / domain / session id.
 func progressKey(id string) string      { return "progress:" + id }
 func seenKey(id string) string          { return "seen:" + id }
 func ratelimitKey(domain string) string { return "ratelimit:" + domain }
