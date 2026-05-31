@@ -7,8 +7,7 @@ import { AuthForm } from '../components/AuthForm';
 import { useAuth } from '../context/AuthContext';
 import { useSeo } from '../hooks/useSeo';
 
-// Full-page sign-in route at /auth. After success → /. If the user is already logged
-// in (e.g. they navigated here by typing the URL), redirect away.
+// Full-page sign-in at /auth. On success, go to /. If already logged in, redirect away.
 export default function AuthPage() {
   useSeo({ title: 'Sign in', path: '/auth', noindex: true });
   const navigate = useNavigate();

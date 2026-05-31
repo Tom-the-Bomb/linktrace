@@ -4,8 +4,8 @@ import { useNavigate } from 'react-router-dom';
 
 import { createCheck } from '../api';
 
-// useCreateCrawl encapsulates the "submit a URL → create a job → navigate to its report"
-// flow shared by the landing form, the history page, and the in-report "new crawl" header.
+// useCreateCrawl: submit a URL, create a job, navigate to its report. shared by the landing
+// form, history page, and in-report new-crawl header.
 export function useCreateCrawl() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);

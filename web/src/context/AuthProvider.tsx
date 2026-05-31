@@ -3,8 +3,8 @@ import { type ReactNode, useEffect, useState } from 'react';
 import * as api from '../api';
 import { AuthContext, type AuthState } from './AuthContext';
 
-// AuthProvider wraps the app. On mount it asks the server who we are (restores a session
-// from an existing cookie). null is a perfectly valid result — that's just "anonymous".
+// Wraps the app. On mount, asks the server who we are (restores session from cookie).
+// null just means anonymous.
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<api.Me | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,6 +28,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     logout: async () => {
       await api.logout();
+      setUser(null);
+    },
+    deleteAccount: async () => {
+      await api.deleteAccount();
       setUser(null);
     },
   };

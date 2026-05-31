@@ -70,7 +70,7 @@ export function Categories({ categories }: { categories: CategoryReport[] }) {
     setPage(1);
   }
 
-  // Order on the right: all healthy mixed rotten · pages rot% seo · Where the rot lives.
+  // right-side order: all/healthy/mixed/rotten filters, sort keys, "where the rot lives"
   const controls = (
     <div className="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
       <div className="flex items-center gap-3">

@@ -47,9 +47,8 @@ func classifyNetworkError(err error) string {
 	return ErrConnRefused
 }
 
-// soft404Phrases is the phrase list we match against visible body text.
-// Kept narrow on purpose — broader phrases produce false positives on real pages
-// (e.g. "page not found" copy inside a help center article).
+// soft404Phrases match against visible body text. Kept narrow on purpose; broader phrases
+// false-positive on real pages (e.g. "page not found" copy in a help-center article).
 var soft404Phrases = []string{
 	"page not found",
 	"404 not found",

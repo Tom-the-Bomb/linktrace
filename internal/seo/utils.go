@@ -31,8 +31,8 @@ func getAttr(n *html.Node, key string) string {
 	return ""
 }
 
-// hasAttr is presence-only: distinguishes "attribute missing" from "attribute set to empty".
-// Matters for alt — alt="" is the valid "decorative image" signal, NOT the same as no alt.
+// hasAttr is presence-only: distinguishes "missing" from "set to empty". matters for alt,
+// where alt="" is the valid decorative-image signal, not the same as no alt.
 func hasAttr(n *html.Node, key string) bool {
 	for _, attr := range n.Attr {
 		if attr.Key == key {
@@ -109,8 +109,7 @@ func findIssues(a *Audit) []Issue {
 		add("h1_multiple", "Multiple H1 headings", SeverityError)
 	}
 
-	// H2: at least 1 is essential for scannable structure; 2+ is the typical recommendation.
-	// No upper bound — long-form content legitimately has many H2s.
+	// H2: 1+ for scannable structure, 2+ is typical. no upper bound, long-form pages have many.
 	switch {
 	case a.H2Count == 0:
 		add("h2_missing", "No H2 headings", SeverityWarning)
@@ -153,8 +152,7 @@ func findIssues(a *Audit) []Issue {
 		add("html_lang_missing", "Missing <html lang> attribute", SeverityInfo)
 	}
 
-	// Image hygiene — only flag when there ARE images, otherwise the rule fires on every
-	// text-only page.
+	// image hygiene: only flag when there are images, else it fires on every text-only page
 	if a.ImagesTotal > 0 {
 		altRatio := float64(a.ImagesWithAlt) / float64(a.ImagesTotal)
 		if altRatio < 0.9 {

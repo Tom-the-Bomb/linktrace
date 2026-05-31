@@ -6,7 +6,7 @@ import ForceGraph2D, { type ForceGraphMethods } from 'react-force-graph-2d';
 import type { GraphData, GraphNode } from '../api';
 import { NodeTooltip } from './ui/NodeTooltip';
 
-// Mutable shape the force-graph library owns (it stores x/y/vx/vy on each node).
+// mutable shape the force-graph lib owns (x/y/vx/vy per node)
 interface FgNode extends GraphNode {
   x?: number;
   y?: number;
@@ -20,7 +20,7 @@ interface FgLink {
   target: string;
 }
 
-// node colouring keyed to the theme: emerald healthy, amber (accent) middling, rose rotten
+// node colour: emerald healthy, amber mid, rose rotten
 function nodeColour(n: GraphNode): string {
   if (!n.is_alive) return '#fb7185'; // rose-400
   if (n.seo_score === null) return '#3a425e'; // ink-300
@@ -29,7 +29,7 @@ function nodeColour(n: GraphNode): string {
   return '#fb7185';
 }
 
-// cap on zoom-to-fit so a sparse graph doesn't blow up to fill the viewport with one dot
+// cap zoom-to-fit so a sparse graph doesn't fill the viewport with one dot
 const MAX_ZOOM = 2.5;
 
 // node size scales with depth, homepage is biggest, leaves smallest
@@ -43,8 +43,8 @@ interface Props {
   onSelect: (url: string) => void;
 }
 
-// Force-directed graph of the site: each page is a node, each internal link an edge.
-// Uses react-force-graph-2d (canvas, d3-force physics). Click a node to open the SEO drawer.
+// Force graph: page = node, internal link = edge. react-force-graph-2d (canvas/d3).
+// Click a node for its audit.
 export function GraphView({ data, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<ForceGraphMethods<GraphNode> | undefined>(undefined);
@@ -53,15 +53,15 @@ export function GraphView({ data, onSelect }: Props) {
   const [query, setQuery] = useState('');
   const tooltipRef = useRef<HTMLDivElement>(null);
 
-  // case-insensitive substring match on the node URL; empty query = no highlight mode
+  // case-insensitive URL substring match; empty query = no highlight
   const normalizedQuery = query.trim().toLowerCase();
   const hasQuery = normalizedQuery.length > 0;
   function matchesQuery(n: FgNode): boolean {
     return n.url.toLowerCase().includes(normalizedQuery);
   }
 
-  // Manual hit-testing: the library's onNodeClick/onNodeHover are unreliable once we override
-  // the canvas painter. Tooltip position writes straight to the DOM so it tracks without re-rendering.
+  // manual hit-testing; lib's onNodeClick/Hover are unreliable with a custom painter.
+  // tooltip position writes to the DOM so it tracks without re-render.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -117,7 +117,7 @@ export function GraphView({ data, onSelect }: Props) {
     };
   }, [onSelect]);
 
-  // observe the container so the canvas can fill it on resize (the lib doesn't auto-fit)
+  // resize the canvas to the container (lib doesn't auto-fit)
   useEffect(() => {
     if (!containerRef.current) return;
     const obs = new ResizeObserver(([entry]) => {
@@ -128,16 +128,14 @@ export function GraphView({ data, onSelect }: Props) {
     return () => obs.disconnect();
   }, []);
 
-  // Graph wrapper kept in state so each poll hands ForceGraph2D a NEW object reference —
-  // mutating a stable ref made the library short-circuit and skip large updates (e.g. final
-  // batch of nodes when the crawl completes), which only un-stuck itself on remount.
-  // The inner FgNode/FgLink objects are preserved across ticks so the simulation-written
-  // x/y/vx/vy survive and the layout doesn't reset.
+  // new wrapper object each poll so ForceGraph2D rebuilds; mutating a stable ref made it
+  // skip large updates (final nodes on completion). inner node objects are reused so the
+  // simulation x/y/vx/vy survive and the layout doesn't reset.
   const [graph, setGraph] = useState<{ nodes: FgNode[]; links: FgLink[] }>({
     nodes: [],
     links: [],
   });
-  // mirror of `graph` for synchronous reads from the pointer hit-test handler
+  // mirror of graph for sync reads in the hit-test handler
   const graphRef = useRef(graph);
 
   useEffect(() => {
@@ -172,16 +170,15 @@ export function GraphView({ data, onSelect }: Props) {
         }
       }
 
-      // Always return a NEW wrapper object — that's the signal ForceGraph2D uses to rebuild.
-      // If nothing structural changed, we still publish so in-place field updates (status,
-      // seo_score) reach the canvas painter on the next frame.
+      // return a new wrapper so ForceGraph2D rebuilds. even with no structural change,
+      // publish so field updates (status, seo_score) reach the painter next frame.
       const next = nodesChanged || linksChanged ? { nodes, links } : { ...prev };
       graphRef.current = next;
       return next;
     });
   }, [data]);
 
-  // zoom-to-fit after the initial layout settles, then never again (would yank the view mid-crawl)
+  // fit once after layout settles, never again (would yank the view mid-crawl)
   const fittedRef = useRef(false);
   useEffect(() => {
     if (fittedRef.current || graphRef.current.nodes.length === 0) return;
@@ -235,14 +232,13 @@ export function GraphView({ data, onSelect }: Props) {
           height={size.height}
           backgroundColor="rgba(0,0,0,0)"
           nodeRelSize={1}
-          // fade links further when a search is active so the matched nodes pop visually
+          // fade links during search so matches pop
           linkColor={() => (hasQuery ? 'rgba(245,239,228,0.04)' : 'rgba(245,239,228,0.12)')}
           linkDirectionalParticles={0}
           linkWidth={0.5}
           cooldownTicks={120}
-          // paint nodes ourselves so the visible radius matches nodeRadius(depth) and the hit-testing.
-          // When a search query is active, non-matches fade — the dimming alone is enough contrast,
-          // no extra ring on matches.
+          // paint nodes ourselves so radius matches nodeRadius(depth) and the hit-testing.
+          // during search, non-matches dim; that's enough contrast, no ring on matches.
           nodeCanvasObject={(node, ctx) => {
             const n = node as FgNode;
             if (n.x === undefined || n.y === undefined) return;
@@ -304,7 +300,7 @@ function Legend() {
   );
 }
 
-// scoreColour maps a node's liveness + SEO score to the tooltip's value text colour.
+// tooltip value colour by liveness + SEO score
 function scoreColour(n: GraphNode): string {
   if (!n.is_alive) return 'text-rose-300';
   if (n.seo_score === null) return 'text-ink-300';
@@ -313,7 +309,7 @@ function scoreColour(n: GraphNode): string {
   return 'text-rose-300';
 }
 
-// pathOnly strips protocol + host so the tooltip reads as a clean path like "/about/team".
+// strip protocol + host so the tooltip shows just the path
 function pathOnly(url: string): string {
   try {
     const u = new URL(url);
@@ -323,7 +319,7 @@ function pathOnly(url: string): string {
   }
 }
 
-// Right-hand value: SEO score if we have one, otherwise the failure reason.
+// right value: SEO score, else the failure reason
 function tooltipDetail(n: GraphNode): string {
   if (n.seo_score !== null) return String(n.seo_score);
   if (!n.is_alive) return n.error_type || (n.status_code ? `http_${n.status_code}` : 'dead');

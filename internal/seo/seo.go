@@ -49,7 +49,7 @@ type Audit struct {
 	KeywordInH1    bool
 	KeywordInURL   bool
 
-	// Image stats — a11y + Core Web Vitals signals. ImagesTotal is the denominator for all.
+	// image stats: a11y + Core Web Vitals signals. ImagesTotal is the denominator for all.
 	ImagesTotal      int
 	ImagesWithAlt    int // <img alt="..."> present (empty alt counts; decorative is fine)
 	ImagesWithDims   int // both width AND height set (prevents CLS)
@@ -62,7 +62,7 @@ type Audit struct {
 	LinksExternal int
 	LinksNofollow int
 
-	// <html lang="..."> — empty if missing. Search engines + screen readers use it.
+	// <html lang="...">, empty if missing. used by search engines and screen readers.
 	HTMLLang string
 
 	Issues []Issue
@@ -162,8 +162,7 @@ func AuditHTML(body []byte, pageURL string) Audit {
 		if n.Type == html.ElementNode {
 			switch n.Data {
 			case "title":
-				// Only the first <title> wins — never let a later one overwrite (defense in
-				// depth: SVG subtrees are already skipped above).
+				// first <title> wins, never overwrite (SVG subtrees already skipped above)
 				if a.Title == "" && n.FirstChild != nil {
 					a.Title = strings.TrimSpace(n.FirstChild.Data)
 					a.TitleLength = len(a.Title)
@@ -190,14 +189,13 @@ func AuditHTML(body []byte, pageURL string) Audit {
 					a.Canonical = getAttr(n, "href")
 				}
 			case "html":
-				// only the first <html lang> wins — there is only one in valid documents anyway
+				// first <html lang> wins (only one in valid documents anyway)
 				if a.HTMLLang == "" {
 					a.HTMLLang = strings.TrimSpace(getAttr(n, "lang"))
 				}
 			case "img":
 				a.ImagesTotal++
-				// alt attribute presence (even empty alt="" is the explicit "decorative" signal,
-				// which is correct usage — so we count any alt attribute that exists)
+				// count any alt attribute that exists; empty alt="" is the valid decorative signal
 				if hasAttr(n, "alt") {
 					a.ImagesWithAlt++
 				}

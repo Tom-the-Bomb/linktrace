@@ -2,7 +2,7 @@ package queue
 
 import amqp "github.com/rabbitmq/amqp091-go"
 
-// declareTopology declares the exchanges, queues, and bindings. Idempotent — safe to run on
+// declareTopology declares the exchanges, queues, and bindings. Idempotent, safe to run on
 // every startup.
 func (q *Queue) declareTopology() error {
 	// dead-letter side

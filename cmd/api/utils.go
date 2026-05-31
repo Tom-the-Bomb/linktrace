@@ -35,10 +35,9 @@ func corsMiddleware(origin string) func(http.Handler) http.Handler {
 	}
 }
 
-// authorizeJobMutation gates destructive actions (cancel/delete). Reads stay open — the
-// unguessable job UUID is the capability for viewing/sharing a report — but mutating a job
-// that has an owner requires being that owner. Anonymous jobs (no owner) have no identity to
-// check against, so they remain UUID-gated. Writes 403 and returns false when not allowed.
+// authorizeJobMutation gates cancel/delete. Reads stay open (the unguessable UUID is the
+// share capability), but mutating an owned job requires being the owner. Anonymous jobs have
+// no owner so they stay UUID-gated. Writes 403, returns false when not allowed.
 func authorizeJobMutation(w http.ResponseWriter, r *http.Request, job *store.Job) bool {
 	if job.UserID != "" && job.UserID != auth.UserID(r) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "unable to perform action on a job you didn't create"})
@@ -47,10 +46,9 @@ func authorizeJobMutation(w http.ResponseWriter, r *http.Request, job *store.Job
 	return true
 }
 
-// jobExists guards the per-job sub-resource handlers (results/report/graph): it returns
-// true when the job is present, and otherwise writes the appropriate response — 500 on a
-// lookup failure, 404 when the id is simply unknown — and returns false so the caller can
-// bail. Without this an unknown id falls through to the data queries and reads as a 500.
+// jobExists guards the per-job sub-resource handlers (results/report/graph). Returns true if
+// present, else writes the response (500 on lookup failure, 404 on unknown id) and returns
+// false. Without it an unknown id falls through to the queries and reads as a 500.
 func (s *Server) jobExists(w http.ResponseWriter, id string) bool {
 	job, err := s.store.GetJob(id)
 	if err != nil {
@@ -64,8 +62,8 @@ func (s *Server) jobExists(w http.ResponseWriter, id string) bool {
 	return true
 }
 
-// toStoreSiteAudit converts the site.Audit (network struct) to store.SiteAudit (db struct).
-// Same fields, different package — keeps `store` from importing `site`.
+// toStoreSiteAudit converts site.Audit to store.SiteAudit. Same fields, different package,
+// keeps store from importing site.
 func toStoreSiteAudit(a site.Audit) store.SiteAudit {
 	return store.SiteAudit{
 		RobotsFound:       a.RobotsFound,

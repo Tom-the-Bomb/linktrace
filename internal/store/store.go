@@ -491,6 +491,39 @@ func (s *Store) GetUserByUsername(username string) (*User, error) {
 	return &u, nil
 }
 
+// ListUserJobIDs returns every job id owned by userID, so account deletion can tear each one
+// down individually (cache purge + row delete) before removing the user.
+func (s *Store) ListUserJobIDs(userID string) ([]string, error) {
+	rows, err := s.db.Query(
+		"SELECT BIN_TO_UUID(id) FROM jobs WHERE user_id = UUID_TO_BIN(?)",
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// DeleteUser removes the user row. Callers must delete the user's jobs first: jobs.user_id
+// references users(id) with no ON DELETE CASCADE, so a lingering job blocks this.
+func (s *Store) DeleteUser(id string) error {
+	if _, err := uuid.Parse(id); err != nil {
+		return nil
+	}
+	_, err := s.db.Exec("DELETE FROM users WHERE id = UUID_TO_BIN(?)", id)
+	return err
+}
+
 // GetUserByID is the symmetric lookup used by /auth/me.
 func (s *Store) GetUserByID(id string) (*User, error) {
 	var u User

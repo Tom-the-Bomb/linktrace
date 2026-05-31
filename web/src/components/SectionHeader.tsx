@@ -1,5 +1,5 @@
-// Standard report section heading: § number + serif title + optional right-aligned subtitle
-// (or arbitrary `right` content like a control bar, which takes precedence over `subtitle`).
+// Report section heading: number, serif title, optional right-aligned subtitle or `right`
+// content (overrides subtitle).
 export function SectionHeader({
   number,
   title,
@@ -11,8 +11,7 @@ export function SectionHeader({
   title: string;
   subtitle?: string;
   right?: React.ReactNode;
-  // optional content rendered to the right of the title, inside the left-aligned group —
-  // useful for filters/search that should hug the heading
+  // extra content right of the title, inside the left group; for filters/search by the heading
   leftExtra?: React.ReactNode;
 }) {
   return (

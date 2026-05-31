@@ -110,12 +110,7 @@ export function ResultsTable({
               sort
             </span>
             {(['depth', 'seo'] as SortKey[]).map((k) => (
-              <SortChip
-                key={k}
-                active={sortKey === k}
-                onClick={() => selectSort(k)}
-                label={k}
-              />
+              <SortChip key={k} active={sortKey === k} onClick={() => selectSort(k)} label={k} />
             ))}
             <button
               onClick={toggleDir}

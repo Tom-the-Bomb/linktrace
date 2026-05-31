@@ -273,6 +273,12 @@ export function logout(): Promise<{ ok: boolean }> {
   return jsonRequest('/auth/logout', { method: 'POST' });
 }
 
+// deleteAccount permanently removes the current user, all of their jobs (stopping any still
+// running), and ends the session. Requires being logged in.
+export function deleteAccount(): Promise<{ ok: boolean }> {
+  return jsonRequest('/auth/account', { method: 'DELETE' });
+}
+
 // getMe returns null when anonymous (401 isn't an error here, it's a valid state)
 export async function getMe(): Promise<Me | null> {
   const res = await fetch(`${BASE}/auth/me`, { credentials: 'include' });

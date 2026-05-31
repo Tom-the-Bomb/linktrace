@@ -80,6 +80,7 @@ func main() {
 	r.Get("/check/{id}/seo", s.handleSEODetail)
 
 	r.With(auth.Require(s.cache)).Get("/history", s.handleHistory)
+	r.With(auth.Require(s.cache)).Delete("/auth/account", s.handleDeleteAccount)
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r}
 
@@ -593,6 +594,41 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"username": user.Username})
+}
+
+// handleDeleteAccount (DELETE /auth/account, Require'd) deletes the logged-in user. Each
+// owned job is torn down like an individual delete: PurgeJob tombstones a running crawl and
+// clears its Redis state, then DeleteJob removes its rows. Then the user row is removed and
+// the session invalidated. Jobs go first because jobs.user_id FKs users(id).
+func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserID(r)
+
+	jobIDs, err := s.store.ListUserJobIDs(userID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "lookup failed"})
+		return
+	}
+	for _, id := range jobIDs {
+		if err := s.cache.PurgeJob(id); err != nil {
+			log.Printf("[api] account delete: purge job %s: %v", id[:8], err)
+		}
+		if err := s.store.DeleteJob(id); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete failed"})
+			return
+		}
+	}
+	if err := s.store.DeleteUser(userID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete failed"})
+		return
+	}
+
+	// invalidate the session, same as logout
+	if cookie, cerr := r.Cookie(auth.CookieName); cerr == nil {
+		_ = s.cache.DeleteSession(cookie.Value)
+	}
+	auth.ClearSessionCookie(w)
+	log.Printf("[api] account %s DELETED (%d jobs)", userID[:8], len(jobIDs))
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // GET /history (protected by Require middleware, so UserID is guaranteed non-empty).

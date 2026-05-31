@@ -33,9 +33,8 @@ import { useCreateCrawl } from '../hooks/useCreateCrawl';
 import { useSeo } from '../hooks/useSeo';
 import { isTerminalStatus } from '../lib/status';
 
-// Route at /jobs/:jobId. Owns the live polling effect + all the report sections.
-// When the user submits a new crawl from this page's header, we create a new job
-// and navigate to /jobs/<new-id>, which remounts this component cleanly.
+// Route /jobs/:jobId. Live polling plus all report sections. New crawl from the header
+// creates a job and navigates, remounting this.
 export default function JobReportPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
@@ -54,23 +53,22 @@ export default function JobReportPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // "new crawl" input in the compact header; the hook handles create + navigate.
+  // new crawl input; hook does create + navigate
   const [newUrl, setNewUrl] = useState('');
   const { submit, submitting, error: createError } = useCreateCrawl();
 
-  // Per-job pages are transient/anonymous-friendly — title tracks the crawled
-  // domain once known, but they stay out of the index.
+  // transient per-job page: title tracks the domain, kept out of the index
   useSeo({
     title: status?.url ? `Report · ${status.url}` : 'Crawl report',
     path: `/jobs/${jobId}`,
     noindex: true,
   });
 
-  // Live polling: every tick fetches the full quartet so partial results stream in.
-  // setTimeout-recursion (not setInterval) prevents stacked overlapping requests.
+  // poll all four endpoints each tick so partial results stream in. setTimeout recursion
+  // (not setInterval) avoids overlapping requests.
   useEffect(() => {
     if (!jobId) return;
-    // reset when navigating between jobs (e.g. from /history or a fresh crawl)
+    // reset when switching jobs
     setStatus(null);
     setRows([]);
     setReport(null);
@@ -109,8 +107,7 @@ export default function JobReportPage() {
 
   const isDone = isTerminalStatus(status?.status);
 
-  // Stop while running → POST /cancel + flip local status so the button morphs to Back.
-  // Back when done → return to the hero.
+  // running: cancel + flip status so the button becomes Back. done: go to hero
   const onStopOrBack = async () => {
     if (!jobId) return;
     if (isDone) {
@@ -130,8 +127,7 @@ export default function JobReportPage() {
     void submit(newUrl);
   }
 
-  // Delete the job (stops it server-side if still running), then leave — the report no
-  // longer exists, so return to the hero.
+  // deletes the job, stops tasks if running, redirect to hero
   async function onConfirmDelete() {
     if (!jobId) return;
     setDeleting(true);
@@ -140,7 +136,7 @@ export default function JobReportPage() {
       await deleteJob(jobId);
       navigate('/');
     } catch (err) {
-      // show the server's message ("not your job") without the "ApiError:" prefix String() adds
+      // show server message without the ApiError: prefix
       setDeleteError(err instanceof Error ? err.message : String(err));
       setDeleting(false);
     }
@@ -153,7 +149,7 @@ export default function JobReportPage() {
       <NotFound
         eyebrow="error 404"
         title="Report not found"
-        message="No crawl matches this ID — it may have expired or never existed. Start a new one from the home page."
+        message="No crawl matches this ID — it may have been deleted, or never existed. Start a new one from the home page."
       />
     );
   }
