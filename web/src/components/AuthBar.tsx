@@ -4,10 +4,10 @@ import { User } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../context/AuthContext';
+import { errMessage } from '../lib/format';
 import { ConfirmDialog } from './ConfirmDialog';
 
-// top-right widget. anonymous: a log in/register link. logged in: username is the menu
-// button (history + logout).
+// top-right widget: log in/register link when anonymous, username menu when logged in
 export function AuthBar() {
   const { user, loading, logout, deleteAccount } = useAuth();
   const navigate = useNavigate();
@@ -16,7 +16,6 @@ export function AuthBar() {
   const containerRef = useRef<HTMLDivElement>(null);
   const historyOpen = location.pathname === '/history';
 
-  // delete-account confirmation state
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -43,8 +42,7 @@ export function AuthBar() {
 
   const close = () => setMenuOpen(false);
 
-  // delete the account, then go to the hero. on success user becomes null and this re-renders
-  // logged-out, unmounting the dialog.
+  // on success user becomes null, re-rendering logged-out and unmounting the dialog
   async function onConfirmDeleteAccount() {
     setDeleting(true);
     setDeleteError(null);
@@ -53,7 +51,7 @@ export function AuthBar() {
       setConfirmDelete(false);
       navigate('/');
     } catch (e) {
-      setDeleteError(e instanceof Error ? e.message : String(e));
+      setDeleteError(errMessage(e));
       setDeleting(false);
     }
   }

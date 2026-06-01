@@ -9,7 +9,7 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/store"
 )
 
-// hostOf returns the host of a raw URL, or the input unchanged if it won't parse.
+// returns the host of a raw URL, or the input unchanged if it won't parse.
 func hostOf(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -18,7 +18,12 @@ func hostOf(raw string) string {
 	return u.Host
 }
 
-// isTransient flags failures worth retrying; permanent rot (dns/4xx/ssl/soft_404) is not.
+// reports whether a result is a live page with a body worth parsing (links + SEO).
+func hasHTML(res checker.CheckResult) bool {
+	return res.IsAlive && len(res.Body) > 0
+}
+
+// flags failures worth retrying; permanent rot (dns/4xx/ssl/soft_404) is not.
 func isTransient(errType string) bool {
 	switch errType {
 	case checker.ErrTimeout, checker.ErrConnReset:
@@ -28,7 +33,7 @@ func isTransient(errType string) bool {
 	}
 }
 
-// categoryOf returns the first non-empty path segment (e.g. /blog/x -> /blog), or "/" for root.
+// returns the first non-empty path segment (e.g. /blog/x -> /blog), or "/" for root.
 func categoryOf(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -42,7 +47,7 @@ func categoryOf(rawURL string) string {
 	return "/"
 }
 
-// classifyPattern labels a category by its rotten-to-total ratio for the report UI.
+// labels a category by its rotten-to-total ratio for the report UI.
 func classifyPattern(total, rotten int) string {
 	switch {
 	case total == 0:
@@ -58,7 +63,7 @@ func classifyPattern(total, rotten int) string {
 	}
 }
 
-// mapAudit copies seo.Audit -> store.SEOAudit (separate types to avoid an import cycle).
+// copies seo.Audit -> store.SEOAudit (separate types to avoid an import cycle).
 func mapAudit(jobID, url string, a seo.Audit) store.SEOAudit {
 	issues := make([]store.Issue, len(a.Issues))
 	for i, iss := range a.Issues {

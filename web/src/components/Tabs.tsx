@@ -1,6 +1,8 @@
+import { SegButton } from './ui/SegButton';
+
 export type Tab = 'graph' | 'table';
 
-// graph/table toggle for the Explore section, each chip showing its item count
+// graph/table toggle, each chip showing its item count
 export function Tabs({
   tab,
   onChange,
@@ -19,18 +21,15 @@ export function Tabs({
   return (
     <div className="inline-flex border border-ink-500/70 bg-ink-800/60">
       {items.map((it) => (
-        <button
+        <SegButton
           key={it.id}
+          variant="tab"
+          active={tab === it.id}
           onClick={() => onChange(it.id)}
-          className={`flex items-baseline gap-2 px-5 py-2.5 font-mono text-[11px] uppercase tracking-widest transition ${
-            tab === it.id
-              ? 'bg-accent text-ink-900'
-              : 'text-ink-300 hover:bg-ink-600/40 hover:text-paper'
-          }`}
+          count={it.count}
         >
-          <span>{it.label}</span>
-          <span className="text-[10px] opacity-60">{it.count}</span>
-        </button>
+          {it.label}
+        </SegButton>
       ))}
     </div>
   );

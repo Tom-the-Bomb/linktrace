@@ -3,8 +3,7 @@ import { type FormEvent, useState } from 'react';
 import { ApiError } from '../api';
 import { useAuth } from '../context/AuthContext';
 
-// map server responses to a friendly message: forward the backend {error}, override per
-// status where clearer (401 differs for login vs register).
+// map server responses to a friendly message, overriding per status where clearer
 function friendlyError(err: unknown, mode: 'login' | 'register'): string {
   if (err instanceof ApiError) {
     switch (err.status) {
@@ -13,8 +12,7 @@ function friendlyError(err: unknown, mode: 'login' | 'register'): string {
       case 409:
         return 'That username is already taken. Pick another.';
       case 400:
-        return err.message; // backend's validation message is already the friendliest version
-      case 0:
+        return err.message;
       case 502:
       case 503:
       case 504:
@@ -30,7 +28,7 @@ function friendlyError(err: unknown, mode: 'login' | 'register'): string {
   return String(err);
 }
 
-// inner login/register form. toggles mode in place, same two inputs. used by AuthPage.
+// login/register form; toggles mode in place over the same two inputs
 export function AuthForm({ onDone }: { onDone?: () => void }) {
   const { login, register } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');

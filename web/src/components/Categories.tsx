@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 
 import type { CategoryReport } from '../api';
 import { SectionHeader } from './SectionHeader';
+import { Pager } from './ui/Pager';
+import { TextChip } from './ui/TextChip';
 
 const PAGE_SIZE = 10;
 
@@ -9,7 +11,6 @@ type Filter = 'all' | 'healthy' | 'mixed' | 'rotten';
 type SortKey = 'pages' | 'rot' | 'seo';
 type SortDir = 'asc' | 'desc';
 
-// pattern bucket -> what the "rotten" filter chip should include
 function inFilter(pattern: string, filter: Filter): boolean {
   if (filter === 'all') return true;
   if (filter === 'healthy') return pattern === 'healthy';
@@ -21,7 +22,13 @@ function rotRatio(c: CategoryReport): number {
   return c.total_pages > 0 ? c.rotten_pages / c.total_pages : 0;
 }
 
-// per-category breakdown as a wide list, each row readable at a glance
+// per-key value extractor; comparator reads the active one
+const SORT_VALUE: Record<SortKey, (c: CategoryReport) => number> = {
+  pages: (c) => c.total_pages,
+  rot: rotRatio,
+  seo: (c) => c.avg_seo_score,
+};
+
 export function Categories({ categories }: { categories: CategoryReport[] }) {
   const [filter, setFilter] = useState<Filter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('pages');
@@ -31,22 +38,11 @@ export function Categories({ categories }: { categories: CategoryReport[] }) {
   const filtered = useMemo(() => {
     let r = categories;
     if (filter !== 'all') r = r.filter((c) => inFilter(c.pattern, filter));
-    const sorted = r.slice().sort((a, b) => {
-      let av = 0;
-      let bv = 0;
-      if (sortKey === 'pages') {
-        av = a.total_pages;
-        bv = b.total_pages;
-      } else if (sortKey === 'rot') {
-        av = rotRatio(a);
-        bv = rotRatio(b);
-      } else {
-        av = a.avg_seo_score;
-        bv = b.avg_seo_score;
-      }
-      return sortDir === 'asc' ? av - bv : bv - av;
+    const value = SORT_VALUE[sortKey];
+    return r.slice().sort((a, b) => {
+      const diff = value(a) - value(b);
+      return sortDir === 'asc' ? diff : -diff;
     });
-    return sorted;
   }, [categories, filter, sortKey, sortDir]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -54,12 +50,12 @@ export function Categories({ categories }: { categories: CategoryReport[] }) {
   const start = (current - 1) * PAGE_SIZE;
   const paged = filtered.slice(start, start + PAGE_SIZE);
 
-  // any control that mutates the result set should reset paging
+  // controls that mutate the result set reset paging
   function setFilterReset(f: Filter) {
     setFilter(f);
     setPage(1);
   }
-  // clicking the active sort key flips direction; clicking another sets it as the new key
+  // click active key flips direction; click another sets it (resets to desc)
   function pickSort(k: SortKey) {
     if (k === sortKey) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -70,14 +66,13 @@ export function Categories({ categories }: { categories: CategoryReport[] }) {
     setPage(1);
   }
 
-  // right-side order: all/healthy/mixed/rotten filters, sort keys, "where the rot lives"
   const controls = (
     <div className="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
       <div className="flex items-center gap-3">
         {(['all', 'healthy', 'mixed', 'rotten'] as Filter[]).map((f) => (
-          <ChipText key={f} active={filter === f} onClick={() => setFilterReset(f)}>
+          <TextChip key={f} active={filter === f} onClick={() => setFilterReset(f)}>
             {f}
-          </ChipText>
+          </TextChip>
         ))}
       </div>
 
@@ -107,22 +102,13 @@ export function Categories({ categories }: { categories: CategoryReport[] }) {
 
       {pageCount > 1 && (
         <div className="mt-4 flex items-center justify-center gap-6">
-          <PageNudge onClick={() => setPage(current - 1)} disabled={current <= 1}>
-            ← prev
-          </PageNudge>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-ink-300">
-            {current} / {pageCount}
-          </span>
-          <PageNudge onClick={() => setPage(current + 1)} disabled={current >= pageCount}>
-            next →
-          </PageNudge>
+          <Pager current={current} pageCount={pageCount} onPage={setPage} />
         </div>
       )}
     </section>
   );
 }
 
-// separator between control groups
 function Divider() {
   return (
     <span aria-hidden="true" className="font-mono text-[10px] text-ink-400">
@@ -131,29 +117,7 @@ function Divider() {
   );
 }
 
-function ChipText({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`font-mono text-[10px] uppercase tracking-widest transition ${
-        active ? 'text-accent' : 'text-ink-300 hover:text-paper'
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-// SortChip: like ChipText, adds an arrow when active. click active to flip dir; click
-// inactive to select it (resets to desc).
+// borderless toggle with a direction arrow when active
 function SortChip({
   k,
   label,
@@ -169,35 +133,10 @@ function SortChip({
 }) {
   const active = current === k;
   return (
-    <button
-      onClick={() => onPick(k)}
-      className={`font-mono text-[10px] uppercase tracking-widest transition ${
-        active ? 'text-accent' : 'text-ink-300 hover:text-paper'
-      }`}
-    >
+    <TextChip active={active} onClick={() => onPick(k)}>
       {label}
       {active && <span className="ml-1">{dir === 'asc' ? '↑' : '↓'}</span>}
-    </button>
-  );
-}
-
-function PageNudge({
-  onClick,
-  disabled,
-  children,
-}: {
-  onClick: () => void;
-  disabled: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="font-mono text-[10px] uppercase tracking-widest text-ink-300 transition hover:text-paper disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-ink-300"
-    >
-      {children}
-    </button>
+    </TextChip>
   );
 }
 

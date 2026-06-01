@@ -1,12 +1,32 @@
 package seo
 
 import (
+	"encoding/json"
 	"net/url"
 	"strings"
 	"unicode"
 
 	"golang.org/x/net/html"
+
+	"github.com/Tom-the-Bomb/linktrace/internal/htmlx"
 )
+
+// SEO thresholds and score penalties.
+const (
+	titleMaxLen    = 60
+	titleMinLen    = 10
+	metaDescMaxLen = 160
+	metaDescMinLen = 50
+	minAltRatio    = 0.9 // share of images that must have alt text
+	minDimRatio    = 0.8 // share of images that must set width+height
+
+	penaltyError   = 20
+	penaltyWarning = 10
+	penaltyInfo    = 3
+)
+
+// nonNavPrefixes are href prefixes that aren't navigable links (skipped in the link rollup).
+var nonNavPrefixes = []string{"#", "javascript:", "mailto:", "tel:"}
 
 var stopwords = map[string]bool{
 	"the": true, "a": true, "an": true, "and": true, "or": true, "but": true,
@@ -21,61 +41,83 @@ var stopwords = map[string]bool{
 	"any": true, "one": true, "two": true, "may": true, "also": true,
 }
 
-// getAttr returns the value of n's attribute key, or "" if absent.
-func getAttr(n *html.Node, key string) string {
-	for _, attr := range n.Attr {
-		if attr.Key == key {
-			return attr.Val
+// records a <script type="application/ld+json"> block's @type.
+func handleJSONLD(a *Audit, n *html.Node) {
+	if htmlx.GetAttr(n, "type") != "application/ld+json" || n.FirstChild == nil {
+		return
+	}
+	a.JSONLDCount++
+	var jsonld map[string]any
+	if err := json.Unmarshal([]byte(n.FirstChild.Data), &jsonld); err == nil {
+		if t, ok := jsonld["@type"].(string); ok {
+			a.JSONLDTypes = append(a.JSONLDTypes, t)
 		}
 	}
-	return ""
 }
 
-// hasAttr is presence-only: distinguishes "missing" from "set to empty". matters for alt,
-// where alt="" is the valid decorative-image signal, not the same as no alt.
-func hasAttr(n *html.Node, key string) bool {
-	for _, attr := range n.Attr {
-		if attr.Key == key {
-			return true
+// tallies one <img>'s a11y/CWV signals (alt, dimensions, lazy, responsive).
+func handleImg(a *Audit, n *html.Node) {
+	a.ImagesTotal++
+	if htmlx.HasAttr(n, "alt") { // empty alt="" is the valid decorative signal
+		a.ImagesWithAlt++
+	}
+	if htmlx.GetAttr(n, "width") != "" && htmlx.GetAttr(n, "height") != "" {
+		a.ImagesWithDims++
+	}
+	if strings.EqualFold(htmlx.GetAttr(n, "loading"), "lazy") {
+		a.ImagesLazyLoaded++
+	}
+	if htmlx.GetAttr(n, "srcset") != "" {
+		a.ImagesResponsive++
+	}
+}
+
+// buckets one <a> as internal/external and counts nofollow, skipping non-nav hrefs.
+func handleAnchor(a *Audit, pageHost string, n *html.Node) {
+	href := strings.TrimSpace(htmlx.GetAttr(n, "href"))
+	if href == "" {
+		return
+	}
+	for _, p := range nonNavPrefixes {
+		if strings.HasPrefix(href, p) {
+			return
 		}
 	}
-	return false
+	if strings.Contains(strings.ToLower(htmlx.GetAttr(n, "rel")), "nofollow") {
+		a.LinksNofollow++
+	}
+	if linkURL, err := url.Parse(href); err == nil {
+		if linkURL.Host == "" || linkURL.Host == pageHost {
+			a.LinksInternal++
+		} else {
+			a.LinksExternal++
+		}
+	}
 }
 
-// handleMeta reads a <meta> element into the audit: description, viewport, robots noindex,
-// and Open Graph / Twitter card tags.
+// reads a <meta> element: description, viewport, robots noindex, OG / Twitter tags.
 func handleMeta(a *Audit, n *html.Node) {
-	var name, property, content string
-	for _, attr := range n.Attr {
-		switch attr.Key {
-		case "name":
-			name = attr.Val
-		case "property":
-			property = attr.Val
-		case "content":
-			content = attr.Val
-		}
-	}
+	name := htmlx.GetAttr(n, "name")
+	property := htmlx.GetAttr(n, "property")
+	content := htmlx.GetAttr(n, "content")
 
 	switch {
 	case name == "description":
 		a.MetaDescription = content
 		a.MetaDescLength = len(content)
+	case name == "viewport":
+		a.HasViewport = true
+	case name == "robots":
+		a.Noindex = strings.Contains(strings.ToLower(content), "noindex")
 	case strings.HasPrefix(property, "og:"):
 		a.OGTags[property] = content
 	case strings.HasPrefix(name, "twitter:"):
 		a.TwitterTags[name] = content
 	}
-
-	if name == "viewport" {
-		a.HasViewport = true
-	}
-	if name == "robots" && strings.Contains(strings.ToLower(content), "noindex") {
-		a.Noindex = true
-	}
 }
 
-// findIssues classifies findings by severity:
+// classifies findings by severity:
+//
 //	error   = breaks indexing (missing title, multiple H1, noindex)
 //	warning = suboptimal (too-long title, missing meta desc, no canonical)
 //	info    = nice-to-have (no OG, no JSON-LD, no viewport)
@@ -87,17 +129,17 @@ func findIssues(a *Audit) []Issue {
 
 	if a.Title == "" {
 		add("title_missing", "Missing <title> tag", SeverityError)
-	} else if a.TitleLength > 60 {
+	} else if a.TitleLength > titleMaxLen {
 		add("title_too_long", "Title is longer than 60 characters", SeverityWarning)
-	} else if a.TitleLength < 10 {
+	} else if a.TitleLength < titleMinLen {
 		add("title_too_short", "Title is shorter than 10 characters", SeverityWarning)
 	}
 
 	if a.MetaDescription == "" {
 		add("meta_desc_missing", "Missing meta description", SeverityWarning)
-	} else if a.MetaDescLength > 160 {
+	} else if a.MetaDescLength > metaDescMaxLen {
 		add("meta_desc_too_long", "Meta description longer than 160 characters", SeverityInfo)
-	} else if a.MetaDescLength < 50 {
+	} else if a.MetaDescLength < metaDescMinLen {
 		add("meta_desc_too_short", "Meta description shorter than 50 characters", SeverityInfo)
 	}
 
@@ -154,12 +196,12 @@ func findIssues(a *Audit) []Issue {
 	// image hygiene: only flag when there are images, else it fires on every text-only page
 	if a.ImagesTotal > 0 {
 		altRatio := float64(a.ImagesWithAlt) / float64(a.ImagesTotal)
-		if altRatio < 0.9 {
+		if altRatio < minAltRatio {
 			add("img_missing_alt",
 				"Images missing alt attribute (accessibility + SEO)", SeverityWarning)
 		}
 		dimRatio := float64(a.ImagesWithDims) / float64(a.ImagesTotal)
-		if dimRatio < 0.8 {
+		if dimRatio < minDimRatio {
 			add("img_missing_dims",
 				"Images missing width/height (causes layout shift)", SeverityInfo)
 		}
@@ -183,33 +225,30 @@ func findIssues(a *Audit) []Issue {
 	return issues
 }
 
-// score returns 100 minus weighted issue penalties, clamped to [0, 100].
+// returns 100 minus weighted issue penalties, clamped to [0, 100].
 func score(issues []Issue) int {
 	s := 100
 	for _, iss := range issues {
 		switch iss.Severity {
 		case SeverityError:
-			s -= 20
+			s -= penaltyError
 		case SeverityWarning:
-			s -= 10
+			s -= penaltyWarning
 		case SeverityInfo:
-			s -= 3
+			s -= penaltyInfo
 		}
 	}
-	if s < 0 {
-		return 0
-	}
-	return s
+	return max(0, s)
 }
 
-// tokenize lowercases s and splits it into runs of letters.
+// lowercases s and splits it into runs of letters.
 func tokenize(s string) []string {
 	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
 		return !unicode.IsLetter(r)
 	})
 }
 
-// slug turns a URL's path into space-separated words so keyword matching can scan it.
+// turns a URL's path into space-separated words so keyword matching can scan it.
 func slug(pageURL string) string {
 	u, err := url.Parse(pageURL)
 	if err != nil {

@@ -4,12 +4,13 @@ package seo
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/url"
 	"sort"
 	"strings"
 
 	"golang.org/x/net/html"
+
+	"github.com/Tom-the-Bomb/linktrace/internal/htmlx"
 )
 
 const (
@@ -74,7 +75,7 @@ type KeywordCount struct {
 	Count int    `json:"count"`
 }
 
-// AnalyzeKeywords tokenizes page text, counts meaningful terms, and reports the top keywords
+// tokenizes page text, counts meaningful terms, and reports the top keywords
 // plus where the most frequent ("primary") one appears (title / first H1 / URL slug).
 func AnalyzeKeywords(text, title, firstH1, pageURL string) (top []KeywordCount,
 	primary string, inTitle, inH1, inURL bool) {
@@ -110,7 +111,7 @@ func AnalyzeKeywords(text, title, firstH1, pageURL string) (top []KeywordCount,
 	return
 }
 
-// AuditHTML parses page HTML and extracts the SEO-relevant signals, scored.
+// parses page HTML and extracts the SEO-relevant signals, scored.
 func AuditHTML(body []byte, pageURL string) Audit {
 	a := Audit{
 		OGTags:      map[string]string{},
@@ -131,110 +132,61 @@ func AuditHTML(body []byte, pageURL string) Audit {
 	var textBuf strings.Builder
 	var firstH1 string
 
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
-		// skip non-content subtrees entirely
-		if n.Type == html.ElementNode && (n.Data == "script" || n.Data == "style") {
-			if n.Data == "script" && getAttr(n, "type") == "application/ld+json" && n.FirstChild != nil {
-				a.JSONLDCount++
-				var jsonld map[string]any
-				if err := json.Unmarshal([]byte(n.FirstChild.Data), &jsonld); err == nil {
-					if t, ok := jsonld["@type"].(string); ok {
-						a.JSONLDTypes = append(a.JSONLDTypes, t)
-					}
-				}
-			}
-			return
-		}
-
+	htmlx.Walk(doc, func(n *html.Node) bool {
 		if n.Type == html.TextNode {
 			textBuf.WriteString(" ")
 			textBuf.WriteString(n.Data)
+			return true
 		}
-
-		// Skip SVG subtrees entirely: inline icons commonly include <title>YouTube</title>
-		// (or similar) as their a11y label, which would otherwise overwrite the real <head>
-		// page title via last-write-wins.
-		if n.Type == html.ElementNode && n.Data == "svg" {
-			return
+		if n.Type != html.ElementNode {
+			return true
 		}
-
-		if n.Type == html.ElementNode {
-			switch n.Data {
-			case "title":
-				// first <title> wins, never overwrite (SVG subtrees already skipped above)
-				if a.Title == "" && n.FirstChild != nil {
-					a.Title = strings.TrimSpace(n.FirstChild.Data)
-					a.TitleLength = len(a.Title)
-				}
-			case "h1":
-				a.H1Count++
-				if firstH1 == "" && n.FirstChild != nil {
-					firstH1 = strings.TrimSpace(n.FirstChild.Data)
-				}
-			case "h2":
-				a.H2Count++
-			case "h3":
-				a.H3Count++
-			case "h4":
-				a.H4Count++
-			case "h5":
-				a.H5Count++
-			case "h6":
-				a.H6Count++
-			case "meta":
-				handleMeta(&a, n)
-			case "link":
-				if getAttr(n, "rel") == "canonical" {
-					a.Canonical = getAttr(n, "href")
-				}
-			case "html":
-				// first <html lang> wins (only one in valid documents anyway)
-				if a.HTMLLang == "" {
-					a.HTMLLang = strings.TrimSpace(getAttr(n, "lang"))
-				}
-			case "img":
-				a.ImagesTotal++
-				// count any alt attribute that exists; empty alt="" is the valid decorative signal
-				if hasAttr(n, "alt") {
-					a.ImagesWithAlt++
-				}
-				if getAttr(n, "width") != "" && getAttr(n, "height") != "" {
-					a.ImagesWithDims++
-				}
-				if strings.EqualFold(getAttr(n, "loading"), "lazy") {
-					a.ImagesLazyLoaded++
-				}
-				if getAttr(n, "srcset") != "" {
-					a.ImagesResponsive++
-				}
-			case "a":
-				href := strings.TrimSpace(getAttr(n, "href"))
-				if href == "" || strings.HasPrefix(href, "#") ||
-					strings.HasPrefix(href, "javascript:") || strings.HasPrefix(href, "mailto:") ||
-					strings.HasPrefix(href, "tel:") {
-					break // not a navigable link, skip from the link rollup
-				}
-				rel := strings.ToLower(getAttr(n, "rel"))
-				if strings.Contains(rel, "nofollow") {
-					a.LinksNofollow++
-				}
-				if linkURL, err := url.Parse(href); err == nil {
-					// relative URL or same host => internal; anything else => external
-					if linkURL.Host == "" || linkURL.Host == pageHost {
-						a.LinksInternal++
-					} else {
-						a.LinksExternal++
-					}
-				}
+		switch n.Data {
+		case "script":
+			handleJSONLD(&a, n)
+			return false // never descend into scripts
+		case "style":
+			return false
+		case "svg":
+			// inline icons often carry <title> a11y labels that would clobber the page title
+			return false
+		case "title":
+			if a.Title == "" && n.FirstChild != nil {
+				a.Title = strings.TrimSpace(n.FirstChild.Data)
+				a.TitleLength = len(a.Title)
 			}
+		case "h1":
+			a.H1Count++
+			if firstH1 == "" && n.FirstChild != nil {
+				firstH1 = strings.TrimSpace(n.FirstChild.Data)
+			}
+		case "h2":
+			a.H2Count++
+		case "h3":
+			a.H3Count++
+		case "h4":
+			a.H4Count++
+		case "h5":
+			a.H5Count++
+		case "h6":
+			a.H6Count++
+		case "meta":
+			handleMeta(&a, n)
+		case "link":
+			if htmlx.GetAttr(n, "rel") == "canonical" {
+				a.Canonical = htmlx.GetAttr(n, "href")
+			}
+		case "html":
+			if a.HTMLLang == "" {
+				a.HTMLLang = strings.TrimSpace(htmlx.GetAttr(n, "lang"))
+			}
+		case "img":
+			handleImg(&a, n)
+		case "a":
+			handleAnchor(&a, pageHost, n)
 		}
-
-		for child := n.FirstChild; child != nil; child = child.NextSibling {
-			walk(child)
-		}
-	}
-	walk(doc)
+		return true
+	})
 
 	a.TopKeywords, a.PrimaryKeyword, a.KeywordInTitle, a.KeywordInH1, a.KeywordInURL =
 		AnalyzeKeywords(textBuf.String(), a.Title, firstH1, pageURL)

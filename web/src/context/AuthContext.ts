@@ -13,8 +13,7 @@ export interface AuthState {
 
 export const AuthContext = createContext<AuthState | null>(null);
 
-// useAuth reads the auth state from context. Lives apart from <AuthProvider> so the provider
-// file can export only a component (keeps React Fast Refresh happy).
+// kept apart from <AuthProvider> so that file exports only a component (Fast Refresh)
 export function useAuth(): AuthState {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');

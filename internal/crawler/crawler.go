@@ -1,5 +1,4 @@
-// Package crawler extracts internal links from crawled HTML and canonicalizes URLs so the
-// same page is never queued twice. Private helpers live in utils.go.
+// Package crawler extracts internal links from HTML and canonicalizes URLs so a page is never queued twice.
 package crawler
 
 import (
@@ -7,10 +6,11 @@ import (
 	"net/url"
 
 	"golang.org/x/net/html"
+
+	"github.com/Tom-the-Bomb/linktrace/internal/htmlx"
 )
 
-// NormalizeURL returns the canonical form of a raw URL, so the API's seed matches the form
-// the crawler produces for discovered links. Returns the input unchanged if parsing fails.
+// returns the canonical form of a raw URL, or the input unchanged if unparseable.
 func NormalizeURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -19,9 +19,8 @@ func NormalizeURL(raw string) string {
 	return canonicalize(u, false)
 }
 
-// CanonicalKey returns a URL's dedup key: the canonical form with the query string dropped,
-// so /endpoint, /endpoint?a=1, and /endpoint?a=1&b=2 collapse to one page. Dedup only; the
-// crawler still fetches the first real URL it saw (query intact). Input unchanged if unparseable.
+// returns a URL's dedup key: the canonical form with the query dropped, so
+// /endpoint and /endpoint?a=1 collapse to one. Dedup only; the original URL is still fetched.
 func CanonicalKey(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -30,8 +29,7 @@ func CanonicalKey(raw string) string {
 	return canonicalize(u, true)
 }
 
-// ExtractLinks parses page HTML and returns the deduped, canonicalized, same-host links it
-// discovers in <a href>. Off-host, non-http, and asset/framework paths are dropped.
+// returns the deduped, canonicalized, same-host links in <a href>.
 func ExtractLinks(body []byte, base *url.URL) []string {
 	doc, err := html.Parse(bytes.NewReader(body))
 	if err != nil {
@@ -39,21 +37,15 @@ func ExtractLinks(body []byte, base *url.URL) []string {
 	}
 
 	var links []string
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
+	htmlx.Walk(doc, func(n *html.Node) bool {
 		if n.Type == html.ElementNode && n.Data == "a" {
-			for _, attr := range n.Attr {
-				if attr.Key == "href" {
-					if abs := resolve(base, attr.Val); abs != "" {
-						links = append(links, abs)
-					}
+			if href, ok := htmlx.Attr(n, "href"); ok {
+				if abs := resolve(base, href); abs != "" {
+					links = append(links, abs)
 				}
 			}
 		}
-		for child := n.FirstChild; child != nil; child = child.NextSibling {
-			walk(child)
-		}
-	}
-	walk(doc)
+		return true
+	})
 	return dedupe(links)
 }

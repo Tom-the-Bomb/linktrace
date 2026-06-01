@@ -24,9 +24,13 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/store"
 )
 
-const maxRetries = 3
+const (
+	maxRetries       = 3
+	checkTimeout     = 10 * time.Second // per-page fetch timeout
+	rateLimitBackoff = time.Second      // pause before requeueing a rate-limited job
+)
 
-// main starts the page-fetch workers and the result consumers, then waits for shutdown.
+// starts the page-fetch workers and the result consumers, then waits for shutdown.
 func main() {
 	cfg := config.Load()
 
@@ -48,7 +52,7 @@ func main() {
 	}
 	defer q.Close()
 
-	w := &worker{cfg: cfg, cache: ca, queue: q, chk: checker.New(10 * time.Second)}
+	w := &worker{cfg: cfg, cache: ca, queue: q, chk: checker.New(checkTimeout)}
 	rb := &reportBuilder{store: st, cache: ca}
 	ac := &archiveChecker{store: st, cache: ca}
 	ag := newAggregator(st, ca)
@@ -62,14 +66,15 @@ func main() {
 	}
 	channels = append(channels, pageCh)
 
-	for _, c := range []struct {
+	consumers := []struct {
 		name    string
 		handler func(queue.PageChecked) error
 	}{
 		{queue.QReport, rb.handle},
 		{queue.QArchive, ac.handle},
 		{queue.QAggregate, ag.handle},
-	} {
+	}
+	for _, c := range consumers {
 		ch, err := runConsumer(q, c.name, &wg, c.handler)
 		if err != nil {
 			log.Fatalf("consumer %s: %v", c.name, err)
@@ -77,7 +82,7 @@ func main() {
 		channels = append(channels, ch)
 	}
 
-	log.Printf("worker running: %d page goroutines + 3 result consumers", cfg.WorkerCount)
+	log.Printf("worker running: %d page goroutines + %d result consumers", cfg.WorkerCount, len(consumers))
 
 	// graceful shutdown: closing channels closes their delivery chans, ranging goroutines exit
 	stop := make(chan os.Signal, 1)
@@ -91,7 +96,7 @@ func main() {
 	log.Println("worker stopped")
 }
 
-// worker bundles per-goroutine dependencies for processing a page job.
+// bundles per-goroutine dependencies for processing a page job.
 type worker struct {
 	cfg   config.Config
 	cache *cache.Cache
@@ -99,7 +104,7 @@ type worker struct {
 	chk   *checker.Checker
 }
 
-// startPageWorkers launches cfg.WorkerCount goroutines, all consuming the same delivery channel.
+// launches cfg.WorkerCount goroutines, all consuming the same delivery channel.
 // Prefetch = WorkerCount applies broker-side backpressure (fair dispatch + bounded in-flight).
 func startPageWorkers(w *worker, wg *sync.WaitGroup) (*amqp.Channel, error) {
 	deliveries, ch, err := w.queue.Consume(queue.WorkQueue, w.cfg.WorkerCount)
@@ -118,7 +123,7 @@ func startPageWorkers(w *worker, wg *sync.WaitGroup) (*amqp.Channel, error) {
 	return ch, nil
 }
 
-// processPage is the per-message decision tree: rate-limit -> fetch -> retry/ack/dead-letter.
+// is the per-message decision tree: rate-limit -> fetch -> retry/ack/dead-letter.
 func (w *worker) processPage(d amqp.Delivery) {
 	var job queue.PageJob
 	if err := json.Unmarshal(d.Body, &job); err != nil {
@@ -143,7 +148,7 @@ func (w *worker) processPage(d amqp.Delivery) {
 	if !allowed {
 		// over budget: brief sleep prevents hot-loop nacking
 		log.Printf("[worker] rate-limited, requeueing %s", job.URL)
-		time.Sleep(time.Second)
+		time.Sleep(rateLimitBackoff)
 		_ = d.Nack(false, true)
 		return
 	}
@@ -174,7 +179,7 @@ func (w *worker) processPage(d amqp.Delivery) {
 	// enqueue children (bumps `discovered`) before publishing the result (bumps `checked`)
 	// so the completion rule checked >= discovered holds
 	var links []string
-	if res.IsAlive && len(res.Body) > 0 {
+	if hasHTML(res) {
 		links = w.enqueueLinks(job, res)
 	}
 	w.publishResult(job, res, links)
@@ -188,7 +193,7 @@ func (w *worker) processPage(d amqp.Delivery) {
 	_ = d.Ack(false)
 }
 
-// publishResult builds the fanout message: rot record + (for healthy HTML) SEO audit + edges.
+// builds the fanout message: rot record + (for healthy HTML) SEO audit + edges.
 func (w *worker) publishResult(job queue.PageJob, res checker.CheckResult, links []string) {
 	pr := store.PageResult{
 		JobID:         job.JobID,
@@ -201,7 +206,7 @@ func (w *worker) publishResult(job queue.PageJob, res checker.CheckResult, links
 		RetryCount:    job.RetryCount,
 		RedirectChain: res.RedirectChain,
 	}
-	resultJSON, _ := json.Marshal(pr)
+	resultJSON, _ := json.Marshal(pr) // marshaling a plain struct can't realistically fail
 
 	msg := queue.PageChecked{
 		JobID:   job.JobID,
@@ -211,12 +216,10 @@ func (w *worker) publishResult(job queue.PageJob, res checker.CheckResult, links
 		Result:  resultJSON,
 	}
 
-	if res.IsAlive && len(res.Body) > 0 {
+	if hasHTML(res) {
 		audit := seo.AuditHTML(res.Body, job.URL)
 		sa := mapAudit(job.JobID, job.URL, audit)
-		if seoJSON, err := json.Marshal(sa); err == nil {
-			msg.SEO = seoJSON
-		}
+		msg.SEO, _ = json.Marshal(sa) // marshaling a plain struct can't realistically fail
 	}
 	msg.Links = links
 
@@ -225,7 +228,7 @@ func (w *worker) publishResult(job queue.PageJob, res checker.CheckResult, links
 	}
 }
 
-// enqueueLinks expands the frontier and returns only the children this page first discovered,
+// expands the frontier and returns only the children this page first discovered,
 // so recorded edges form a strict BFS tree (one parent per page) rather than the full link soup.
 // Three caps bound a sprawling crawl: depth (MaxDepth), global (MaxPages), per-category (MaxPerCategory).
 func (w *worker) enqueueLinks(job queue.PageJob, res checker.CheckResult) []string {
@@ -279,7 +282,8 @@ func (w *worker) enqueueLinks(job queue.PageJob, res checker.CheckResult) []stri
 	return discovered
 }
 
-// runConsumer drains queueName one at a time: handle returning nil acks, an error dead-letters.
+// drains queueName one at a time: nil acks; a handler error requeues once, then
+// dead-letters on the retry (so a transient blip doesn't drop a result, nor loop forever).
 func runConsumer(q *queue.Queue, queueName string, wg *sync.WaitGroup,
 	handle func(queue.PageChecked) error) (*amqp.Channel, error) {
 
@@ -293,12 +297,13 @@ func runConsumer(q *queue.Queue, queueName string, wg *sync.WaitGroup,
 		for d := range deliveries {
 			var msg queue.PageChecked
 			if err := json.Unmarshal(d.Body, &msg); err != nil {
-				_ = d.Nack(false, false)
+				_ = d.Nack(false, false) // unparseable: requeue can't help
 				continue
 			}
 			if err := handle(msg); err != nil {
-				log.Printf("[%s] handler error: %v", queueName, err)
-				_ = d.Nack(false, false)
+				requeue := !d.Redelivered // retry once, then dead-letter
+				log.Printf("[%s] handler error (requeue=%v): %v", queueName, requeue, err)
+				_ = d.Nack(false, requeue)
 				continue
 			}
 			_ = d.Ack(false)
@@ -307,13 +312,26 @@ func runConsumer(q *queue.Queue, queueName string, wg *sync.WaitGroup,
 	return ch, nil
 }
 
-// reportBuilder persists rot + SEO rows, bumps progress, and flips the job to complete.
+// unmarshals the optional SEO blob on a result message; ok=false when it's absent
+// (e.g. a rotten page), "null", or unparseable.
+func decodeSEO(raw json.RawMessage) (store.SEOAudit, bool) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return store.SEOAudit{}, false
+	}
+	var audit store.SEOAudit
+	if err := json.Unmarshal(raw, &audit); err != nil {
+		return store.SEOAudit{}, false
+	}
+	return audit, true
+}
+
+// persists rot + SEO rows, bumps progress, and flips the job to complete.
 type reportBuilder struct {
 	store *store.Store
 	cache *cache.Cache
 }
 
-// handle persists a checked page (rot row, SEO audit, links) and bumps progress.
+// persists a checked page (rot row, SEO audit, links) and bumps progress.
 func (rb *reportBuilder) handle(msg queue.PageChecked) error {
 	// cancelled mid-flight: drop the message, preserving whatever was already saved
 	if rb.cache.IsCancelled(msg.JobID) {
@@ -327,12 +345,8 @@ func (rb *reportBuilder) handle(msg queue.PageChecked) error {
 		return err
 	}
 
-	hasSEO := len(msg.SEO) > 0 && string(msg.SEO) != "null"
+	audit, hasSEO := decodeSEO(msg.SEO)
 	if hasSEO {
-		var audit store.SEOAudit
-		if err := json.Unmarshal(msg.SEO, &audit); err != nil {
-			return err
-		}
 		audit.JobID = msg.JobID
 		audit.URL = msg.URL
 		if err := rb.store.InsertSEOAudit(audit); err != nil {
@@ -355,7 +369,7 @@ func (rb *reportBuilder) handle(msg queue.PageChecked) error {
 	return rb.maybeComplete(msg.JobID)
 }
 
-// maybeComplete marks the job done once `checked` catches up to `discovered`. The IsCancelled
+// marks the job done once `checked` catches up to `discovered`. The IsCancelled
 // guard is belt-and-suspenders for a result that was in-flight at cancel time.
 func (rb *reportBuilder) maybeComplete(jobID string) error {
 	if rb.cache.IsCancelled(jobID) {
@@ -376,13 +390,13 @@ func (rb *reportBuilder) maybeComplete(jobID string) error {
 	return nil
 }
 
-// archiveChecker hits Wayback for rotten pages only; isolated so its slowness can't stall reports.
+// hits Wayback for rotten pages only; isolated so its slowness can't stall reports.
 type archiveChecker struct {
 	store *store.Store
 	cache *cache.Cache
 }
 
-// handle looks up a Wayback snapshot for rotten pages and stores it.
+// looks up a Wayback snapshot for rotten pages and stores it.
 func (ac *archiveChecker) handle(msg queue.PageChecked) error {
 	if msg.IsAlive {
 		return nil
@@ -405,7 +419,7 @@ func (ac *archiveChecker) handle(msg queue.PageChecked) error {
 	return ac.store.SetArchiveURL(msg.JobID, msg.URL, snap)
 }
 
-// aggregator buckets pages by URL category and rewrites the category_reports row each tick.
+// buckets pages by URL category and rewrites the category_reports row each tick.
 // In-memory tallies are fine given a single aggregator instance.
 type aggregator struct {
 	store *store.Store
@@ -421,12 +435,12 @@ type catTally struct {
 	scoreCount int
 }
 
-// newAggregator builds an aggregator with empty per-job category tallies.
+// builds an aggregator with empty per-job category tallies.
 func newAggregator(st *store.Store, ca *cache.Cache) *aggregator {
 	return &aggregator{store: st, cache: ca, stats: map[string]map[string]*catTally{}}
 }
 
-// handle tallies a page into its URL category and rewrites that category's report row.
+// tallies a page into its URL category and rewrites that category's report row.
 func (ag *aggregator) handle(msg queue.PageChecked) error {
 	// cancelled: skip the write and free the per-job stats so it doesn't squat on memory
 	if ag.cache.IsCancelled(msg.JobID) {
@@ -438,13 +452,9 @@ func (ag *aggregator) handle(msg queue.PageChecked) error {
 	cat := categoryOf(msg.URL)
 
 	var seoScore int
-	var hasSEO bool
-	if len(msg.SEO) > 0 && string(msg.SEO) != "null" {
-		var a store.SEOAudit
-		if err := json.Unmarshal(msg.SEO, &a); err == nil {
-			seoScore = a.Score
-			hasSEO = true
-		}
+	a, hasSEO := decodeSEO(msg.SEO)
+	if hasSEO {
+		seoScore = a.Score
 	}
 
 	ag.mu.Lock()

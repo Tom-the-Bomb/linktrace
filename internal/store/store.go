@@ -1,13 +1,12 @@
 // Package store is the MySQL persistence layer: jobs, page results, SEO audits, links,
 // category reports, users, site audits, and the derived crawl-stats/site-SEO aggregates.
-// Row-scanning helpers and small utilities live in utils.go.
+// Job/page/link CRUD lives here; user/session/history methods are in users.go and the
+// read-only aggregates in audits.go. Row-scanning helpers and small utilities live in utils.go.
 package store
 
 import (
 	"database/sql"
 	"encoding/json"
-	"sort"
-	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -99,7 +98,7 @@ type Store struct {
 	db *sql.DB
 }
 
-// New opens the MySQL pool, verifies it with a ping, and applies connection limits.
+// opens the MySQL pool, verifies it with a ping, and applies connection limits.
 func New(dsn string) (*Store, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
@@ -116,12 +115,12 @@ func New(dsn string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// Close closes the database pool.
+// closes the database pool.
 func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// CreateJob inserts a job owned by userID, or anonymous (SQL NULL) when userID == "".
+// inserts a job owned by userID, or anonymous (SQL NULL) when userID == "".
 func (s *Store) CreateJob(id, url, userID string) error {
 	var uid any
 	if userID != "" {
@@ -134,7 +133,7 @@ func (s *Store) CreateJob(id, url, userID string) error {
 	return err
 }
 
-// UpdateJobStatus sets a job's lifecycle status (pending/crawling/complete/failed/stopped).
+// sets a job's lifecycle status (pending/crawling/complete/failed/stopped).
 func (s *Store) UpdateJobStatus(id, status string) error {
 	_, err := s.db.Exec(
 		"UPDATE jobs SET status = ? WHERE id = UUID_TO_BIN(?)", status, id,
@@ -142,7 +141,7 @@ func (s *Store) UpdateJobStatus(id, status string) error {
 	return err
 }
 
-// SetTotalPages records the final crawled-page count on the job row.
+// records the final crawled-page count on the job row.
 func (s *Store) SetTotalPages(id string, n int) error {
 	_, err := s.db.Exec(
 		"UPDATE jobs SET total_pages = ? WHERE id = UUID_TO_BIN(?)", n, id,
@@ -150,7 +149,7 @@ func (s *Store) SetTotalPages(id string, n int) error {
 	return err
 }
 
-// DeleteJob removes a job and every row that references it. The child tables have
+// removes a job and every row that references it. The child tables have
 // FK(job_id) -> jobs(id) with no ON DELETE CASCADE, so we delete children before the
 // parent, all inside one transaction so a partial failure leaves nothing orphaned.
 func (s *Store) DeleteJob(id string) error {
@@ -158,31 +157,26 @@ func (s *Store) DeleteJob(id string) error {
 	if _, err := uuid.Parse(id); err != nil {
 		return nil
 	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback() //nolint:errcheck // no-op once Commit succeeds
-
-	// children first, parent last
-	stmts := []string{
-		"DELETE FROM pages WHERE job_id = UUID_TO_BIN(?)",
-		"DELETE FROM seo_audits WHERE job_id = UUID_TO_BIN(?)",
-		"DELETE FROM links WHERE job_id = UUID_TO_BIN(?)",
-		"DELETE FROM category_reports WHERE job_id = UUID_TO_BIN(?)",
-		"DELETE FROM site_audits WHERE job_id = UUID_TO_BIN(?)",
-		"DELETE FROM jobs WHERE id = UUID_TO_BIN(?)",
-	}
-	for _, q := range stmts {
-		if _, err := tx.Exec(q, id); err != nil {
-			return err
+	return s.tx(func(t *sql.Tx) error {
+		// children first, parent last
+		stmts := []string{
+			"DELETE FROM pages WHERE job_id = UUID_TO_BIN(?)",
+			"DELETE FROM seo_audits WHERE job_id = UUID_TO_BIN(?)",
+			"DELETE FROM links WHERE job_id = UUID_TO_BIN(?)",
+			"DELETE FROM category_reports WHERE job_id = UUID_TO_BIN(?)",
+			"DELETE FROM site_audits WHERE job_id = UUID_TO_BIN(?)",
+			"DELETE FROM jobs WHERE id = UUID_TO_BIN(?)",
 		}
-	}
-	return tx.Commit()
+		for _, q := range stmts {
+			if _, err := t.Exec(q, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
-// GetJob returns the job by id, or (nil, nil) if it doesn't exist.
+// returns the job by id, or (nil, nil) if it doesn't exist.
 func (s *Store) GetJob(id string) (*Job, error) {
 	// A malformed id can never match a job, and feeding it to MySQL's UUID_TO_BIN()
 	// raises a query error (surfacing as a 500) rather than an empty result. Treat it
@@ -193,37 +187,29 @@ func (s *Store) GetJob(id string) (*Job, error) {
 
 	var j Job
 	var userID sql.NullString // user_id is nullable for anonymous jobs
-	err := s.db.QueryRow(
-		"SELECT BIN_TO_UUID(id), BIN_TO_UUID(user_id), url, status, total_pages, created_at, updated_at FROM jobs WHERE id = UUID_TO_BIN(?)",
-		id,
-	).Scan(&j.ID, &userID, &j.URL, &j.Status, &j.TotalPages, &j.CreatedAt, &j.UpdatedAt)
-
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
+	out, err := getOne(&j, func() error {
+		return s.db.QueryRow(
+			"SELECT BIN_TO_UUID(id), BIN_TO_UUID(user_id), url, status, total_pages, created_at, updated_at FROM jobs WHERE id = UUID_TO_BIN(?)",
+			id,
+		).Scan(&j.ID, &userID, &j.URL, &j.Status, &j.TotalPages, &j.CreatedAt, &j.UpdatedAt)
+	})
+	if out == nil || err != nil {
+		return out, err
 	}
 	j.UserID = userID.String
-	return &j, nil
+	return out, nil
 }
 
-// InsertPageResult persists one crawled page's rot record (status, timing, redirect chain).
+// persists one crawled page's rot record (status, timing, redirect chain).
 func (s *Store) InsertPageResult(result PageResult) error {
-	chain, err := json.Marshal(result.RedirectChain)
-
-	if err != nil {
-		return err
-	}
-
-	_, err = s.db.Exec(
+	_, err := s.db.Exec(
 		`INSERT INTO pages (job_id, url, status_code,
 		response_time, error_type, is_alive, depth,
 		retry_count, redirect_chain)
 		VALUES (UUID_TO_BIN(?), ?, ?, ?, ?, ?, ?, ?, ?)`,
 		result.JobID, result.URL, result.StatusCode,
 		result.ResponseTime, nullIfEmpty(result.ErrorType), result.IsAlive,
-		result.Depth, result.RetryCount, chain,
+		result.Depth, result.RetryCount, mustJSON(result.RedirectChain),
 	)
 	return err
 }
@@ -233,7 +219,7 @@ type Link struct {
 	Target string
 }
 
-// InsertLink records a discovered edge; INSERT IGNORE silently no-ops on duplicate (job, src, tgt).
+// records a discovered edge; INSERT IGNORE silently no-ops on duplicate (job, src, tgt).
 func (s *Store) InsertLink(jobID, source, target string) error {
 	_, err := s.db.Exec(
 		"INSERT IGNORE INTO links (job_id, source_url, target_url) VALUES (UUID_TO_BIN(?), ?, ?)",
@@ -242,112 +228,67 @@ func (s *Store) InsertLink(jobID, source, target string) error {
 	return err
 }
 
-// ListLinks returns every recorded edge for a job, for building the graph view.
+// returns every recorded edge for a job, for building the graph view.
 func (s *Store) ListLinks(jobID string) ([]Link, error) {
-	rows, err := s.db.Query(
+	return queryRows(s.db,
 		"SELECT source_url, target_url FROM links WHERE job_id = UUID_TO_BIN(?)",
-		jobID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []Link
-	for rows.Next() {
-		var l Link
-		if err := rows.Scan(&l.Source, &l.Target); err != nil {
-			return nil, err
-		}
-		out = append(out, l)
-	}
-	return out, rows.Err()
+		func(rows *sql.Rows) (Link, error) {
+			var l Link
+			err := rows.Scan(&l.Source, &l.Target)
+			return l, err
+		}, jobID)
 }
 
-// GetSEOAudit fetches one SEO audit row by (job, URL) for the per-page drilldown endpoint.
+// fetches one SEO audit row by (job, URL) for the per-page drilldown endpoint.
 // Returns (nil, nil) if there's no audit for that URL.
 func (s *Store) GetSEOAudit(jobID, pageURL string) (*SEOAudit, error) {
-	row := s.db.QueryRow(
-		`SELECT `+seoAuditColumns+`
-		FROM seo_audits WHERE job_id = UUID_TO_BIN(?) AND url = ? LIMIT 1`,
-		jobID, pageURL,
-	)
-	a, err := scanSEOAudit(row, jobID)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &a, nil
+	var a SEOAudit
+	return getOne(&a, func() error {
+		row := s.db.QueryRow(
+			`SELECT `+seoAuditColumns+`
+			FROM seo_audits WHERE job_id = UUID_TO_BIN(?) AND url = ? LIMIT 1`,
+			jobID, pageURL,
+		)
+		var err error
+		a, err = scanSEOAudit(row, jobID)
+		return err
+	})
 }
 
-// SetArchiveURL records the Wayback snapshot URL for a (job, page).
+// records the Wayback snapshot URL for a (job, page).
 func (s *Store) SetArchiveURL(jobID, url, archiveURL string) error {
 	_, err := s.db.Exec(
-		"UPDATE pages SET archive_url = ? where job_id = UUID_TO_BIN(?) AND url = ?",
+		"UPDATE pages SET archive_url = ? WHERE job_id = UUID_TO_BIN(?) AND url = ?",
 		archiveURL, jobID, url,
 	)
 	return err
 }
 
-// ListPageResults returns every crawled page for a job, ordered by depth then URL.
+// returns every crawled page for a job, ordered by depth then URL.
 func (s *Store) ListPageResults(jobID string) ([]PageResult, error) {
-	rows, err := s.db.Query(
+	return queryRows(s.db,
 		`SELECT id, url, status_code, response_time, error_type,
 		is_alive, depth, retry_count, redirect_chain, archive_url
 		FROM pages WHERE job_id = UUID_TO_BIN(?)
 		ORDER BY depth, url`,
-		jobID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []PageResult
-	for rows.Next() {
-		var r PageResult
-		var errType, archive sql.NullString
-		var chain []byte
-
-		if err := rows.Scan(&r.ID, &r.URL, &r.StatusCode, &r.ResponseTime, &errType, &r.IsAlive, &r.Depth, &r.RetryCount, &chain, &archive); err != nil {
-			return nil, err
-		}
-		r.JobID = jobID
-		r.ErrorType = errType.String
-		r.ArchiveURL = archive.String
-		_ = json.Unmarshal(chain, &r.RedirectChain)
-		out = append(out, r)
-
-	}
-	return out, rows.Err()
+		func(rows *sql.Rows) (PageResult, error) {
+			var r PageResult
+			var errType, archive sql.NullString
+			var chain []byte
+			if err := rows.Scan(&r.ID, &r.URL, &r.StatusCode, &r.ResponseTime, &errType, &r.IsAlive, &r.Depth, &r.RetryCount, &chain, &archive); err != nil {
+				return r, err
+			}
+			r.JobID = jobID
+			r.ErrorType = errType.String
+			r.ArchiveURL = archive.String
+			_ = json.Unmarshal(chain, &r.RedirectChain)
+			return r, nil
+		}, jobID)
 }
 
-// InsertSEOAudit persists one page's SEO audit, JSON-encoding the map/slice columns.
+// persists one page's SEO audit, JSON-encoding the map/slice columns.
 func (s *Store) InsertSEOAudit(audit SEOAudit) error {
-	ogTags, err := json.Marshal(audit.OGTags)
-	if err != nil {
-		return err
-	}
-	jsonLDTypes, err := json.Marshal(audit.JSONLDTypes)
-	if err != nil {
-		return err
-	}
-	twitterTags, err := json.Marshal(audit.TwitterTags)
-	if err != nil {
-		return err
-	}
-	topKeywords, err := json.Marshal(audit.TopKeywords)
-	if err != nil {
-		return err
-	}
-	issues, err := json.Marshal(audit.Issues)
-	if err != nil {
-		return err
-	}
-
-	_, err = s.db.Exec(
+	_, err := s.db.Exec(
 		`INSERT INTO seo_audits (job_id, url, title, title_length,
 		meta_description, meta_description_length, h1_count,
 		h2_count, h3_count, h4_count, h5_count, h6_count,
@@ -367,376 +308,54 @@ func (s *Store) InsertSEOAudit(audit SEOAudit) error {
 		audit.ImagesLazyLoaded, audit.ImagesResponsive,
 		audit.LinksInternal, audit.LinksExternal, audit.LinksNofollow,
 		nullIfEmpty(audit.HTMLLang),
-		nullIfEmpty(audit.Canonical), ogTags, twitterTags,
-		audit.JSONLDCount, jsonLDTypes, audit.HasViewport, audit.Noindex,
-		topKeywords, nullIfEmpty(audit.PrimaryKeyword),
+		nullIfEmpty(audit.Canonical), mustJSON(audit.OGTags), mustJSON(audit.TwitterTags),
+		audit.JSONLDCount, mustJSON(audit.JSONLDTypes), audit.HasViewport, audit.Noindex,
+		mustJSON(audit.TopKeywords), nullIfEmpty(audit.PrimaryKeyword),
 		audit.KeywordInTitle, audit.KeywordInH1, audit.KeywordInURL,
-		issues, audit.Score,
+		mustJSON(audit.Issues), audit.Score,
 	)
 	return err
 }
 
-// ListSEOAudits returns every SEO audit row for a job (used by the report + graph endpoints).
+// returns every SEO audit row for a job (used by the report + graph endpoints).
 func (s *Store) ListSEOAudits(jobID string) ([]SEOAudit, error) {
-	rows, err := s.db.Query(
+	return queryRows(s.db,
 		`SELECT `+seoAuditColumns+` FROM seo_audits WHERE job_id = UUID_TO_BIN(?)`,
-		jobID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []SEOAudit
-	for rows.Next() {
-		a, err := scanSEOAudit(rows, jobID)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, a)
-	}
-	return out, rows.Err()
+		func(rows *sql.Rows) (SEOAudit, error) {
+			return scanSEOAudit(rows, jobID)
+		}, jobID)
 }
 
-// ReplaceCategoryReport upserts a category's rollup row (delete + insert in one tx), since
+// upserts a category's rollup row (delete + insert in one tx), since
 // the aggregator rewrites it on every tick as counts change.
 func (s *Store) ReplaceCategoryReport(jobID string, report CategoryReport) error {
-	tx, err := s.db.Begin()
-	if err != nil {
+	return s.tx(func(t *sql.Tx) error {
+		if _, err := t.Exec(
+			"DELETE FROM category_reports WHERE job_id = UUID_TO_BIN(?) AND category = ?",
+			jobID, report.Category,
+		); err != nil {
+			return err
+		}
+		_, err := t.Exec(
+			`INSERT INTO category_reports (job_id, category, total_pages,
+			rotten_pages, avg_seo_score, pattern)
+			VALUES (UUID_TO_BIN(?), ?, ?, ?, ?, ?)`,
+			jobID, report.Category, report.TotalPages,
+			report.RottenPages, report.AvgSEOScore, report.Pattern,
+		)
 		return err
-	}
-	defer tx.Rollback()
-
-	if _, err = tx.Exec(
-		"DELETE FROM category_reports WHERE job_id = UUID_TO_BIN(?) AND category = ?",
-		jobID, report.Category,
-	); err != nil {
-		return err
-	}
-
-	_, err = tx.Exec(
-		`INSERT INTO category_reports (job_id, category, total_pages,
-		rotten_pages, avg_seo_score, pattern)
-		VALUES (UUID_TO_BIN(?), ?, ?, ?, ?, ?)`,
-		jobID, report.Category, report.TotalPages,
-		report.RottenPages, report.AvgSEOScore, report.Pattern,
-	)
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit()
+	})
 }
 
-// ListCategoryReports returns the per-category rollups for a job.
+// returns the per-category rollups for a job.
 func (s *Store) ListCategoryReports(jobID string) ([]CategoryReport, error) {
-	rows, err := s.db.Query(
+	return queryRows(s.db,
 		`SELECT category, total_pages, rotten_pages,
 		avg_seo_score, pattern FROM category_reports
 		WHERE job_id = UUID_TO_BIN(?)`,
-		jobID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []CategoryReport
-	for rows.Next() {
-		var r CategoryReport
-		if err := rows.Scan(&r.Category, &r.TotalPages, &r.RottenPages, &r.AvgSEOScore, &r.Pattern); err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
-}
-
-type User struct {
-	ID           string `json:"id"`
-	Username     string `json:"username"`
-	PasswordHash string `json:"-"`
-}
-
-// CreateUser inserts a new account. UNIQUE(username) makes duplicate inserts fail at the DB.
-func (s *Store) CreateUser(u User) error {
-	_, err := s.db.Exec(
-		"INSERT INTO users (id, username, password_hash) VALUES (UUID_TO_BIN(?), ?, ?)",
-		u.ID, u.Username, u.PasswordHash,
-	)
-	return err
-}
-
-// IsDuplicateUsername reports whether err is a MySQL duplicate-username error.
-// Lets the handler turn it into a 409 instead of a generic 500.
-func IsDuplicateUsername(err error) bool {
-	if err == nil {
-		return false
-	}
-	return strings.Contains(err.Error(), "Duplicate entry") && strings.Contains(err.Error(), "username")
-}
-
-// GetUserByUsername returns the user with the given username, or (nil, nil) if not found.
-func (s *Store) GetUserByUsername(username string) (*User, error) {
-	var u User
-	err := s.db.QueryRow(
-		"SELECT BIN_TO_UUID(id), username, password_hash FROM users WHERE username = ?",
-		username,
-	).Scan(&u.ID, &u.Username, &u.PasswordHash)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &u, nil
-}
-
-// ListUserJobIDs returns every job id owned by userID, so account deletion can tear each one
-// down individually (cache purge + row delete) before removing the user.
-func (s *Store) ListUserJobIDs(userID string) ([]string, error) {
-	rows, err := s.db.Query(
-		"SELECT BIN_TO_UUID(id) FROM jobs WHERE user_id = UUID_TO_BIN(?)",
-		userID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
-}
-
-// DeleteUser removes the user row. Callers must delete the user's jobs first: jobs.user_id
-// references users(id) with no ON DELETE CASCADE, so a lingering job blocks this.
-func (s *Store) DeleteUser(id string) error {
-	if _, err := uuid.Parse(id); err != nil {
-		return nil
-	}
-	_, err := s.db.Exec("DELETE FROM users WHERE id = UUID_TO_BIN(?)", id)
-	return err
-}
-
-// GetUserByID is the symmetric lookup used by /auth/me.
-func (s *Store) GetUserByID(id string) (*User, error) {
-	var u User
-	err := s.db.QueryRow(
-		"SELECT BIN_TO_UUID(id), username, password_hash FROM users WHERE id = UUID_TO_BIN(?)",
-		id,
-	).Scan(&u.ID, &u.Username, &u.PasswordHash)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &u, nil
-}
-
-type HistoryRun struct {
-	JobID     string    `json:"job_id"`
-	CreatedAt time.Time `json:"created_at"`
-	Status    string    `json:"status"`
-}
-
-type HistoryEntry struct {
-	URL         string       `json:"url"`
-	CrawlCount  int          `json:"crawl_count"`
-	LastJobID   string       `json:"last_job_id"`
-	LastCrawled time.Time    `json:"last_crawled"`
-	Runs        []HistoryRun `json:"runs"`
-}
-
-// ListUserHistory returns one row per site the user has crawled (most recent first), each
-// with its individual runs, so the frontend can render an expandable list per domain.
-// Rows are grouped in Go from a single (url, created_at DESC) query.
-func (s *Store) ListUserHistory(userID string) ([]HistoryEntry, error) {
-	rows, err := s.db.Query(`
-		SELECT BIN_TO_UUID(id), url, status, created_at
-		FROM jobs
-		WHERE user_id = UUID_TO_BIN(?)
-		ORDER BY url, created_at DESC`, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	byURL := map[string]*HistoryEntry{}
-	for rows.Next() {
-		var jobID, url, status string
-		var createdAt time.Time
-		if err := rows.Scan(&jobID, &url, &status, &createdAt); err != nil {
-			return nil, err
-		}
-		e, ok := byURL[url]
-		if !ok {
-			// first row for this URL is the newest (rows are ordered DESC within each url)
-			e = &HistoryEntry{URL: url, LastJobID: jobID, LastCrawled: createdAt}
-			byURL[url] = e
-		}
-		e.CrawlCount++
-		e.Runs = append(e.Runs, HistoryRun{JobID: jobID, CreatedAt: createdAt, Status: status})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	out := make([]HistoryEntry, 0, len(byURL))
-	for _, e := range byURL {
-		out = append(out, *e)
-	}
-	// final order: most recently active domain first
-	sort.Slice(out, func(i, j int) bool { return out[i].LastCrawled.After(out[j].LastCrawled) })
-	return out, nil
-}
-
-type SiteAudit struct {
-	RobotsFound       bool     `json:"robots_found"`
-	RobotsDisallowAll bool     `json:"robots_disallow_all"`
-	CrawlDelay        int      `json:"crawl_delay"`
-	SitemapFound      bool     `json:"sitemap_found"`
-	SitemapURL        string   `json:"sitemap_url"`
-	SitemapURLCount   int      `json:"sitemap_url_count"`
-	SitemapURLs       []string `json:"-"`
-	IsHTTPS           bool     `json:"is_https"`
-	HTTPSRedirect     bool     `json:"https_redirect"`
-	CertValid         bool     `json:"cert_valid"`
-	WWWCanonical      string   `json:"www_canonical"`
-}
-
-// SaveSiteAudit persists the one-shot domain checks. Called once per crawl at job creation.
-func (s *Store) SaveSiteAudit(jobID string, a SiteAudit) error {
-	urls, err := json.Marshal(a.SitemapURLs)
-	if err != nil {
-		return err
-	}
-	_, err = s.db.Exec(
-		`INSERT INTO site_audits (job_id, robots_found, robots_disallow_all, crawl_delay,
-		 sitemap_found, sitemap_url, sitemap_url_count, sitemap_urls,
-		 is_https, https_redirect, cert_valid, www_canonical)
-		 VALUES (UUID_TO_BIN(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		jobID, a.RobotsFound, a.RobotsDisallowAll, a.CrawlDelay,
-		a.SitemapFound, nullIfEmpty(a.SitemapURL), a.SitemapURLCount, urls,
-		a.IsHTTPS, a.HTTPSRedirect, a.CertValid, a.WWWCanonical,
-	)
-	return err
-}
-
-// GetSiteAudit retrieves the one-shot domain checks. Returns (nil, nil) if absent.
-func (s *Store) GetSiteAudit(jobID string) (*SiteAudit, error) {
-	var a SiteAudit
-	var sitemapURL sql.NullString
-	var urls []byte
-	err := s.db.QueryRow(
-		`SELECT robots_found, robots_disallow_all, crawl_delay,
-		 sitemap_found, sitemap_url, sitemap_url_count, sitemap_urls,
-		 is_https, https_redirect, cert_valid, www_canonical
-		 FROM site_audits WHERE job_id = UUID_TO_BIN(?)`, jobID,
-	).Scan(&a.RobotsFound, &a.RobotsDisallowAll, &a.CrawlDelay,
-		&a.SitemapFound, &sitemapURL, &a.SitemapURLCount, &urls,
-		&a.IsHTTPS, &a.HTTPSRedirect, &a.CertValid, &a.WWWCanonical)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	a.SitemapURL = sitemapURL.String
-	_ = json.Unmarshal(urls, &a.SitemapURLs)
-	return &a, nil
-}
-
-type CrawlStats struct {
-	TotalPages      int     `json:"total_pages"`
-	TotalRequests   int     `json:"total_requests"`
-	AvgResponseMs   int     `json:"avg_response_ms"`
-	MaxResponseMs   int     `json:"max_response_ms"`
-	RottenCount     int     `json:"rotten_count"`
-	ErrorRate       float64 `json:"error_rate"`
-	DurationSeconds int     `json:"duration_seconds"`
-}
-
-// GetCrawlStats aggregates per-page rows into the telemetry numbers. Pure SQL: nothing new stored.
-func (s *Store) GetCrawlStats(jobID string) (CrawlStats, error) {
-	var cs CrawlStats
-	var avg sql.NullFloat64
-	var maxMs, retries, rotten, dur sql.NullInt64
-	err := s.db.QueryRow(`
-		SELECT COUNT(*),
-		       COALESCE(SUM(retry_count), 0),
-		       COALESCE(AVG(response_time), 0),
-		       COALESCE(MAX(response_time), 0),
-		       COALESCE(SUM(NOT is_alive), 0),
-		       COALESCE(TIMESTAMPDIFF(SECOND, MIN(checked_at), MAX(checked_at)), 0)
-		FROM pages WHERE job_id = UUID_TO_BIN(?)`, jobID).
-		Scan(&cs.TotalPages, &retries, &avg, &maxMs, &rotten, &dur)
-	if err != nil {
-		return cs, err
-	}
-	cs.TotalRequests = cs.TotalPages + int(retries.Int64)
-	cs.AvgResponseMs = int(avg.Float64)
-	cs.MaxResponseMs = int(maxMs.Int64)
-	cs.RottenCount = int(rotten.Int64)
-	cs.DurationSeconds = int(dur.Int64)
-	if cs.TotalPages > 0 {
-		cs.ErrorRate = float64(cs.RottenCount) / float64(cs.TotalPages)
-	}
-	return cs, nil
-}
-
-type SiteSEO struct {
-	PagesAudited       int `json:"pages_audited"`
-	DuplicateTitleSets int `json:"duplicate_title_sets"`
-	MissingMetaDesc    int `json:"missing_meta_desc"`
-	WithCanonical      int `json:"with_canonical"`
-	NoindexPages       int `json:"noindex_pages"`
-	WithJSONLD         int `json:"with_jsonld"`
-	WithOpenGraph      int `json:"with_open_graph"`
-	WithTwitterCards   int `json:"with_twitter_cards"`
-	WithViewport       int `json:"with_viewport"`
-	MultipleH1         int `json:"multiple_h1"`
-	MissingH1          int `json:"missing_h1"`
-}
-
-// GetSiteSEO aggregates the per-page seo_audits rows into site-wide signals.
-// Two queries: one row of counts, then a second for the duplicate-title set count.
-func (s *Store) GetSiteSEO(jobID string) (SiteSEO, error) {
-	var out SiteSEO
-	err := s.db.QueryRow(`
-		SELECT COUNT(*),
-		       COALESCE(SUM(meta_description = '' OR meta_description IS NULL), 0),
-		       COALESCE(SUM(canonical IS NOT NULL AND canonical <> ''), 0),
-		       COALESCE(SUM(noindex), 0),
-		       COALESCE(SUM(jsonld_count > 0), 0),
-		       COALESCE(SUM(JSON_LENGTH(og_tags) > 0), 0),
-		       COALESCE(SUM(JSON_LENGTH(twitter_tags) > 0), 0),
-		       COALESCE(SUM(has_viewport), 0),
-		       COALESCE(SUM(h1_count > 1), 0),
-		       COALESCE(SUM(h1_count = 0), 0)
-		FROM seo_audits WHERE job_id = UUID_TO_BIN(?)`, jobID).
-		Scan(&out.PagesAudited, &out.MissingMetaDesc, &out.WithCanonical, &out.NoindexPages,
-			&out.WithJSONLD, &out.WithOpenGraph, &out.WithTwitterCards, &out.WithViewport,
-			&out.MultipleH1, &out.MissingH1)
-	if err != nil {
-		return out, err
-	}
-	// duplicate titles: titles that appear on more than one page
-	err = s.db.QueryRow(`
-		SELECT COUNT(*) FROM (
-		    SELECT title FROM seo_audits
-		    WHERE job_id = UUID_TO_BIN(?) AND title <> ''
-		    GROUP BY title HAVING COUNT(*) > 1
-		) t`, jobID).Scan(&out.DuplicateTitleSets)
-	if err != nil {
-		return out, err
-	}
-	return out, nil
+		func(rows *sql.Rows) (CategoryReport, error) {
+			var r CategoryReport
+			err := rows.Scan(&r.Category, &r.TotalPages, &r.RottenPages, &r.AvgSEOScore, &r.Pattern)
+			return r, err
+		}, jobID)
 }

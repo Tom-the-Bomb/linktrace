@@ -9,8 +9,7 @@ import { History } from '../components/History';
 import { useCreateCrawl } from '../hooks/useCreateCrawl';
 import { useSeo } from '../hooks/useSeo';
 
-// /history route. Protected by <Protected> at the route level so this component
-// can assume the user is logged in.
+// /history route; <Protected> at the route level guarantees a logged-in user here
 export default function HistoryPage() {
   useSeo({ title: 'Crawl history', path: '/history', noindex: true });
   const navigate = useNavigate();
@@ -34,8 +33,7 @@ export default function HistoryPage() {
         onStopOrBack={() => navigate('/')}
       />
       <main className="mx-auto w-full max-w-7xl px-6 pb-24 pt-10 sm:px-10">
-        {/* quiet identity line — fills a sliver of space above the section header
-            without competing with it visually */}
+        {/* quiet identity line above the section header */}
         {user && (
           <div className="mb-8 flex items-center gap-2 font-mono text-[11px] text-ink-300">
             <User className="h-3 w-3" strokeWidth={2} />

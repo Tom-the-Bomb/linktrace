@@ -21,6 +21,9 @@ const (
 	QAggregate = "q.aggregate"
 )
 
+// publishTimeout bounds each publish's broker round-trip.
+const publishTimeout = 5 * time.Second
+
 type PageJob struct {
 	JobID      string `json:"job_id"`
 	URL        string `json:"url"`
@@ -44,7 +47,7 @@ type Queue struct {
 	ch   *amqp.Channel
 }
 
-// New dials RabbitMQ, opens a channel, and declares the topology.
+// dials RabbitMQ, opens a channel, and declares the topology.
 func New(url string) (*Queue, error) {
 	conn, err := amqp.Dial(url)
 	if err != nil {
@@ -63,52 +66,42 @@ func New(url string) (*Queue, error) {
 	return q, nil
 }
 
-// Close closes the connection (and its channels).
+// closes the connection (and its channels).
 func (q *Queue) Close() error {
 	return q.conn.Close()
 }
 
-// PublishPageJob enqueues a page to crawl onto the work queue.
+// jSON-marshals v and sends it to exchange/key as a persistent message.
+func (q *Queue) publish(exchange, key string, v any) error {
+	body, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), publishTimeout)
+	defer cancel()
+
+	return q.ch.PublishWithContext(ctx,
+		exchange, key, false, false,
+		amqp.Publishing{
+			ContentType:  "application/json",
+			DeliveryMode: amqp.Persistent,
+			Body:         body,
+		},
+	)
+}
+
+// enqueues a page to crawl onto the work queue.
+// Default exchange ("") + routing key = queue name routes straight to that queue.
 func (q *Queue) PublishPageJob(job PageJob) error {
-	body, err := json.Marshal(job)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// default exchange ("") + routing key = queue name routes straight to that queue
-	return q.ch.PublishWithContext(ctx,
-		"", WorkQueue, false, false,
-		amqp.Publishing{
-			ContentType:  "application/json",
-			DeliveryMode: amqp.Persistent,
-			Body:         body,
-		},
-	)
+	return q.publish("", WorkQueue, job)
 }
 
-// PublishResult fans a checked-page result out to all result consumers.
+// fans a checked-page result out to all result consumers (fanout ignores the key).
 func (q *Queue) PublishResult(r PageChecked) error {
-	body, err := json.Marshal(r)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// fanout ignores routing key
-	return q.ch.PublishWithContext(ctx,
-		ResultsEx, "", false, false,
-		amqp.Publishing{
-			ContentType:  "application/json",
-			DeliveryMode: amqp.Persistent,
-			Body:         body,
-		},
-	)
+	return q.publish(ResultsEx, "", r)
 }
 
-// Consume opens its own channel (per concurrency rule) with prefetch set for backpressure.
+// opens its own channel (per concurrency rule) with prefetch set for backpressure.
 // Manual ack throughout: caller acks via d.Ack(false) / d.Nack(false, requeue).
 func (q *Queue) Consume(queueName string, prefetch int) (<-chan amqp.Delivery, *amqp.Channel, error) {
 	ch, err := q.conn.Channel()

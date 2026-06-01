@@ -1,11 +1,12 @@
 import type { Report } from '../api';
-import { type Tone, scoreStrokeColour, scoreTextColour, toneColour } from '../lib/colours';
+import { scoreStrokeColour, scoreTextColour } from '../lib/colours';
 import { SectionHeader } from './SectionHeader';
+import { StatTile } from './ui/StatTile';
 
 // gauge + headline metric left, stats + issues right
 export function OverallReport({ report }: { report: Report }) {
   const { total_pages, healthy, rotten, avg_seo_score } = report.overall;
-  const top_issues = report.overall.top_issues ?? [];
+  const top_issues = report.overall.top_issues;
   const rottenPct = total_pages > 0 ? Math.round((rotten / total_pages) * 100) : 0;
   const healthyPct = total_pages > 0 ? Math.round((healthy / total_pages) * 100) : 0;
 
@@ -18,7 +19,7 @@ export function OverallReport({ report }: { report: Report }) {
       />
 
       <div className="grid grid-cols-1 gap-12 lg:grid-cols-12">
-        {/* featured: huge score + verdict copy */}
+        {/* featured score + verdict */}
         <div className="lg:col-span-7">
           <div className="flex items-center gap-10">
             <ScoreGauge score={avg_seo_score} />
@@ -31,9 +32,9 @@ export function OverallReport({ report }: { report: Report }) {
           </div>
 
           <div className="hairline mt-10 grid grid-cols-3 gap-4 pt-8">
-            <BigStat label="pages" value={total_pages} />
-            <BigStat label="healthy" value={`${healthy}`} sub={`${healthyPct}%`} tone="ok" />
-            <BigStat label="rotten" value={`${rotten}`} sub={`${rottenPct}%`} tone="bad" />
+            <StatTile label="pages" value={total_pages} />
+            <StatTile label="healthy" value={`${healthy}`} hint={`${healthyPct}%`} tone="ok" />
+            <StatTile label="rotten" value={`${rotten}`} hint={`${rottenPct}%`} tone="bad" />
           </div>
         </div>
 
@@ -122,30 +123,6 @@ function ScoreGauge({ score }: { score: number }) {
         <span className={`display text-6xl font-light tabular-nums ${fill}`}>{score}</span>
         <span className="font-mono text-[10px] uppercase tracking-widest text-ink-300">/ 100</span>
       </div>
-    </div>
-  );
-}
-
-function BigStat({
-  label,
-  value,
-  sub,
-  tone,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  tone?: Tone;
-}) {
-  return (
-    <div>
-      <div className="eyebrow text-ink-300">{label}</div>
-      <div className={`display mt-2 text-4xl font-light tabular-nums ${toneColour(tone)}`}>
-        {value}
-      </div>
-      {sub && (
-        <div className="font-mono text-[10px] uppercase tracking-widest text-ink-300">{sub}</div>
-      )}
     </div>
   );
 }

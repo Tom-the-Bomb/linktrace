@@ -5,12 +5,12 @@ import (
 	"time"
 )
 
-// ctx returns the standard 2s request context used by most cache operations.
+// returns the standard 2s request context for cache operations.
 func (c *Cache) ctx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 2*time.Second)
 }
 
-// bump adds delta to field of the progress hash for jobID and refreshes its TTL.
+// adds delta to field of the progress hash for jobID and refreshes its TTL.
 func (c *Cache) bump(jobID, field string, delta int64) error {
 	ctx, cancel := c.ctx()
 	defer cancel()
@@ -21,7 +21,7 @@ func (c *Cache) bump(jobID, field string, delta int64) error {
 	return c.rdb.Expire(ctx, progressKey(jobID), progressTTL).Err()
 }
 
-// redis key builders, namespaced by job / domain / session id.
+// redis key builders, namespaced by job / domain / session id
 func progressKey(id string) string      { return "progress:" + id }
 func seenKey(id string) string          { return "seen:" + id }
 func ratelimitKey(domain string) string { return "ratelimit:" + domain }

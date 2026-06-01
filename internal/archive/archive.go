@@ -7,22 +7,27 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/Tom-the-Bomb/linktrace/internal/httpx"
 )
 
-// Available queries the Wayback "available" API for the closest snapshot of rawURL.
+const (
+	fetchTimeout = 10 * time.Second
+	maxBodyBytes = 1 << 20
+)
+
+// queries the Wayback "available" API for the closest snapshot of rawURL.
 // Returns the snapshot URL, or "" if none exists.
 func Available(rawURL string) (string, error) {
 	api := "https://archive.org/wayback/available?url=" + url.QueryEscape(rawURL)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 	defer cancel()
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, api, nil)
-	resp, err := http.DefaultClient.Do(req)
+	body, _, err := httpx.Fetch(ctx, http.DefaultClient, api, maxBodyBytes)
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
 
 	var out struct {
 		ArchivedSnapshots struct {
@@ -32,7 +37,7 @@ func Available(rawURL string) (string, error) {
 			} `json:"closest"`
 		} `json:"archived_snapshots"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.Unmarshal(body, &out); err != nil {
 		return "", err
 	}
 	if out.ArchivedSnapshots.Closest.Available {

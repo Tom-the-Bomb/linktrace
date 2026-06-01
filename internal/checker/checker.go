@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/Tom-the-Bomb/linktrace/internal/httpx"
 )
 
 // type of rot
@@ -20,6 +22,12 @@ const (
 	ErrSoft404      = "soft_404"
 	ErrHTTP4xx      = "http_4xx"
 	ErrServer5xx    = "server_error"
+	ErrUnknown      = "unknown"
+)
+
+const (
+	maxRedirects = 10      // give up past this many hops (redirect loop)
+	maxBodyBytes = 1 << 20 // 1 MB cap on the body kept for SEO analysis
 )
 
 type CheckResult struct {
@@ -33,42 +41,44 @@ type CheckResult struct {
 	FinalURL      string
 }
 
+// holds only the per-request timeout; each Check builds its own client so the
+// CheckRedirect hook can record that request's redirect chain without shared state.
 type Checker struct {
-	client *http.Client
+	timeout time.Duration
 }
 
-// New returns a Checker whose client times out after timeout and follows at most 10 redirects.
+// returns a Checker whose requests time out after the given duration.
 func New(timeout time.Duration) *Checker {
-	return &Checker{
-		client: &http.Client{
-			Timeout: timeout,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) >= 10 {
-					return http.ErrUseLastResponse
-				}
-				return nil
-			},
-		},
-	}
+	return &Checker{timeout: timeout}
 }
 
-// Check fetches rawURL and returns its liveness + classified error type. For healthy HTML it
-// also returns the response body (capped at 1 MB) for downstream SEO analysis.
+// fetches rawURL and returns its liveness + classified error type. For healthy HTML it
+// also returns the response body (capped at maxBodyBytes) for downstream SEO analysis.
 func (c *Checker) Check(rawURL string) CheckResult {
 	start := time.Now()
 	res := CheckResult{FinalURL: rawURL}
 
 	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
 	if err != nil {
-		res.ErrorType = ErrDNS
+		res.ErrorType = ErrUnknown // malformed URL / bad scheme, not a DNS failure
 		return res
 	}
+	req.Header.Set("User-Agent", httpx.CheckerUserAgent)
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; LinkTrace/1.0)")
+	var chain []string
+	client := &http.Client{
+		Timeout: c.timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			chain = append(chain, req.URL.String())
+			if len(via) >= maxRedirects {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
+	}
 
-	resp, err := c.client.Do(req)
+	resp, err := client.Do(req)
 	res.ResponseTime = int(time.Since(start).Milliseconds())
-
 	if err != nil {
 		res.ErrorType = classifyNetworkError(err)
 		return res
@@ -78,9 +88,9 @@ func (c *Checker) Check(rawURL string) CheckResult {
 	res.StatusCode = resp.StatusCode
 	res.ContentType = resp.Header.Get("Content-Type")
 	res.FinalURL = resp.Request.URL.String()
+	res.RedirectChain = chain
 
-	// read body up to 1 MB
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 
 	switch {
 	case resp.StatusCode >= 500:

@@ -1,7 +1,8 @@
+import { formatDate } from '../lib/format';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface Props {
-  // the crawl being deleted; url + start date shown so runs are distinguishable
+  // url + start date shown so runs are distinguishable
   url: string;
   startedAt: string;
   busy?: boolean;
@@ -10,8 +11,7 @@ interface Props {
   onCancel: () => void;
 }
 
-// crawl delete confirmation: ConfirmDialog plus a website/started detail block. used by
-// history rows and the report page.
+// crawl delete confirmation: ConfirmDialog plus a website/started detail block
 export function ConfirmDeleteDialog({ url, startedAt, busy, error, onConfirm, onCancel }: Props) {
   return (
     <ConfirmDialog
@@ -32,21 +32,9 @@ export function ConfirmDeleteDialog({ url, startedAt, busy, error, onConfirm, on
         </div>
         <div className="flex items-baseline justify-between gap-4 px-4 py-2.5">
           <dt className="shrink-0 text-ink-400">started</dt>
-          <dd className="text-paper">{formatStarted(startedAt)}</dd>
+          <dd className="text-paper">{formatDate(startedAt, true)}</dd>
         </div>
       </dl>
     </ConfirmDialog>
   );
-}
-
-function formatStarted(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
 }

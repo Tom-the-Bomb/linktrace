@@ -113,12 +113,21 @@ export class ApiError extends Error {
 
 // all requests go through this for the session cookie + JSON headers.
 // credentials: 'include' sends the cookie cross-origin.
-async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
+// nullOn lets a single status (e.g. 404/401) resolve to null instead of throwing —
+// for endpoints where "not found"/"not logged in" is a valid, expected state.
+function jsonRequest<T>(path: string, init?: RequestInit): Promise<T>;
+function jsonRequest<T>(path: string, init: RequestInit | undefined, nullOn: number): Promise<T | null>;
+async function jsonRequest<T>(
+  path: string,
+  init?: RequestInit,
+  nullOn?: number,
+): Promise<T | null> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
   });
+  if (res.status === nullOn) return null;
   if (!res.ok) {
     // prefer the server {error} message, fall back to status text
     let msg = `${res.status} ${res.statusText || 'request failed'}`;
@@ -140,7 +149,6 @@ export function createCheck(url: string): Promise<{ job_id: string }> {
   }
   return jsonRequest('/check', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
   });
 }
@@ -150,7 +158,7 @@ export function cancelCheck(id: string): Promise<{ job_id: string; status: strin
   return jsonRequest(`/check/${id}/cancel`, { method: 'POST' });
 }
 
-// deleteJob removes a job and its data. the server tombstones it so a running crawl's
+// removes a job and its data. the server tombstones it so a running crawl's
 // workers stop and queued work drains.
 export function deleteJob(id: string): Promise<{ job_id: string; status: string }> {
   return jsonRequest(`/check/${id}`, { method: 'DELETE' });
@@ -234,11 +242,8 @@ export interface SEODetail {
 }
 
 // rotten/uncrawled pages have no audit row; return null on 404 so the drawer shows empty
-export async function getSEODetail(id: string, url: string): Promise<SEODetail | null> {
-  const res = await fetch(`${BASE}/check/${id}/seo?url=${encodeURIComponent(url)}`);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`GET /check/${id}/seo failed: ${res.status}`);
-  return res.json() as Promise<SEODetail>;
+export function getSEODetail(id: string, url: string): Promise<SEODetail | null> {
+  return jsonRequest(`/check/${id}/seo?url=${encodeURIComponent(url)}`, undefined, 404);
 }
 
 export interface Me {
@@ -280,18 +285,15 @@ export function logout(): Promise<{ ok: boolean }> {
   return jsonRequest('/auth/logout', { method: 'POST' });
 }
 
-// deleteAccount removes the user, all their jobs (stopping running ones), and ends the
+// removes the user, all their jobs (stopping running ones), and ends the
 // session. requires login.
 export function deleteAccount(): Promise<{ ok: boolean }> {
   return jsonRequest('/auth/account', { method: 'DELETE' });
 }
 
-// getMe returns null when anonymous (401 isn't an error here, it's a valid state)
-export async function getMe(): Promise<Me | null> {
-  const res = await fetch(`${BASE}/auth/me`, { credentials: 'include' });
-  if (res.status === 401) return null;
-  if (!res.ok) throw new Error(`getMe failed: ${res.status}`);
-  return res.json() as Promise<Me>;
+// returns null when anonymous (401 isn't an error here, it's a valid state)
+export function getMe(): Promise<Me | null> {
+  return jsonRequest('/auth/me', undefined, 401);
 }
 
 // GET /history: the logged-in user's past crawls (auth required)

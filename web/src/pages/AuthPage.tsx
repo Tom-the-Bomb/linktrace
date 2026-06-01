@@ -7,7 +7,7 @@ import { AuthForm } from '../components/AuthForm';
 import { useAuth } from '../context/AuthContext';
 import { useSeo } from '../hooks/useSeo';
 
-// Full-page sign-in at /auth. On success, go to /. If already logged in, redirect away.
+// Full-page sign-in at /auth; redirects to / on success or if already logged in
 export default function AuthPage() {
   useSeo({ title: 'Sign in', path: '/auth', noindex: true });
   const navigate = useNavigate();
@@ -19,8 +19,7 @@ export default function AuthPage() {
 
   return (
     <div className="relative flex flex-1 flex-col">
-      {/* wordmark in the top-left, mirroring the Hero header so the auth route doesn't feel
-          stranded from the rest of the app */}
+      {/* wordmark mirroring the Hero header */}
       <header className="px-6 py-4 sm:px-10">
         <Link to="/" className="inline-flex items-center gap-2" aria-label="Go to home">
           <Link2 className="h-4 w-4 text-accent" strokeWidth={2.25} />

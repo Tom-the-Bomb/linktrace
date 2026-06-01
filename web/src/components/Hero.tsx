@@ -1,10 +1,10 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent } from 'react';
 
 import { Link2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import { useTypingPlaceholder } from '../hooks/useTypingPlaceholder';
 import { AuthBar } from './AuthBar';
+import { CrawlForm } from './CrawlForm';
 import { CrawlGraphBackdrop } from './CrawlGraphBackdrop';
 
 interface HeroProps {
@@ -15,19 +15,15 @@ interface HeroProps {
   error: string | null;
 }
 
-// landing page: wordmark + auth bar, headline, crawl input, feature cards, over the
-// CrawlGraphBackdrop canvas.
+// landing page over the CrawlGraphBackdrop canvas: headline, crawl input, feature cards
 export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
-  const [focused, setFocused] = useState(false);
-  // pause the animation when focused or non-empty so our fake caret doesn't fight the real one
-  const placeholder = useTypingPlaceholder(url === '' && !focused);
   return (
     <div className="relative flex-1 overflow-hidden">
       <div className="absolute inset-0 overflow-hidden">
         <CrawlGraphBackdrop />
       </div>
 
-      {/* wrappers are click-through so the canvas behind catches taps in empty space */}
+      {/* click-through so the canvas behind catches taps in empty space */}
       <header className="pointer-events-none relative z-10 grid grid-cols-3 items-center gap-4 px-6 py-4 sm:px-10 [&_*]:pointer-events-auto">
         <Link to="/#" className="flex items-center gap-2 justify-self-start" aria-label="Go to home">
           <Link2 className="h-4 w-4 text-accent" strokeWidth={2.25} />
@@ -55,39 +51,7 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
           an interactive graph.
         </p>
 
-        <form onSubmit={onSubmit} className="mt-14 w-full max-w-2xl">
-          <div className="group relative">
-            <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 font-mono text-xs uppercase tracking-widest text-ink-300">
-              https://
-            </span>
-            <input
-              type="text"
-              required
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
-              placeholder=""
-              className="w-full border border-ink-500 bg-ink-800/80 py-6 pl-6 pr-44 font-mono text-base text-paper shadow-card backdrop-blur-sm placeholder:text-ink-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40 sm:text-lg"
-            />
-            {/* fake placeholder: animated demo domain + blinking cursor; vanishes on focus */}
-            {url === '' && !focused && (
-              // override the section's [&_span]:pointer-events-auto so these spans don't eat input clicks
-              <div className="pointer-events-none absolute left-6 top-1/2 flex -translate-y-1/2 items-center gap-px font-mono text-base text-ink-400/60 sm:text-lg [&_*]:!pointer-events-none">
-                <span>{placeholder}</span>
-                <span className="cursor-blink inline-block h-[1.2em] w-[2px] bg-accent/60" />
-              </div>
-            )}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 bg-accent px-6 py-3.5 font-mono text-xs uppercase tracking-widest text-ink-900 shadow-amber transition hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {submitting ? 'starting…' : 'crawl →'}
-            </button>
-          </div>
-          {error && <p className="mt-4 font-mono text-xs text-rose-300">{error}</p>}
-        </form>
+        <CrawlForm url={url} setUrl={setUrl} onSubmit={onSubmit} submitting={submitting} error={error} />
 
         <Features />
       </section>
@@ -116,7 +80,7 @@ const FEATURES = [
   },
 ];
 
-// three staggered how-it-works cards under the input
+// staggered how-it-works cards under the input
 function Features() {
   return (
     <div className="mt-24 grid w-full grid-cols-1 gap-6 sm:grid-cols-3">

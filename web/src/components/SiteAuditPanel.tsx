@@ -1,8 +1,9 @@
 import type { SiteAudit, SiteSEO } from '../api';
+import { pct } from '../lib/colours';
 import { SectionHeader } from './SectionHeader';
+import { DataRow } from './ui/DataRow';
 
-// domain checks (robots, sitemap, https, www) + site-wide SEO roll-ups.
-// reads site_audit (one-shot) and site_seo (aggregated counts).
+// domain checks (robots, sitemap, https, www) + site-wide SEO roll-ups
 export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO | null }) {
   return (
     <section>
@@ -29,10 +30,9 @@ export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO 
               label={`www canonicalization: ${audit.www_canonical}`}
             />
             {audit.crawl_delay > 0 && (
-              <li className="flex items-center justify-between py-2.5 font-mono text-xs">
-                <span className="text-paper/80">crawl-delay</span>
+              <DataRow label="crawl-delay">
                 <span className="text-ink-300">{audit.crawl_delay}s</span>
-              </li>
+              </DataRow>
             )}
           </ul>
         </div>
@@ -100,19 +100,17 @@ export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO 
 
 function Check({ ok, label }: { ok: boolean; label: string }) {
   return (
-    <li className="flex items-center justify-between py-2.5 font-mono text-xs">
-      <span className="text-paper/80">{label}</span>
+    <DataRow label={label}>
       <span className={ok ? 'text-emerald-300' : 'text-rose-300'}>{ok ? '● ok' : '○ no'}</span>
-    </li>
+    </DataRow>
   );
 }
 
 function Stat({ label, value, bad }: { label: string; value: number; bad?: boolean }) {
   return (
-    <li className="flex items-baseline justify-between py-1.5 font-mono text-xs">
-      <span className="text-paper/80">{label}</span>
+    <DataRow compact label={label}>
       <span className={`tabular-nums ${bad ? 'text-rose-300' : 'text-ink-300'}`}>{value}</span>
-    </li>
+    </DataRow>
   );
 }
 
@@ -130,16 +128,14 @@ function PctStat({
   badAbove?: number;
 }) {
   const ratio = total > 0 ? count / total : 0;
-  const pct = Math.round(ratio * 100);
   let colour = 'text-ink-300';
   if (goodAbove !== undefined) colour = ratio >= goodAbove ? 'text-emerald-300' : 'text-amber-300';
   if (badAbove !== undefined) colour = ratio > badAbove ? 'text-rose-300' : 'text-emerald-300';
   return (
-    <li className="flex items-baseline justify-between py-1.5 font-mono text-xs">
-      <span className="text-paper/80">{label}</span>
+    <DataRow compact label={label}>
       <span className={`tabular-nums ${colour}`}>
-        {count}/{total} <span className="text-ink-400">({pct}%)</span>
+        {count}/{total} <span className="text-ink-400">({pct(count, total)}%)</span>
       </span>
-    </li>
+    </DataRow>
   );
 }

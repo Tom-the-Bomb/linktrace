@@ -3,28 +3,22 @@ package site
 import (
 	"context"
 	"encoding/xml"
-	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Tom-the-Bomb/linktrace/internal/httpx"
 )
 
-// newNoFollowClient returns a client that surfaces redirects (returns the 3xx response with
-// its Location header) instead of following them, so we can inspect where a URL points.
-func newNoFollowClient() *http.Client {
-	return &http.Client{
-		Timeout: 8 * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-}
+const (
+	fetchTimeout    = 10 * time.Second // robots/sitemap GETs
+	probeTimeout    = 8 * time.Second  // HTTPS/www redirect probes
+	maxSitemapBytes = 5 << 20          // sitemaps can be big
+)
 
-// fetchRobots reads /robots.txt. We only honour groups that target * or our UA.
-// Disallow:/ inside an applicable group means "stay out".
+// reads /robots.txt, honouring only groups that target * or our UA.
 func fetchRobots(root *url.URL) (found, disallowAll bool, crawlDelay int, sitemaps []string) {
 	body, status := get(root.Scheme + "://" + root.Host + "/robots.txt")
 	if status != http.StatusOK || body == "" {
@@ -55,8 +49,7 @@ func fetchRobots(root *url.URL) (found, disallowAll bool, crawlDelay int, sitema
 				}
 			}
 		case "sitemap":
-			// global directive, applies regardless of UA group
-			sitemaps = append(sitemaps, val)
+			sitemaps = append(sitemaps, val) // global directive, applies regardless of UA group
 		}
 	}
 	return found, disallowAll, crawlDelay, sitemaps
@@ -73,18 +66,15 @@ type sitemapXML struct {
 	} `xml:"sitemap"`
 }
 
-// fetchSitemap downloads and parses a sitemap, recursing one level into a sitemap index,
+// downloads and parses a sitemap, recursing one level into a sitemap index,
 // returning whether it was found and the (capped) list of page URLs.
 func fetchSitemap(sitemapURL string, depth int) (bool, []string) {
-	log.Printf("[site] analyzing sitemap (depth %d): %s", depth, sitemapURL)
 	body, status := get(sitemapURL)
 	if status != http.StatusOK || body == "" {
-		log.Printf("[site] sitemap fetch failed (status %d): %s", status, sitemapURL)
 		return false, nil
 	}
 	var doc sitemapXML
 	if err := xml.Unmarshal([]byte(body), &doc); err != nil {
-		log.Printf("[site] sitemap unparseable (%v): %s", err, sitemapURL)
 		return false, nil
 	}
 
@@ -93,14 +83,12 @@ func fetchSitemap(sitemapURL string, depth int) (bool, []string) {
 		if loc := strings.TrimSpace(u.Loc); loc != "" {
 			urls = append(urls, loc)
 			if len(urls) >= maxSitemapURLs {
-				log.Printf("[site] sitemap hit URL cap (%d) at %s", maxSitemapURLs, sitemapURL)
 				return true, urls
 			}
 		}
 	}
 	// sitemap INDEX: recurse one level
 	if depth == 0 && len(doc.Sitemaps) > 0 {
-		log.Printf("[site] %s is an index with %d children, recursing", sitemapURL, len(doc.Sitemaps))
 		for _, child := range doc.Sitemaps {
 			if loc := strings.TrimSpace(child.Loc); loc != "" {
 				_, more := fetchSitemap(loc, depth+1)
@@ -113,15 +101,12 @@ func fetchSitemap(sitemapURL string, depth int) (bool, []string) {
 			}
 		}
 	}
-	if depth > 0 {
-		log.Printf("[site] sitemap leaf returned %d URLs: %s", len(urls), sitemapURL)
-	}
 	return true, urls
 }
 
-// checkHTTPS verifies the site serves HTTPS with a valid cert and redirects HTTP to HTTPS.
+// verifies the site serves HTTPS with a valid cert and redirects HTTP to HTTPS.
 func checkHTTPS(host string) (isHTTPS, httpsRedirect, certValid bool) {
-	noFollow := newNoFollowClient()
+	noFollow := httpx.NewClient(probeTimeout, false)
 
 	// HTTP -> HTTPS redirect check
 	if resp, err := noFollow.Get("http://" + host); err == nil {
@@ -131,8 +116,8 @@ func checkHTTPS(host string) (isHTTPS, httpsRedirect, certValid bool) {
 		}
 	}
 
-	// HTTPS reachable + cert valid
-	if resp, err := http.DefaultClient.Get("https://" + host); err == nil {
+	// HTTPS reachable + cert valid (a bad cert errors out, leaving both false)
+	if resp, err := httpx.NewClient(probeTimeout, true).Get("https://" + host); err == nil {
 		defer resp.Body.Close()
 		isHTTPS = true
 		certValid = true
@@ -140,13 +125,13 @@ func checkHTTPS(host string) (isHTTPS, httpsRedirect, certValid bool) {
 	return
 }
 
-// checkWWW determines which form the site canonicalizes to.
+// determines which form the site canonicalizes to.
 // "www" / "apex" means proper canonicalization; "both" means duplicate-content risk.
 func checkWWW(host string) string {
 	apex := strings.TrimPrefix(host, "www.")
 	wwwHost := "www." + apex
 
-	noFollow := newNoFollowClient()
+	noFollow := httpx.NewClient(probeTimeout, false)
 
 	land := func(rawURL string) string {
 		resp, err := noFollow.Get(rawURL)
@@ -184,25 +169,18 @@ func checkWWW(host string) string {
 	}
 }
 
-// get fetches a URL with a 10s timeout and a 5 MiB cap (sitemaps can be big).
+// fetches a URL (robots/sitemap) and returns its body and status, or ("", 0) on error.
 func get(rawURL string) (string, int) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	body, status, err := httpx.Fetch(ctx, http.DefaultClient, rawURL, maxSitemapBytes)
 	if err != nil {
 		return "", 0
 	}
-	req.Header.Set("User-Agent", ua)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", 0
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
-	return string(body), resp.StatusCode
+	return string(body), status
 }
 
-// cut splits "Key: value" on the first ':'. Lowercases the key, trims both sides.
+// splits "Key: value" on the first ':'. Lowercases the key, trims both sides.
 func cut(line string) (key, val string, ok bool) {
 	i := strings.Index(line, ":")
 	if i < 0 {

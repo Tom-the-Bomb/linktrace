@@ -10,9 +10,11 @@ import (
 	"syscall"
 
 	"golang.org/x/net/html"
+
+	"github.com/Tom-the-Bomb/linktrace/internal/htmlx"
 )
 
-// classifyNetworkError maps a transport-level error to one of the rot ErrType constants.
+// maps a transport-level error to one of the rot ErrType constants.
 func classifyNetworkError(err error) string {
 	var dnsErr *net.DNSError
 	if errors.As(err, &dnsErr) {
@@ -27,7 +29,6 @@ func classifyNetworkError(err error) string {
 	var certErr x509.CertificateInvalidError
 	var hostErr x509.HostnameError
 	var recErr tls.RecordHeaderError
-
 	if errors.As(err, &certErr) || errors.As(err, &hostErr) || errors.As(err, &recErr) {
 		return ErrSSL
 	}
@@ -35,16 +36,13 @@ func classifyNetworkError(err error) string {
 	if errors.Is(err, syscall.ECONNREFUSED) {
 		return ErrConnRefused
 	}
-
 	if errors.Is(err, syscall.ECONNRESET) {
 		return ErrConnReset
 	}
-
 	if strings.Contains(err.Error(), "redirect") {
 		return ErrRedirectLoop
 	}
-
-	return ErrConnRefused
+	return ErrUnknown
 }
 
 // soft404Phrases match against visible body text. Kept narrow on purpose; broader phrases
@@ -59,7 +57,7 @@ var soft404Phrases = []string{
 	"page cannot be found",
 }
 
-// isSoft404 reports whether a 2xx page is actually an error page (status OK, body says 404).
+// reports whether a 2xx page is actually an error page (status OK, body says 404).
 // Only visible <body> text is scanned: SPA shells inline error copy like "page not found"
 // inside <script> tags, so matching raw HTML would soft-404 the whole site.
 func isSoft404(body []byte) bool {
@@ -76,9 +74,8 @@ func isSoft404(body []byte) bool {
 	return false
 }
 
-// visibleBodyText walks the parsed HTML and returns a lowercased concatenation of
-// all text nodes inside <body>, skipping non-rendered elements (script, style,
-// template, noscript). Returns ok=false if the document can't be parsed.
+// returns a lowercased concatenation of the text nodes inside <body>, skipping
+// non-rendered subtrees (script/style/template/noscript). ok=false if the doc can't be parsed.
 func visibleBodyText(body []byte) (string, bool) {
 	doc, err := html.Parse(bytes.NewReader(body))
 	if err != nil {
@@ -86,25 +83,20 @@ func visibleBodyText(body []byte) (string, bool) {
 	}
 	var buf strings.Builder
 	var inBody bool
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
+	htmlx.Walk(doc, func(n *html.Node) bool {
 		if n.Type == html.ElementNode {
 			switch n.Data {
 			case "script", "style", "template", "noscript":
-				return // entire subtree is non-visible
+				return false // entire subtree is non-visible
 			case "body":
 				inBody = true
-				defer func() { inBody = false }()
 			}
 		}
 		if inBody && n.Type == html.TextNode {
 			buf.WriteString(strings.ToLower(n.Data))
 			buf.WriteByte(' ')
 		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c)
-		}
-	}
-	walk(doc)
+		return true
+	})
 	return buf.String(), true
 }
