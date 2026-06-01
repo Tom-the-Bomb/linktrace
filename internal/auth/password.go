@@ -8,8 +8,7 @@ func HashPassword(plain string) (string, error) {
 	return string(bytes), err
 }
 
-// CheckPassword reports whether `plain` matches a stored bcrypt hash.
-// CompareHashAndPassword does a constant-time comparison.
+// CheckPassword reports whether plain matches a stored bcrypt hash (constant-time).
 func CheckPassword(hash, plain string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(plain)) == nil
 }

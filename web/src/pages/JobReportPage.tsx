@@ -29,12 +29,13 @@ import { SectionHeader } from '../components/SectionHeader';
 import { SeoDrawer } from '../components/SeoDrawer';
 import { SiteAuditPanel } from '../components/SiteAuditPanel';
 import { type Tab, Tabs } from '../components/Tabs';
+import { ErrorBanner } from '../components/ui/ErrorBanner';
 import { useCreateCrawl } from '../hooks/useCreateCrawl';
 import { useSeo } from '../hooks/useSeo';
+import { errMessage } from '../lib/format';
 import { isTerminalStatus } from '../lib/status';
 
-// Route /jobs/:jobId. Live polling plus all report sections. New crawl from the header
-// creates a job and navigates, remounting this.
+// Route /jobs/:jobId: live polling plus all report sections.
 export default function JobReportPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
@@ -48,12 +49,10 @@ export default function JobReportPage() {
   const [tab, setTab] = useState<Tab>('graph');
   const [drilldownUrl, setDrilldownUrl] = useState<string | null>(null);
 
-  // delete-confirmation dialog state
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // new crawl input; hook does create + navigate
   const [newUrl, setNewUrl] = useState('');
   const { submit, submitting, error: createError } = useCreateCrawl();
 
@@ -64,8 +63,7 @@ export default function JobReportPage() {
     noindex: true,
   });
 
-  // poll all four endpoints each tick so partial results stream in. setTimeout recursion
-  // (not setInterval) avoids overlapping requests.
+  // poll all four endpoints each tick so partial results stream in; setTimeout recursion (not setInterval) avoids overlapping requests
   useEffect(() => {
     if (!jobId) return;
     // reset when switching jobs
@@ -90,11 +88,11 @@ export default function JobReportPage() {
         setRows(r);
         setReport(rep);
         setGraph(g);
-        if (s.status === 'complete' || s.status === 'failed' || s.status === 'stopped') return;
+        if (isTerminalStatus(s.status)) return;
       } catch (err) {
         if (stop) return;
         if (err instanceof ApiError && err.status === 404) setNotFound(true);
-        else setError(String(err));
+        else setError(errMessage(err));
         return;
       }
       if (!stop) setTimeout(tick, 1000);
@@ -107,7 +105,7 @@ export default function JobReportPage() {
 
   const isDone = isTerminalStatus(status?.status);
 
-  // running: cancel + flip status so the button becomes Back. done: go to hero
+  // running: cancel + flip status to Back; done: go to hero
   const onStopOrBack = async () => {
     if (!jobId) return;
     if (isDone) {
@@ -118,7 +116,7 @@ export default function JobReportPage() {
       await cancelCheck(jobId);
       setStatus((s) => (s ? { ...s, status: 'stopped' } : s));
     } catch (err) {
-      setError(String(err));
+      setError(errMessage(err));
     }
   };
 
@@ -127,7 +125,6 @@ export default function JobReportPage() {
     void submit(newUrl);
   }
 
-  // deletes the job, stops tasks if running, redirect to hero
   async function onConfirmDelete() {
     if (!jobId) return;
     setDeleting(true);
@@ -136,8 +133,8 @@ export default function JobReportPage() {
       await deleteJob(jobId);
       navigate('/');
     } catch (err) {
-      // show server message without the ApiError: prefix
-      setDeleteError(err instanceof Error ? err.message : String(err));
+      // server message without the ApiError: prefix
+      setDeleteError(errMessage(err));
       setDeleting(false);
     }
   }
@@ -168,9 +165,7 @@ export default function JobReportPage() {
 
       <main className="mx-auto w-full max-w-7xl px-6 pb-24 pt-10 sm:px-10">
         {(error ?? createError) && (
-          <div className="mb-8 border-l-2 border-rose-500 bg-rose-500/5 px-5 py-3 font-mono text-xs text-rose-200">
-            {error ?? createError}
-          </div>
+          <ErrorBanner className="mb-8 px-5">{error ?? createError}</ErrorBanner>
         )}
 
         <ProgressView status={status} onDelete={() => setConfirmingDelete(true)} />
@@ -181,7 +176,7 @@ export default function JobReportPage() {
           </div>
         )}
 
-        {report && (report.categories?.length ?? 0) > 0 && (
+        {report && report.categories.length > 0 && (
           <div className="mt-16">
             <Categories categories={report.categories} />
           </div>
@@ -193,7 +188,7 @@ export default function JobReportPage() {
             <Tabs
               tab={tab}
               onChange={setTab}
-              graphCount={graph?.nodes?.length ?? 0}
+              graphCount={graph?.nodes.length ?? 0}
               tableCount={rows.length}
             />
             <div className="mt-6">

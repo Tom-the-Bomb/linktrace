@@ -18,6 +18,11 @@ func hostOf(raw string) string {
 	return u.Host
 }
 
+// hasHTML reports whether a result is a live page with a body worth parsing (links + SEO).
+func hasHTML(res checker.CheckResult) bool {
+	return res.IsAlive && len(res.Body) > 0
+}
+
 // isTransient flags failures worth retrying; permanent rot (dns/4xx/ssl/soft_404) is not.
 func isTransient(errType string) bool {
 	switch errType {

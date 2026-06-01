@@ -3,8 +3,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import * as api from '../api';
 import { AuthContext, type AuthState } from './AuthContext';
 
-// Wraps the app. On mount, asks the server who we are (restores session from cookie).
-// null just means anonymous.
+// On mount, restores session from cookie via getMe; null means anonymous
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<api.Me | null>(null);
   const [loading, setLoading] = useState(true);

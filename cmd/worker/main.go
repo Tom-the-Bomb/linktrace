@@ -24,7 +24,11 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/store"
 )
 
-const maxRetries = 3
+const (
+	maxRetries       = 3
+	checkTimeout     = 10 * time.Second // per-page fetch timeout
+	rateLimitBackoff = time.Second      // pause before requeueing a rate-limited job
+)
 
 // main starts the page-fetch workers and the result consumers, then waits for shutdown.
 func main() {
@@ -48,7 +52,7 @@ func main() {
 	}
 	defer q.Close()
 
-	w := &worker{cfg: cfg, cache: ca, queue: q, chk: checker.New(10 * time.Second)}
+	w := &worker{cfg: cfg, cache: ca, queue: q, chk: checker.New(checkTimeout)}
 	rb := &reportBuilder{store: st, cache: ca}
 	ac := &archiveChecker{store: st, cache: ca}
 	ag := newAggregator(st, ca)
@@ -62,14 +66,15 @@ func main() {
 	}
 	channels = append(channels, pageCh)
 
-	for _, c := range []struct {
+	consumers := []struct {
 		name    string
 		handler func(queue.PageChecked) error
 	}{
 		{queue.QReport, rb.handle},
 		{queue.QArchive, ac.handle},
 		{queue.QAggregate, ag.handle},
-	} {
+	}
+	for _, c := range consumers {
 		ch, err := runConsumer(q, c.name, &wg, c.handler)
 		if err != nil {
 			log.Fatalf("consumer %s: %v", c.name, err)
@@ -77,7 +82,7 @@ func main() {
 		channels = append(channels, ch)
 	}
 
-	log.Printf("worker running: %d page goroutines + 3 result consumers", cfg.WorkerCount)
+	log.Printf("worker running: %d page goroutines + %d result consumers", cfg.WorkerCount, len(consumers))
 
 	// graceful shutdown: closing channels closes their delivery chans, ranging goroutines exit
 	stop := make(chan os.Signal, 1)
@@ -143,7 +148,7 @@ func (w *worker) processPage(d amqp.Delivery) {
 	if !allowed {
 		// over budget: brief sleep prevents hot-loop nacking
 		log.Printf("[worker] rate-limited, requeueing %s", job.URL)
-		time.Sleep(time.Second)
+		time.Sleep(rateLimitBackoff)
 		_ = d.Nack(false, true)
 		return
 	}
@@ -174,7 +179,7 @@ func (w *worker) processPage(d amqp.Delivery) {
 	// enqueue children (bumps `discovered`) before publishing the result (bumps `checked`)
 	// so the completion rule checked >= discovered holds
 	var links []string
-	if res.IsAlive && len(res.Body) > 0 {
+	if hasHTML(res) {
 		links = w.enqueueLinks(job, res)
 	}
 	w.publishResult(job, res, links)
@@ -201,7 +206,7 @@ func (w *worker) publishResult(job queue.PageJob, res checker.CheckResult, links
 		RetryCount:    job.RetryCount,
 		RedirectChain: res.RedirectChain,
 	}
-	resultJSON, _ := json.Marshal(pr)
+	resultJSON, _ := json.Marshal(pr) // marshaling a plain struct can't realistically fail
 
 	msg := queue.PageChecked{
 		JobID:   job.JobID,
@@ -211,12 +216,10 @@ func (w *worker) publishResult(job queue.PageJob, res checker.CheckResult, links
 		Result:  resultJSON,
 	}
 
-	if res.IsAlive && len(res.Body) > 0 {
+	if hasHTML(res) {
 		audit := seo.AuditHTML(res.Body, job.URL)
 		sa := mapAudit(job.JobID, job.URL, audit)
-		if seoJSON, err := json.Marshal(sa); err == nil {
-			msg.SEO = seoJSON
-		}
+		msg.SEO, _ = json.Marshal(sa) // marshaling a plain struct can't realistically fail
 	}
 	msg.Links = links
 
@@ -279,7 +282,8 @@ func (w *worker) enqueueLinks(job queue.PageJob, res checker.CheckResult) []stri
 	return discovered
 }
 
-// runConsumer drains queueName one at a time: handle returning nil acks, an error dead-letters.
+// runConsumer drains queueName one at a time: nil acks; a handler error requeues once, then
+// dead-letters on the retry (so a transient blip doesn't drop a result, nor loop forever).
 func runConsumer(q *queue.Queue, queueName string, wg *sync.WaitGroup,
 	handle func(queue.PageChecked) error) (*amqp.Channel, error) {
 
@@ -293,18 +297,32 @@ func runConsumer(q *queue.Queue, queueName string, wg *sync.WaitGroup,
 		for d := range deliveries {
 			var msg queue.PageChecked
 			if err := json.Unmarshal(d.Body, &msg); err != nil {
-				_ = d.Nack(false, false)
+				_ = d.Nack(false, false) // unparseable: requeue can't help
 				continue
 			}
 			if err := handle(msg); err != nil {
-				log.Printf("[%s] handler error: %v", queueName, err)
-				_ = d.Nack(false, false)
+				requeue := !d.Redelivered // retry once, then dead-letter
+				log.Printf("[%s] handler error (requeue=%v): %v", queueName, requeue, err)
+				_ = d.Nack(false, requeue)
 				continue
 			}
 			_ = d.Ack(false)
 		}
 	}()
 	return ch, nil
+}
+
+// decodeSEO unmarshals the optional SEO blob on a result message; ok=false when it's absent
+// (e.g. a rotten page), "null", or unparseable.
+func decodeSEO(raw json.RawMessage) (store.SEOAudit, bool) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return store.SEOAudit{}, false
+	}
+	var audit store.SEOAudit
+	if err := json.Unmarshal(raw, &audit); err != nil {
+		return store.SEOAudit{}, false
+	}
+	return audit, true
 }
 
 // reportBuilder persists rot + SEO rows, bumps progress, and flips the job to complete.
@@ -327,12 +345,8 @@ func (rb *reportBuilder) handle(msg queue.PageChecked) error {
 		return err
 	}
 
-	hasSEO := len(msg.SEO) > 0 && string(msg.SEO) != "null"
+	audit, hasSEO := decodeSEO(msg.SEO)
 	if hasSEO {
-		var audit store.SEOAudit
-		if err := json.Unmarshal(msg.SEO, &audit); err != nil {
-			return err
-		}
 		audit.JobID = msg.JobID
 		audit.URL = msg.URL
 		if err := rb.store.InsertSEOAudit(audit); err != nil {
@@ -438,13 +452,9 @@ func (ag *aggregator) handle(msg queue.PageChecked) error {
 	cat := categoryOf(msg.URL)
 
 	var seoScore int
-	var hasSEO bool
-	if len(msg.SEO) > 0 && string(msg.SEO) != "null" {
-		var a store.SEOAudit
-		if err := json.Unmarshal(msg.SEO, &a); err == nil {
-			seoScore = a.Score
-			hasSEO = true
-		}
+	a, hasSEO := decodeSEO(msg.SEO)
+	if hasSEO {
+		seoScore = a.Score
 	}
 
 	ag.mu.Lock()

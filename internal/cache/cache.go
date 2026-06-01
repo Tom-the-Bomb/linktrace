@@ -9,15 +9,36 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/Tom-the-Bomb/linktrace/internal/auth"
 )
 
 type Cache struct {
 	rdb *redis.Client
 }
 
-const progressTTL = 2 * time.Hour
-const seenTTL = 1 * time.Hour
-const sessionTTL = 7 * 24 * time.Hour
+const (
+	progressTTL = 2 * time.Hour
+	seenTTL     = 1 * time.Hour
+	// sessionTTL mirrors the cookie lifetime; auth.SessionTTL is the single source of truth.
+	sessionTTL = auth.SessionTTL
+)
+
+// progress hash field names, used by IncDiscovered/IncChecked/GetProgress.
+const (
+	fieldDiscovered = "discovered"
+	fieldChecked    = "checked"
+	fieldHealthy    = "healthy"
+	fieldRotten     = "rotten"
+)
+
+var progressFields = []string{fieldDiscovered, fieldChecked, fieldHealthy, fieldRotten}
+
+const (
+	rateLimitWindow = 60 // seconds; rolling window for Allow's per-domain count
+	// cancelCheckTimeout is tight: IsCancelled runs on every page, so a slow lookup stalls the crawl.
+	cancelCheckTimeout = 1 * time.Second
+)
 
 // New connects to Redis at addr and pings it to verify the connection.
 func New(addr string) (*Cache, error) {
@@ -68,17 +89,17 @@ func (c *Cache) DeleteSession(sid string) error {
 
 // IncDiscovered bumps the discovered counter; called each time a new page is queued.
 func (c *Cache) IncDiscovered(jobID string) error {
-	return c.bump(jobID, "discovered", 1)
+	return c.bump(jobID, fieldDiscovered, 1)
 }
 
 // IncChecked bumps the checked counter plus healthy or rotten; called once per crawled page.
 func (c *Cache) IncChecked(jobID string, isAlive bool) error {
-	if err := c.bump(jobID, "checked", 1); err != nil {
+	if err := c.bump(jobID, fieldChecked, 1); err != nil {
 		return err
 	}
-	field := "rotten"
+	field := fieldRotten
 	if isAlive {
-		field = "healthy"
+		field = fieldHealthy
 	}
 	return c.bump(jobID, field, 1)
 }
@@ -93,11 +114,9 @@ func (c *Cache) GetProgress(jobID string) (map[string]int, error) {
 		return nil, err
 	}
 
-	out := map[string]int{
-		"discovered": 0,
-		"checked":    0,
-		"healthy":    0,
-		"rotten":     0,
+	out := make(map[string]int, len(progressFields))
+	for _, f := range progressFields {
+		out[f] = 0
 	}
 	for k, v := range vals {
 		if i, err := strconv.Atoi(v); err == nil {
@@ -124,7 +143,7 @@ func (c *Cache) Allow(domain string, perMinute int) (bool, error) {
 	ctx, cancel := c.ctx()
 	defer cancel()
 
-	n, err := allowScript.Run(ctx, c.rdb, []string{ratelimitKey(domain)}, 60).Int64()
+	n, err := allowScript.Run(ctx, c.rdb, []string{ratelimitKey(domain)}, rateLimitWindow).Int64()
 	if err != nil {
 		return false, err
 	}
@@ -167,7 +186,7 @@ func (c *Cache) PurgeJob(jobID string) error {
 
 // IsCancelled reports whether jobID's cancel flag is set.
 func (c *Cache) IsCancelled(jobID string) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cancelCheckTimeout)
 	defer cancel()
 	n, err := c.rdb.Exists(ctx, cancelKey(jobID)).Result()
 	return err == nil && n > 0

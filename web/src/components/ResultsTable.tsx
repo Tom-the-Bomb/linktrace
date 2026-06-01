@@ -4,6 +4,8 @@ import { ArrowDown, ArrowUp, Search } from 'lucide-react';
 
 import type { PageRow } from '../api';
 import { scoreTextColour } from '../lib/colours';
+import { Pager } from './ui/Pager';
+import { SegButton } from './ui/SegButton';
 
 type Filter = 'all' | 'rotten' | 'healthy';
 type SortKey = 'depth' | 'seo';
@@ -59,7 +61,7 @@ export function ResultsTable({
     [sorted, current],
   );
 
-  // reset to page 1 when the filter/search changes the result set
+  // reset to page 1 when filter/search/sort changes the result set
   function selectFilter(f: Filter) {
     setFilter(f);
     setPage(1);
@@ -110,7 +112,9 @@ export function ResultsTable({
               sort
             </span>
             {(['depth', 'seo'] as SortKey[]).map((k) => (
-              <SortChip key={k} active={sortKey === k} onClick={() => selectSort(k)} label={k} />
+              <SegButton key={k} variant="sort" active={sortKey === k} onClick={() => selectSort(k)}>
+                {k}
+              </SegButton>
             ))}
             <button
               onClick={toggleDir}
@@ -126,13 +130,14 @@ export function ResultsTable({
           </div>
           <div className="flex">
             {(['all', 'healthy', 'rotten'] as Filter[]).map((f) => (
-              <FilterChip
+              <SegButton
                 key={f}
                 active={filter === f}
                 onClick={() => selectFilter(f)}
-                label={f}
                 count={counts[f]}
-              />
+              >
+                {f}
+              </SegButton>
             ))}
           </div>
         </div>
@@ -194,84 +199,11 @@ export function ResultsTable({
             {sorted.length}
           </span>
           <div className="flex items-center gap-5">
-            <PageButton onClick={() => setPage(current - 1)} disabled={current <= 1}>
-              ← prev
-            </PageButton>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-ink-300">
-              {current} / {pageCount}
-            </span>
-            <PageButton onClick={() => setPage(current + 1)} disabled={current >= pageCount}>
-              next →
-            </PageButton>
+            <Pager bordered current={current} pageCount={pageCount} onPage={setPage} />
           </div>
         </footer>
       )}
     </section>
-  );
-}
-
-function PageButton({
-  onClick,
-  disabled,
-  children,
-}: {
-  onClick: () => void;
-  disabled: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="border border-ink-500/70 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-ink-300 transition hover:bg-ink-600/40 hover:text-paper disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-ink-300"
-    >
-      {children}
-    </button>
-  );
-}
-
-function FilterChip({
-  active,
-  onClick,
-  label,
-  count,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  count: number;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-baseline gap-1.5 border border-ink-500/70 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest transition first:border-r-0 last:border-l-0 ${
-        active ? 'bg-accent text-ink-900' : 'text-ink-300 hover:bg-ink-600/40 hover:text-paper'
-      }`}
-    >
-      <span>{label}</span>
-      <span className="text-[10px] opacity-60">{count}</span>
-    </button>
-  );
-}
-
-function SortChip({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`border border-ink-500/70 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest transition first:border-r-0 ${
-        active ? 'bg-accent text-ink-900' : 'text-ink-300 hover:bg-ink-600/40 hover:text-paper'
-      }`}
-    >
-      {label}
-    </button>
   );
 }
 

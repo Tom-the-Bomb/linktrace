@@ -4,37 +4,39 @@ import { Search } from 'lucide-react';
 import ForceGraph2D, { type ForceGraphMethods } from 'react-force-graph-2d';
 
 import type { GraphData, GraphNode } from '../api';
+import { scoreTier } from '../lib/colours';
 import { NodeTooltip } from './ui/NodeTooltip';
 
-// mutable shape the force-graph lib owns (x/y/vx/vy per node)
+// mutable shape the force-graph lib owns (x/y per node)
 interface FgNode extends GraphNode {
   x?: number;
   y?: number;
-  vx?: number;
-  vy?: number;
-  fx?: number;
-  fy?: number;
 }
 interface FgLink {
   source: string;
   target: string;
 }
 
-// node colour: emerald healthy, amber mid, rose rotten
+// canvas hex per score tier (emerald-400 / accent / rose-400)
+const NODE_HEX: Record<'good' | 'ok' | 'poor', string> = {
+  good: '#34d399',
+  ok: '#f5b042',
+  poor: '#fb7185',
+};
+
+// node colour by liveness + SEO score
 function nodeColour(n: GraphNode): string {
   if (!n.is_alive) return '#fb7185'; // rose-400
   if (n.seo_score === null) return '#3a425e'; // ink-300
-  if (n.seo_score >= 80) return '#34d399'; // emerald-400
-  if (n.seo_score >= 50) return '#f5b042'; // accent
-  return '#fb7185';
+  return NODE_HEX[scoreTier(n.seo_score)];
 }
 
 // cap zoom-to-fit so a sparse graph doesn't fill the viewport with one dot
 const MAX_ZOOM = 2.5;
 
-// node size scales with depth, homepage is biggest, leaves smallest
+// node size shrinks with depth; homepage biggest, leaves smallest
 function nodeRadius(depth: number): number {
-  if (depth === 0) return 4.5; // root, kept a touch larger than other top-level nodes
+  if (depth === 0) return 4.5; // root, a touch larger than other top-level nodes
   return Math.max(1.8, 3.5 - depth * 0.35);
 }
 
@@ -43,8 +45,7 @@ interface Props {
   onSelect: (url: string) => void;
 }
 
-// Force graph: page = node, internal link = edge. react-force-graph-2d (canvas/d3).
-// Click a node for its audit.
+// Force graph: page = node, internal link = edge; click a node for its audit
 export function GraphView({ data, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<ForceGraphMethods<GraphNode> | undefined>(undefined);
@@ -60,8 +61,7 @@ export function GraphView({ data, onSelect }: Props) {
     return n.url.toLowerCase().includes(normalizedQuery);
   }
 
-  // manual hit-testing; lib's onNodeClick/Hover are unreliable with a custom painter.
-  // tooltip position writes to the DOM so it tracks without re-render.
+  // manual hit-testing; lib's onNodeClick/Hover are unreliable with a custom painter
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -78,8 +78,7 @@ export function GraphView({ data, onSelect }: Props) {
         const dx = n.x - gx;
         const dy = n.y - gy;
         const d2 = dx * dx + dy * dy;
-        // generous hit radius: visible radius + 6 graph units
-        const hit = nodeRadius(n.depth) + 6;
+        const hit = nodeRadius(n.depth) + 6; // generous hit radius
         if (d2 <= hit * hit && d2 < bestDist) {
           bestDist = d2;
           best = n;
@@ -128,15 +127,12 @@ export function GraphView({ data, onSelect }: Props) {
     return () => obs.disconnect();
   }, []);
 
-  // new wrapper object each poll so ForceGraph2D rebuilds; mutating a stable ref made it
-  // skip large updates (final nodes on completion). inner node objects are reused so the
-  // simulation x/y/vx/vy survive and the layout doesn't reset.
+  // new wrapper each poll so ForceGraph2D rebuilds; inner nodes reused so layout/velocities survive
   const [graph, setGraph] = useState<{ nodes: FgNode[]; links: FgLink[] }>({
     nodes: [],
     links: [],
   });
-  // mirror of graph for sync reads in the hit-test handler
-  const graphRef = useRef(graph);
+  const graphRef = useRef(graph); // sync mirror for the hit-test handler
 
   useEffect(() => {
     setGraph((prev) => {
@@ -170,8 +166,7 @@ export function GraphView({ data, onSelect }: Props) {
         }
       }
 
-      // return a new wrapper so ForceGraph2D rebuilds. even with no structural change,
-      // publish so field updates (status, seo_score) reach the painter next frame.
+      // new wrapper even with no structural change, so field updates reach the painter
       const next = nodesChanged || linksChanged ? { nodes, links } : { ...prev };
       graphRef.current = next;
       return next;
@@ -186,7 +181,7 @@ export function GraphView({ data, onSelect }: Props) {
       const fg = fgRef.current;
       if (!fg) return;
       fg.zoomToFit(400, 40);
-      // zoomToFit has no max-zoom, so clamp a tiny graph once the fit animation lands
+      // zoomToFit has no max-zoom; clamp a tiny graph after the fit lands
       setTimeout(() => {
         if (fgRef.current && fgRef.current.zoom() > MAX_ZOOM) {
           fgRef.current.zoom(MAX_ZOOM, 200);
@@ -237,8 +232,7 @@ export function GraphView({ data, onSelect }: Props) {
           linkDirectionalParticles={0}
           linkWidth={0.5}
           cooldownTicks={120}
-          // paint nodes ourselves so radius matches nodeRadius(depth) and the hit-testing.
-          // during search, non-matches dim; that's enough contrast, no ring on matches.
+          // paint nodes ourselves so radius matches nodeRadius(depth) and the hit-testing
           nodeCanvasObject={(node, ctx) => {
             const n = node as FgNode;
             if (n.x === undefined || n.y === undefined) return;
@@ -248,7 +242,7 @@ export function GraphView({ data, onSelect }: Props) {
 
             ctx.globalAlpha = dimmed ? 0.15 : 1;
 
-            // root (depth 0) gets a hollow halo so the seed page reads as the entry point
+            // root gets a hollow halo so the seed page reads as the entry point
             if (n.depth === 0) {
               ctx.lineWidth = 1.2;
               ctx.strokeStyle = colour;
@@ -300,13 +294,17 @@ function Legend() {
   );
 }
 
+const TOOLTIP_COLOUR: Record<'good' | 'ok' | 'poor', string> = {
+  good: 'text-teal',
+  ok: 'text-accent',
+  poor: 'text-rose-300',
+};
+
 // tooltip value colour by liveness + SEO score
 function scoreColour(n: GraphNode): string {
   if (!n.is_alive) return 'text-rose-300';
   if (n.seo_score === null) return 'text-ink-300';
-  if (n.seo_score >= 80) return 'text-teal';
-  if (n.seo_score >= 50) return 'text-accent';
-  return 'text-rose-300';
+  return TOOLTIP_COLOUR[scoreTier(n.seo_score)];
 }
 
 // strip protocol + host so the tooltip shows just the path

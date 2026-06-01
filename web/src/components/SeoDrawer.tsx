@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 
 import { type SEODetail, getSEODetail } from '../api';
-import { scoreTextColour } from '../lib/colours';
+import { pct, scoreTextColour } from '../lib/colours';
+import { DataRow } from './ui/DataRow';
+import { ErrorBanner } from './ui/ErrorBanner';
 
 interface Props {
   jobId: string;
@@ -9,7 +11,7 @@ interface Props {
   onClose: () => void;
 }
 
-// slide-in audit panel. fetches on URL change; closes on backdrop click or Esc
+// slide-in audit panel; fetches on URL change, closes on backdrop click or Esc
 export function SeoDrawer({ jobId, url, onClose }: Props) {
   const [detail, setDetail] = useState<SEODetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,11 +68,7 @@ export function SeoDrawer({ jobId, url, onClose }: Props) {
 
         <div className="flex-1 overflow-y-auto px-6 py-6">
           {loading && <SkeletonRow />}
-          {error && (
-            <div className="border-l-2 border-rose-500 bg-rose-500/5 px-4 py-3 font-mono text-xs text-rose-200">
-              {error}
-            </div>
-          )}
+          {error && <ErrorBanner className="px-4">{error}</ErrorBanner>}
           {!loading && !error && !detail && <NoAuditState />}
           {detail && <SeoBody detail={detail} />}
         </div>
@@ -284,38 +282,34 @@ function HeadingTile({
 
 function Signal({ label, ok }: { label: string; ok: boolean }) {
   return (
-    <li className="flex items-center justify-between py-2.5">
-      <span className="font-mono text-xs text-paper/80">{label}</span>
+    <DataRow label={label}>
       <span className={`font-mono text-xs ${ok ? 'text-emerald-300' : 'text-rose-300'}`}>
         {ok ? '● present' : '○ missing'}
       </span>
-    </li>
+    </DataRow>
   );
 }
 
-// CountSignal: "X of Y (NN%)", colour bucketed by ratio. for image hygiene
+// "X of Y (NN%)", colour bucketed by ratio
 function CountSignal({ label, count, total }: { label: string; count: number; total: number }) {
   const ratio = total > 0 ? count / total : 0;
-  const pct = Math.round(ratio * 100);
   const colour =
     ratio >= 0.9 ? 'text-emerald-300' : ratio >= 0.5 ? 'text-amber-300' : 'text-rose-300';
   return (
-    <li className="flex items-center justify-between py-2.5">
-      <span className="font-mono text-xs text-paper/80">{label}</span>
+    <DataRow label={label}>
       <span className={`font-mono text-xs tabular-nums ${colour}`}>
-        {count}/{total} <span className="text-ink-400">({pct}%)</span>
+        {count}/{total} <span className="text-ink-400">({pct(count, total)}%)</span>
       </span>
-    </li>
+    </DataRow>
   );
 }
 
-// RawStat: plain count, no ratio. for link breakdowns with no "good" target
+// plain count, no ratio; for breakdowns with no "good" target
 function RawStat({ label, value }: { label: string; value: number }) {
   return (
-    <li className="flex items-center justify-between py-2.5">
-      <span className="font-mono text-xs text-paper/80">{label}</span>
+    <DataRow label={label}>
       <span className="font-mono text-xs tabular-nums text-ink-200">{value}</span>
-    </li>
+    </DataRow>
   );
 }
 

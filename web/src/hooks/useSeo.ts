@@ -3,12 +3,12 @@ import { useEffect } from 'react';
 import { DEFAULT_DESCRIPTION, DEFAULT_TITLE, SITE_NAME, SITE_URL } from '../lib/seo';
 
 interface SeoOptions {
-  // title without the site suffix, e.g. "Sign in". omit for the home default.
+  // title without the site suffix; omit for the home default
   title?: string;
   description?: string;
-  // canonical path, e.g. "/auth". omit for home.
+  // canonical path, e.g. "/auth"; omit for home
   path?: string;
-  // app/transient pages (auth, history, per-job reports) shouldn't be indexed
+  // transient pages shouldn't be indexed
   noindex?: boolean;
 }
 
@@ -32,8 +32,7 @@ function upsertCanonical(href: string) {
   el.setAttribute('href', href);
 }
 
-// syncs document title + SEO meta as the SPA navigates. static defaults live in index.html
-// for first paint/scrapers; this updates them on client route changes.
+// syncs document title + SEO meta on client route changes (static defaults live in index.html)
 export function useSeo({ title, description, path, noindex }: SeoOptions = {}) {
   useEffect(() => {
     const fullTitle = title ? `${title} · ${SITE_NAME}` : DEFAULT_TITLE;

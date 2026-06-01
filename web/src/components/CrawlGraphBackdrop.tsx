@@ -5,7 +5,7 @@ import { NodeTooltip } from './ui/NodeTooltip';
 type NodeTone = 'live' | 'rot' | 'mid';
 
 interface BgNode {
-  ax: number; // anchor (where the node tries to return to)
+  ax: number; // anchor the node springs back to
   ay: number;
   x: number;
   y: number;
@@ -72,21 +72,20 @@ const TONE_COLOUR: Record<NodeTone, string> = {
   rot: '#fb7185',
 };
 
-// tooltipToneClass maps a node tone to the tooltip's score text colour.
+// node tone -> tooltip score text colour
 function tooltipToneClass(tone: NodeTone): string {
   if (tone === 'live') return 'text-teal';
   if (tone === 'mid') return 'text-accent';
   return 'text-rose-300';
 }
 
-// scoreFor derives a stable pseudo-random score within the tone's range from a seed.
+// stable pseudo-random score within the tone's range, from a seed
 function scoreFor(tone: NodeTone, seed: number) {
   const [lo, hi] = SCORE_RANGE[tone];
   return lo + ((seed * 7919) % (hi - lo + 1));
 }
 
-// interactive node-graph canvas behind the hero: spring-anchored nodes wobble, drag,
-// tooltip on hover. purely decorative.
+// decorative node-graph canvas behind the hero: spring-anchored nodes wobble, drag, tooltip on hover
 export function CrawlGraphBackdrop() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nodesRef = useRef<BgNode[]>(
@@ -109,7 +108,6 @@ export function CrawlGraphBackdrop() {
   const hoverRef = useRef<number | null>(null);
 
   const [tooltipContent, setTooltipContent] = useState<{
-    idx: number;
     path: string;
     score: number;
     tone: NodeTone;
@@ -172,7 +170,7 @@ export function CrawlGraphBackdrop() {
       dragRef.current = { idx, lx: x, ly: y };
       canvas.style.cursor = 'grabbing';
       const n = nodesRef.current[idx];
-      setTooltipContent({ idx, path: n.path, score: n.score, tone: n.tone });
+      setTooltipContent({ path: n.path, score: n.score, tone: n.tone });
     };
     const onPointerMove = (e: PointerEvent) => {
       const { x, y } = toLogical(e.clientX, e.clientY);
@@ -188,7 +186,7 @@ export function CrawlGraphBackdrop() {
         if (idx === null) setTooltipContent(null);
         else {
           const n = nodesRef.current[idx];
-          setTooltipContent({ idx, path: n.path, score: n.score, tone: n.tone });
+          setTooltipContent({ path: n.path, score: n.score, tone: n.tone });
         }
       }
     };

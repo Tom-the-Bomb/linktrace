@@ -4,6 +4,7 @@ import { ChevronRight, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { type HistoryEntry, type HistoryRun, deleteJob, getHistory } from '../api';
+import { errMessage, formatDate } from '../lib/format';
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
 import { SectionHeader } from './SectionHeader';
 
@@ -14,16 +15,14 @@ interface DeleteTarget {
   startedAt: string;
 }
 
-// per-site history. single-run sites: flat row with one "view report". multi-run: a
-// chevron expands the run list, each with its own link, plus "view latest".
+// per-site history: single-run sites show a flat row; multi-run sites expand to a run list
 export function History() {
   const navigate = useNavigate();
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // set of URLs whose run list is currently expanded
+  // URLs whose run list is currently expanded
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  // the run awaiting delete confirmation, plus in-flight + error state for the dialog
   const [pendingDelete, setPendingDelete] = useState<DeleteTarget | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -31,7 +30,7 @@ export function History() {
   useEffect(() => {
     getHistory()
       .then(setEntries)
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(errMessage(e)));
   }, []);
 
   const toggle = (url: string) =>
@@ -42,8 +41,7 @@ export function History() {
       return next;
     });
 
-  // drop a deleted run in place: prune it, recompute count + latest pointers, remove the
-  // entry if it was the only run
+  // drop a deleted run in place: prune it, recompute count + latest pointers, drop the entry if it was the only run
   const removeRun = (jobId: string) =>
     setEntries((prev) =>
       prev
@@ -74,8 +72,8 @@ export function History() {
       removeRun(pendingDelete.jobId);
       setPendingDelete(null);
     } catch (e) {
-      // show server message without the ApiError: prefix
-      setDeleteError(e instanceof Error ? e.message : String(e));
+      // server message without the ApiError: prefix
+      setDeleteError(errMessage(e));
     } finally {
       setDeleting(false);
     }
@@ -152,7 +150,7 @@ function HistoryRow({
         onClick={multi ? onToggle : undefined}
         className={`group grid grid-cols-12 items-center gap-4 py-4 pr-4 transition hover:bg-ink-700/30 ${multi ? 'cursor-pointer' : ''}`}
       >
-        {/* chevron column: blank when single-run; lights up on row hover */}
+        {/* chevron: blank when single-run, lights up on row hover */}
         <div className="col-span-1 flex justify-center">
           {multi ? (
             <ChevronRight
@@ -161,7 +159,7 @@ function HistoryRow({
             />
           ) : null}
         </div>
-        {/* <a> is inline-block + max-w-full so its hover hit-box is only as wide as the text */}
+        {/* inline-block + max-w-full keeps the hover hit-box only as wide as the text */}
         <div className="col-span-4 min-w-0">
           <a
             href={entry.url}
@@ -181,8 +179,7 @@ function HistoryRow({
           {formatDate(entry.last_crawled)}
         </div>
         <div className="col-span-3 flex items-center justify-end gap-3">
-          {/* delete left of the status, revealed on row hover. targets the latest run
-              (older runs deleted individually from the RunRows below) */}
+          {/* targets the latest run; older runs are deleted individually from RunRows below */}
           <DeleteButton
             onClick={(ev) => {
               ev.stopPropagation();
@@ -193,7 +190,7 @@ function HistoryRow({
               });
             }}
           />
-          {/* runs[0] is the newest run, so its status reflects the "view latest" target */}
+          {/* runs[0] is newest, so its status reflects the "view latest" target */}
           <StatusBadge status={entry.runs[0]?.status} />
           <button
             onClick={(ev) => {
@@ -246,7 +243,7 @@ function RunRow({
         #{String(index).padStart(2, '0')}
       </div>
       <div className="col-span-5 font-mono text-[11px] text-ink-300">
-        {formatDateTime(run.created_at)}
+        {formatDate(run.created_at, true)}
         {isLatest && (
           <span className="ml-2 font-mono text-[9px] uppercase tracking-widest text-accent/70">
             latest
@@ -276,8 +273,7 @@ function RunRow({
   );
 }
 
-// trash affordance: hidden until row hover/focus, muted ink that lights rose on hover.
-// absolutely positioned by callers so it doesn't shift row layout. shared by both rows.
+// trash affordance shared by both rows: hidden until row hover/focus, lights rose on hover
 function DeleteButton({
   onClick,
   className = '',
@@ -285,7 +281,7 @@ function DeleteButton({
 }: {
   onClick: (ev: React.MouseEvent) => void;
   className?: string;
-  // sub-dropdown run rows use a smaller icon than the top-level rows
+  // run rows use a smaller icon than top-level rows
   small?: boolean;
 }) {
   return (
@@ -300,7 +296,7 @@ function DeleteButton({
   );
 }
 
-// border + text color per job lifecycle status; unknown statuses fall back to neutral ink.
+// border + text colour per status; unknown falls back to neutral ink
 const STATUS_STYLES: Record<string, string> = {
   complete: 'border-emerald-400/40 text-emerald-300',
   crawling: 'border-accent/40 text-accent',
@@ -320,22 +316,4 @@ function StatusBadge({ status }: { status?: string }) {
       {status}
     </span>
   );
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
 }

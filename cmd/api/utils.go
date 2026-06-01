@@ -2,8 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"sort"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/Tom-the-Bomb/linktrace/internal/auth"
 	"github.com/Tom-the-Bomb/linktrace/internal/site"
@@ -15,6 +18,28 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// httpError writes a JSON {"error": msg} body with the given status.
+func httpError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// short truncates an id to its first 8 chars for logging, guarding ids shorter than that.
+func short(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
+}
+
+// decodeJSON decodes the request body into v; on failure it writes a 400 and returns false.
+func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		httpError(w, http.StatusBadRequest, "bad request")
+		return false
+	}
+	return true
 }
 
 // corsMiddleware sets CORS headers for the Vite dev server. Cookies require an EXACT origin
@@ -35,35 +60,61 @@ func corsMiddleware(origin string) func(http.Handler) http.Handler {
 	}
 }
 
-// authorizeJobMutation gates cancel/delete. Reads stay open (the unguessable UUID is the
-// share capability), but mutating an owned job requires being the owner. Anonymous jobs have
-// no owner so they stay UUID-gated. Writes 403, returns false when not allowed.
-func authorizeJobMutation(w http.ResponseWriter, r *http.Request, job *store.Job) bool {
-	if job.UserID != "" && job.UserID != auth.UserID(r) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "unable to perform action on a job you didn't create"})
-		return false
-	}
-	return true
-}
-
-// jobExists guards the per-job sub-resource handlers (results/report/graph). Returns true if
-// present, else writes the response (500 on lookup failure, 404 on unknown id) and returns
-// false. Without it an unknown id falls through to the queries and reads as a 500.
-func (s *Server) jobExists(w http.ResponseWriter, id string) bool {
+// requireJob returns the job by id, or writes 500/404 and returns nil.
+func (s *Server) requireJob(w http.ResponseWriter, id string) *store.Job {
 	job, err := s.store.GetJob(id)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "lookup failed"})
-		return false
+		httpError(w, http.StatusInternalServerError, "lookup failed")
+		return nil
 	}
 	if job == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
-		return false
+		httpError(w, http.StatusNotFound, "job not found")
+		return nil
 	}
-	return true
+	return job
 }
 
-// toStoreSiteAudit converts site.Audit to store.SiteAudit. Same fields, different package,
-// keeps store from importing site.
+// requireOwnedJob is requireJob plus an owner check for mutations. Anonymous jobs stay
+// UUID-gated; owned jobs require the owner. Writes 404/403 and returns nil if disallowed.
+func (s *Server) requireOwnedJob(w http.ResponseWriter, r *http.Request) *store.Job {
+	job := s.requireJob(w, chi.URLParam(r, "id"))
+	if job == nil {
+		return nil
+	}
+	if job.UserID != "" && job.UserID != auth.UserID(r) {
+		httpError(w, http.StatusForbidden, "unable to perform action on a job you didn't create")
+		return nil
+	}
+	return job
+}
+
+// loadPagesAndAudits fetches a job's page rows + SEO audits, writing 500 and ok=false on failure.
+func (s *Server) loadPagesAndAudits(w http.ResponseWriter, id string) (pages []store.PageResult, audits []store.SEOAudit, ok bool) {
+	pages, err := s.store.ListPageResults(id)
+	if err != nil {
+		log.Printf("loadPagesAndAudits: ListPageResults(%s): %v", id, err)
+		httpError(w, http.StatusInternalServerError, "results lookup failed")
+		return nil, nil, false
+	}
+	audits, err = s.store.ListSEOAudits(id)
+	if err != nil {
+		log.Printf("loadPagesAndAudits: ListSEOAudits(%s): %v", id, err)
+		httpError(w, http.StatusInternalServerError, "audits lookup failed")
+		return nil, nil, false
+	}
+	return pages, audits, true
+}
+
+// scoreByURL indexes SEO audit scores by page URL for joining onto page rows.
+func scoreByURL(audits []store.SEOAudit) map[string]int {
+	m := make(map[string]int, len(audits))
+	for _, a := range audits {
+		m[a.URL] = a.Score
+	}
+	return m
+}
+
+// toStoreSiteAudit converts site.Audit to store.SiteAudit (keeps store from importing site).
 func toStoreSiteAudit(a site.Audit) store.SiteAudit {
 	return store.SiteAudit{
 		RobotsFound:       a.RobotsFound,

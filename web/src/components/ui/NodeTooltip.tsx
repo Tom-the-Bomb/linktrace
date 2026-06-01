@@ -5,12 +5,11 @@ interface Props {
   path: string;
   detail: string;
   detailClass?: string;
-  // fixed for the viewport-positioned landing backdrop, absolute inside the graph container.
+  // fixed for the landing backdrop, absolute inside the graph container
   position?: 'fixed' | 'absolute';
 }
 
-// pointer-following tooltip shared by the backdrop and report graph: path left, value
-// (SEO score/status) right. caller writes position via the ref so React doesn't re-render per move.
+// pointer-following tooltip (path left, value right); caller writes position via the ref to avoid re-renders
 export const NodeTooltip = forwardRef<HTMLDivElement, Props>(function NodeTooltip(
   { visible, path, detail, detailClass = '', position = 'absolute' },
   ref,

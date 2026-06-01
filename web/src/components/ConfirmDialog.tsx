@@ -2,10 +2,10 @@ import { type ReactNode, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
 interface Props {
-  eyebrow: string; // small rose label, e.g. "delete crawl" / "delete account"
+  eyebrow: string; // small rose label, e.g. "delete crawl"
   title: string;
   message: ReactNode;
-  children?: ReactNode; // optional detail block rendered under the message
+  children?: ReactNode; // detail block under the message
   confirmLabel: string;
   busyLabel?: string;
   busy?: boolean;
@@ -14,9 +14,7 @@ interface Props {
   onCancel: () => void;
 }
 
-// Centered destructive-confirm modal. Reuses the SeoDrawer overlay pattern (fixed backdrop at
-// z-40, panel at z-50, Esc + backdrop-click to dismiss). Shared shell behind every "are you
-// sure?" prompt (crawl deletion, account deletion, etc).
+// Shared centered destructive-confirm modal (Esc + backdrop-click to dismiss)
 export function ConfirmDialog({
   eyebrow,
   title,
@@ -37,9 +35,7 @@ export function ConfirmDialog({
     return () => window.removeEventListener('keydown', onKey);
   }, [onCancel, busy]);
 
-  // portal to <body> so the fixed overlay positions against the viewport. a backdrop-blur
-  // (or any transform/filter) ancestor would otherwise become the containing block and pin
-  // this near the top instead of centering it.
+  // portal to <body> so a transform/filter ancestor can't become the containing block and break centering
   return createPortal(
     <>
       <div

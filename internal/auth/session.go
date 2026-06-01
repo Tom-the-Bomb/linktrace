@@ -4,14 +4,19 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
-	"os"
+	"time"
+
+	"github.com/Tom-the-Bomb/linktrace/internal/config"
 )
 
 const CookieName = "sid"
 
-// secureCookie controls the cookie Secure attribute: off by default so local HTTP dev works,
-// enabled by COOKIE_SECURE=true in HTTPS deployments.
-var secureCookie = os.Getenv("COOKIE_SECURE") == "true"
+// SessionTTL is the single source of truth for session lifetime; the cookie MaxAge and the
+// Redis session TTL (cache.sessionTTL) both derive from it.
+const SessionTTL = 7 * 24 * time.Hour
+
+// secureCookie sets the cookie Secure attribute (off for local HTTP dev, on behind HTTPS).
+var secureCookie = config.Load().CookieSecure
 
 // NewSessionID returns 32 random bytes as hex: an opaque, unguessable token. Uses crypto/rand,
 // since math/rand is predictable and unsafe for security tokens.
@@ -33,7 +38,7 @@ func SetSessionCookie(w http.ResponseWriter, sid string) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		Secure:   secureCookie,
-		MaxAge:   7 * 24 * 60 * 60,
+		MaxAge:   int(SessionTTL.Seconds()),
 	})
 }
 

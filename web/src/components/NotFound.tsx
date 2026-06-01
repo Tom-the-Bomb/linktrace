@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 import { useSeo } from '../hooks/useSeo';
 
-// standalone 404 state. for /jobs/:id with an unknown ID, reusable for any unmatched route.
+// standalone 404 state, reusable for any unmatched route
 export function NotFound({
   eyebrow = 'error 404',
   title = 'Page not found',

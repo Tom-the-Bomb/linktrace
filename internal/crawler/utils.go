@@ -5,8 +5,7 @@ import (
 	"strings"
 )
 
-// path prefixes that are auto-generated infrastructure / framework internals, never user
-// content. We don't even add them to the crawl frontier, saves the budget for real pages.
+// path prefixes for framework/asset internals, never enqueued (saves crawl budget for real pages).
 var skipPrefixes = []string{
 	"/cdn-cgi/",     // cloudflare
 	"/.well-known/", // ietf metadata
@@ -32,7 +31,7 @@ var skipPrefixes = []string{
 	"/admin/",       // generic admin
 }
 
-// file extensions that aren't HTML pages, we'd just fetch a 404 or a binary
+// non-HTML file extensions, never enqueued.
 var skipExtensions = []string{
 	".css", ".js", ".mjs", ".map",
 	".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".bmp",
@@ -42,8 +41,7 @@ var skipExtensions = []string{
 	".xml", ".json", ".txt", ".csv",
 }
 
-// isUnwantedPath reports whether a path is a framework/asset route or a non-HTML file we
-// should never enqueue.
+// isUnwantedPath reports whether a path is a framework/asset route or non-HTML file.
 func isUnwantedPath(path string) bool {
 	lower := strings.ToLower(path)
 	for _, p := range skipPrefixes {
@@ -59,8 +57,7 @@ func isUnwantedPath(path string) bool {
 	return false
 }
 
-// query params that don't change the page content, tracking, sessions, click IDs.
-// stripped during URL normalization so /post?utm_source=x and /post collapse to one entry.
+// content-irrelevant query params (tracking/session/click IDs), stripped during normalization.
 var trackingParams = map[string]bool{
 	"utm_source":   true,
 	"utm_medium":   true,
@@ -85,18 +82,15 @@ var trackingParams = map[string]bool{
 	"sessionid":    true,
 }
 
-// canonicalize collapses URL variants of the same page into one string: lowercase host,
-// fragment dropped, trailing slash trimmed (except root), tracking params removed and the
-// rest sorted. When dropQuery is true the query string is removed entirely (the dedup key).
+// canonicalize collapses same-page URL variants: lowercase host, no fragment, trimmed trailing
+// slash (except root), tracking params removed and the rest sorted. dropQuery drops the query.
 func canonicalize(u *url.URL, dropQuery bool) string {
 	u.Host = strings.ToLower(u.Host)
 	u.Fragment = ""
 
-	// canonical root path is "/", else "https://x.com" and "https://x.com/" never collide
 	if u.Path == "" {
 		u.Path = "/"
 	}
-	// trim trailing slash so /a and /a/ are the same, but keep "/" itself
 	if len(u.Path) > 1 && strings.HasSuffix(u.Path, "/") {
 		u.Path = strings.TrimRight(u.Path, "/")
 	}
@@ -110,21 +104,20 @@ func canonicalize(u *url.URL, dropQuery bool) string {
 				q.Del(k)
 			}
 		}
-		// Encode() already sorts keys alphabetically, gives a stable canonical form
+		// Encode() sorts keys, giving a stable canonical form
 		u.RawQuery = q.Encode()
 	}
 
 	return u.String()
 }
 
-// resolve turns an href (relative or absolute) into a canonical same-host page URL, or ""
-// if it's off-host, a non-http(s) scheme, or an asset/framework path.
+// resolve turns an href into a canonical same-host page URL, or "" if off-host,
+// non-http(s), or an asset/framework path.
 func resolve(base *url.URL, href string) string {
 	u, err := base.Parse(href)
 	if err != nil {
 		return ""
 	}
-	// skip mailto:, tel:, javascript:, etc.
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return ""
 	}
@@ -137,7 +130,7 @@ func resolve(base *url.URL, href string) string {
 	return canonicalize(u, false)
 }
 
-// dedupe removes duplicate URLs while preserving first-seen order.
+// dedupe removes duplicate URLs, preserving first-seen order.
 func dedupe(in []string) []string {
 	seen := map[string]bool{}
 	var out []string

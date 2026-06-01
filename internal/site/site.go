@@ -24,7 +24,6 @@ type Audit struct {
 	WWWCanonical      string   `json:"www_canonical"`
 }
 
-const ua = "LinkTraceBot/1.0"
 const maxSitemapURLs = 2000
 
 // Run performs every domain-level check against the root URL.
@@ -35,43 +34,25 @@ func Run(rawRoot string) Audit {
 		log.Printf("[site] invalid root URL %q: %v", rawRoot, err)
 		return a
 	}
-	log.Printf("[site] auditing %s", root.Host)
 
 	// robots.txt: yields disallow + crawl-delay + sitemap hints
-	log.Printf("[site] fetching robots.txt for %s", root.Host)
 	found, disallow, delay, sitemaps := fetchRobots(root)
 	a.RobotsFound, a.RobotsDisallowAll, a.CrawlDelay = found, disallow, delay
-	if found {
-		log.Printf("[site] robots.txt found, sitemaps=%d, disallow_all=%v, crawl_delay=%ds",
-			len(sitemaps), disallow, delay)
-	} else {
-		log.Printf("[site] no robots.txt at %s", root.Host)
-	}
 
 	// sitemap.xml: prefer one named in robots, else the conventional location
 	sitemapURL := root.Scheme + "://" + root.Host + "/sitemap.xml"
 	if len(sitemaps) > 0 {
 		sitemapURL = sitemaps[0]
-		log.Printf("[site] using sitemap from robots.txt: %s", sitemapURL)
-	} else {
-		log.Printf("[site] no sitemap in robots.txt, trying %s", sitemapURL)
 	}
 	if ok, urls := fetchSitemap(sitemapURL, 0); ok {
 		a.SitemapFound, a.SitemapURL, a.SitemapURLs = true, sitemapURL, urls
 		a.SitemapURLCount = len(urls)
-		log.Printf("[site] sitemap OK, %d URLs collected", len(urls))
-	} else {
-		log.Printf("[site] sitemap not found / unparseable at %s", sitemapURL)
 	}
 
-	// HTTPS / cert / www
-	log.Printf("[site] checking HTTPS + cert for %s", root.Host)
 	a.IsHTTPS, a.HTTPSRedirect, a.CertValid = checkHTTPS(root.Host)
-	log.Printf("[site] https=%v, http→https=%v, cert=%v", a.IsHTTPS, a.HTTPSRedirect, a.CertValid)
-
-	log.Printf("[site] checking www canonicalization for %s", root.Host)
 	a.WWWCanonical = checkWWW(root.Host)
-	log.Printf("[site] www_canonical=%s", a.WWWCanonical)
+	log.Printf("[site] audited %s: robots=%v sitemap=%d https=%v www=%s",
+		root.Host, a.RobotsFound, a.SitemapURLCount, a.IsHTTPS, a.WWWCanonical)
 	return a
 }
 

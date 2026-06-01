@@ -3,7 +3,10 @@ import { useState } from 'react';
 import type { CoverageGap } from '../api';
 import { SectionHeader } from './SectionHeader';
 
-// sitemap vs crawled set difference. always renders all three sections; empty ones show a green 0.
+// max URLs listed before collapsing into a "...and N more" line
+const CAP = 50;
+
+// sitemap vs crawled diff; always renders all three sections (empty ones show a green 0)
 export function CoverageGapPanel({ gap }: { gap: CoverageGap }) {
   const total = gap.orphans.length + gap.not_crawled.length + gap.sitemap_dead.length;
 
@@ -51,49 +54,44 @@ function GapList({
   tone: 'amber' | 'rose';
 }) {
   const [open, setOpen] = useState(false);
-  if (urls.length === 0) {
-    return (
-      <div className="flex items-baseline justify-between border-l-2 border-ink-500/60 px-4 py-2 font-mono text-xs">
-        <div>
-          <span className="text-paper/80">{label}</span>{' '}
-          <span className="text-ink-400">{hint}</span>
-        </div>
-        <span className="text-emerald-300">0</span>
+  const empty = urls.length === 0;
+  const accent = empty ? 'border-ink-500/60' : tone === 'rose' ? 'border-rose-400/60' : 'border-amber-400/60';
+  const countColour = empty ? 'text-emerald-300' : tone === 'rose' ? 'text-rose-300' : 'text-amber-300';
+
+  const header = (
+    <>
+      <div>
+        <span className="text-paper/80">{label}</span> <span className="text-ink-400">{hint}</span>
       </div>
-    );
-  }
-  const accent = tone === 'rose' ? 'border-rose-400/60' : 'border-amber-400/60';
-  const countColour = tone === 'rose' ? 'text-rose-300' : 'text-amber-300';
+      <span className={`tabular-nums ${countColour}`}>
+        {empty ? '0' : `${urls.length} ${open ? '▲' : '▼'}`}
+      </span>
+    </>
+  );
+
   return (
-    <div className={`border-l-2 ${accent} bg-ink-700/20`}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-baseline justify-between px-4 py-2 font-mono text-xs transition hover:bg-ink-600/30"
-      >
-        <div>
-          <span className="text-paper/80">{label}</span>{' '}
-          <span className="text-ink-400">{hint}</span>
-        </div>
-        <span className={`tabular-nums ${countColour}`}>
-          {urls.length} {open ? '▲' : '▼'}
-        </span>
-      </button>
-      {open && (
+    <div className={`border-l-2 ${accent} ${empty ? '' : 'bg-ink-700/20'}`}>
+      {empty ? (
+        <div className="flex items-baseline justify-between px-4 py-2 font-mono text-xs">{header}</div>
+      ) : (
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex w-full items-baseline justify-between px-4 py-2 font-mono text-xs transition hover:bg-ink-600/30"
+        >
+          {header}
+        </button>
+      )}
+      {open && !empty && (
         <ul className="space-y-1 border-t border-ink-500/40 px-4 py-2">
-          {urls.slice(0, 50).map((u) => (
+          {urls.slice(0, CAP).map((u) => (
             <li key={u} className="truncate font-mono text-[11px]">
-              <a
-                href={u}
-                target="_blank"
-                rel="noreferrer"
-                className="text-ink-300 hover:text-accent"
-              >
+              <a href={u} target="_blank" rel="noreferrer" className="text-ink-300 hover:text-accent">
                 {u}
               </a>
             </li>
           ))}
-          {urls.length > 50 && (
-            <li className="font-mono text-[10px] text-ink-400">...and {urls.length - 50} more</li>
+          {urls.length > CAP && (
+            <li className="font-mono text-[10px] text-ink-400">...and {urls.length - CAP} more</li>
           )}
         </ul>
       )}

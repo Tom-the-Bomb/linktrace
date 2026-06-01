@@ -21,6 +21,9 @@ const (
 	QAggregate = "q.aggregate"
 )
 
+// publishTimeout bounds each publish's broker round-trip.
+const publishTimeout = 5 * time.Second
+
 type PageJob struct {
 	JobID      string `json:"job_id"`
 	URL        string `json:"url"`
@@ -68,18 +71,17 @@ func (q *Queue) Close() error {
 	return q.conn.Close()
 }
 
-// PublishPageJob enqueues a page to crawl onto the work queue.
-func (q *Queue) PublishPageJob(job PageJob) error {
-	body, err := json.Marshal(job)
+// publish JSON-marshals v and sends it to exchange/key as a persistent message.
+func (q *Queue) publish(exchange, key string, v any) error {
+	body, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), publishTimeout)
 	defer cancel()
 
-	// default exchange ("") + routing key = queue name routes straight to that queue
 	return q.ch.PublishWithContext(ctx,
-		"", WorkQueue, false, false,
+		exchange, key, false, false,
 		amqp.Publishing{
 			ContentType:  "application/json",
 			DeliveryMode: amqp.Persistent,
@@ -88,24 +90,15 @@ func (q *Queue) PublishPageJob(job PageJob) error {
 	)
 }
 
-// PublishResult fans a checked-page result out to all result consumers.
-func (q *Queue) PublishResult(r PageChecked) error {
-	body, err := json.Marshal(r)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+// PublishPageJob enqueues a page to crawl onto the work queue.
+// Default exchange ("") + routing key = queue name routes straight to that queue.
+func (q *Queue) PublishPageJob(job PageJob) error {
+	return q.publish("", WorkQueue, job)
+}
 
-	// fanout ignores routing key
-	return q.ch.PublishWithContext(ctx,
-		ResultsEx, "", false, false,
-		amqp.Publishing{
-			ContentType:  "application/json",
-			DeliveryMode: amqp.Persistent,
-			Body:         body,
-		},
-	)
+// PublishResult fans a checked-page result out to all result consumers (fanout ignores the key).
+func (q *Queue) PublishResult(r PageChecked) error {
+	return q.publish(ResultsEx, "", r)
 }
 
 // Consume opens its own channel (per concurrency rule) with prefetch set for backpressure.

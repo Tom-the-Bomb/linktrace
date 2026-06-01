@@ -22,3 +22,13 @@ func envInt(key string, deflt int) int {
 	}
 	return deflt
 }
+
+// envBool parses key as a bool, or returns deflt if unset/unparseable.
+func envBool(key string, deflt bool) bool {
+	if val := os.Getenv(key); val != "" {
+		if b, err := strconv.ParseBool(val); err == nil {
+			return b
+		}
+	}
+	return deflt
+}

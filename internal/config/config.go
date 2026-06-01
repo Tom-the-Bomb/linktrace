@@ -12,6 +12,7 @@ type Config struct {
 	RatePerMin     int
 	WorkerCount    int
 	FrontendOrigin string
+	CookieSecure   bool // session cookie Secure attribute (true behind HTTPS in prod)
 }
 
 // Load reads the configuration from the environment, falling back to dev-friendly defaults.
@@ -27,5 +28,6 @@ func Load() Config {
 		RatePerMin:     envInt("RATE_PER_MIN", 1000),
 		WorkerCount:    envInt("WORKER_COUNT", 100),
 		FrontendOrigin: env("FRONTEND_ORIGIN", "http://localhost:5173"),
+		CookieSecure:   envBool("COOKIE_SECURE", false),
 	}
 }

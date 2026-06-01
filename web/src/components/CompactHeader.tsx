@@ -4,6 +4,7 @@ import { Link2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { AuthBar } from './AuthBar';
+import { CrawlForm } from './CrawlForm';
 
 interface CompactHeaderProps {
   // jobId is absent on /history (no job loaded)
@@ -16,8 +17,7 @@ interface CompactHeaderProps {
   onStopOrBack: () => void;
 }
 
-// sticky top bar on /history and /jobs/:id. hosts the new-crawl form, the stop/back
-// button (when a job is active), and the AuthBar.
+// sticky top bar on /history and /jobs/:id: new-crawl form, stop/back button, AuthBar
 export function CompactHeader({
   jobId,
   url,
@@ -39,23 +39,13 @@ export function CompactHeader({
             / job · {jobId.slice(0, 8)}
           </span>
         )}
-        <form onSubmit={onSubmit} className="ml-auto flex max-w-md flex-1 gap-2">
-          <input
-            type="text"
-            required
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="new domain…"
-            className="input flex-1 px-3 py-2 text-xs"
-          />
-          <button
-            type="submit"
-            disabled={submitting}
-            // fixed size + shrink-0 so the "crawl" -> "…" swap during submit can't shift layout
-            className="h-[34px] w-[80px] shrink-0 bg-accent font-mono text-[11px] uppercase tracking-widest text-ink-900 transition hover:bg-accent-soft disabled:opacity-50"
-          >
-            {submitting ? '…' : 'crawl'}
-          </button>
+        <CrawlForm
+          variant="compact"
+          url={url}
+          setUrl={setUrl}
+          onSubmit={onSubmit}
+          submitting={submitting}
+        >
           {jobId && (
             <button
               type="button"
@@ -69,7 +59,7 @@ export function CompactHeader({
               {isDone ? '← back' : 'stop'}
             </button>
           )}
-        </form>
+        </CrawlForm>
 
         <div className="ml-2">
           <AuthBar />
