@@ -28,7 +28,7 @@ import (
 
 const shutdownTimeout = 5 * time.Second
 
-// Server bundles shared dependencies so handlers can reach them without globals.
+// bundles shared dependencies so handlers can reach them without globals.
 type Server struct {
 	cfg   config.Config
 	store *store.Store
@@ -36,7 +36,7 @@ type Server struct {
 	queue *queue.Queue
 }
 
-// main wires up the store/cache/queue, mounts the routes, and serves until shutdown.
+// wires up the store/cache/queue, mounts the routes, and serves until shutdown.
 func main() {
 	cfg := config.Load()
 
@@ -107,7 +107,7 @@ type createRequest struct {
 	URL string `json:"url"`
 }
 
-// handleCreate (POST /check) validates the URL, creates the job row, seeds the crawl, returns 202.
+// (POST /check) validates the URL, creates the job row, seeds the crawl, returns 202.
 func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var req createRequest
 	if !decodeJSON(w, r, &req) {
@@ -168,7 +168,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"job_id": id, "status": "crawling"})
 }
 
-// handleCancel (POST /check/{id}/cancel) sets the Redis cancel flag and marks the job stopped;
+// (POST /check/{id}/cancel) sets the Redis cancel flag and marks the job stopped;
 // workers check IsCancelled and silently ack the rest so the queue drains cheaply.
 func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 	job := s.requireOwnedJob(w, r)
@@ -185,7 +185,7 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"job_id": job.ID, "status": "stopped"})
 }
 
-// handleDelete (DELETE /check/{id}) tears down a job. PurgeJob (tombstone + Redis keys) runs
+// (DELETE /check/{id}) tears down a job. PurgeJob (tombstone + Redis keys) runs
 // before DeleteJob so no in-flight worker re-creates rows mid-delete.
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	job := s.requireOwnedJob(w, r)
@@ -521,7 +521,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"username": user.Username})
 }
 
-// handleDeleteAccount (DELETE /auth/account) tears down each owned job, then the user row and
+// (DELETE /auth/account) tears down each owned job, then the user row and
 // session. Jobs go first because jobs.user_id FKs users(id).
 func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserID(r)

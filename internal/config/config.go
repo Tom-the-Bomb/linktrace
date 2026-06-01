@@ -15,7 +15,7 @@ type Config struct {
 	CookieSecure   bool // session cookie Secure attribute (true behind HTTPS in prod)
 }
 
-// Load reads the configuration from the environment, falling back to dev-friendly defaults.
+// reads the configuration from the environment, falling back to dev-friendly defaults.
 func Load() Config {
 	return Config{
 		MySQLDSN:       env("MYSQL_DSN", "linktrace:linktrace@tcp(localhost:3306)/linktrace?parseTime=true"),

@@ -14,7 +14,7 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/htmlx"
 )
 
-// classifyNetworkError maps a transport-level error to one of the rot ErrType constants.
+// maps a transport-level error to one of the rot ErrType constants.
 func classifyNetworkError(err error) string {
 	var dnsErr *net.DNSError
 	if errors.As(err, &dnsErr) {
@@ -57,7 +57,7 @@ var soft404Phrases = []string{
 	"page cannot be found",
 }
 
-// isSoft404 reports whether a 2xx page is actually an error page (status OK, body says 404).
+// reports whether a 2xx page is actually an error page (status OK, body says 404).
 // Only visible <body> text is scanned: SPA shells inline error copy like "page not found"
 // inside <script> tags, so matching raw HTML would soft-404 the whole site.
 func isSoft404(body []byte) bool {
@@ -74,7 +74,7 @@ func isSoft404(body []byte) bool {
 	return false
 }
 
-// visibleBodyText returns a lowercased concatenation of the text nodes inside <body>, skipping
+// returns a lowercased concatenation of the text nodes inside <body>, skipping
 // non-rendered subtrees (script/style/template/noscript). ok=false if the doc can't be parsed.
 func visibleBodyText(body []byte) (string, bool) {
 	doc, err := html.Parse(bytes.NewReader(body))

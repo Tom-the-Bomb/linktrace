@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-// env returns the value of key, or deflt if unset/empty.
+// returns the value of key, or deflt if unset/empty.
 func env(key, deflt string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
@@ -13,7 +13,7 @@ func env(key, deflt string) string {
 	return deflt
 }
 
-// envInt returns key parsed as an int, or deflt if unset/empty/unparseable.
+// returns key parsed as an int, or deflt if unset/empty/unparseable.
 func envInt(key string, deflt int) int {
 	if val := os.Getenv(key); val != "" {
 		if i, err := strconv.Atoi(val); err == nil {
@@ -23,7 +23,7 @@ func envInt(key string, deflt int) int {
 	return deflt
 }
 
-// envBool parses key as a bool, or returns deflt if unset/unparseable.
+// parses key as a bool, or returns deflt if unset/unparseable.
 func envBool(key string, deflt bool) bool {
 	if val := os.Getenv(key); val != "" {
 		if b, err := strconv.ParseBool(val); err == nil {

@@ -16,7 +16,7 @@ type User struct {
 	PasswordHash string `json:"-"`
 }
 
-// CreateUser inserts a new account. UNIQUE(username) makes duplicate inserts fail at the DB.
+// inserts a new account. UNIQUE(username) makes duplicate inserts fail at the DB.
 func (s *Store) CreateUser(u User) error {
 	_, err := s.db.Exec(
 		"INSERT INTO users (id, username, password_hash) VALUES (UUID_TO_BIN(?), ?, ?)",
@@ -25,14 +25,14 @@ func (s *Store) CreateUser(u User) error {
 	return err
 }
 
-// IsDuplicateUsername reports whether err is a MySQL duplicate-key error (code 1062).
+// reports whether err is a MySQL duplicate-key error (code 1062).
 // Lets the handler turn it into a 409 instead of a generic 500.
 func IsDuplicateUsername(err error) bool {
 	var me *mysql.MySQLError
 	return errors.As(err, &me) && me.Number == 1062
 }
 
-// GetUserByUsername returns the user with the given username, or (nil, nil) if not found.
+// returns the user with the given username, or (nil, nil) if not found.
 func (s *Store) GetUserByUsername(username string) (*User, error) {
 	var u User
 	return getOne(&u, func() error {
@@ -43,7 +43,7 @@ func (s *Store) GetUserByUsername(username string) (*User, error) {
 	})
 }
 
-// GetUserByID is the symmetric lookup used by /auth/me.
+// is the symmetric lookup used by /auth/me.
 func (s *Store) GetUserByID(id string) (*User, error) {
 	var u User
 	return getOne(&u, func() error {
@@ -54,7 +54,7 @@ func (s *Store) GetUserByID(id string) (*User, error) {
 	})
 }
 
-// DeleteUser removes the user row. Callers must delete the user's jobs first: jobs.user_id
+// removes the user row. Callers must delete the user's jobs first: jobs.user_id
 // references users(id) with no ON DELETE CASCADE, so a lingering job blocks this.
 func (s *Store) DeleteUser(id string) error {
 	if _, err := uuid.Parse(id); err != nil {
@@ -64,7 +64,7 @@ func (s *Store) DeleteUser(id string) error {
 	return err
 }
 
-// ListUserJobIDs returns every job id owned by userID, so account deletion can tear each one
+// returns every job id owned by userID, so account deletion can tear each one
 // down individually (cache purge + row delete) before removing the user.
 func (s *Store) ListUserJobIDs(userID string) ([]string, error) {
 	return queryRows(s.db,
@@ -90,7 +90,7 @@ type HistoryEntry struct {
 	Runs        []HistoryRun `json:"runs"`
 }
 
-// ListUserHistory returns one row per site the user has crawled (most recent first), each
+// returns one row per site the user has crawled (most recent first), each
 // with its individual runs, so the frontend can render an expandable list per domain.
 // Rows are grouped in Go from a single (url, created_at DESC) query.
 func (s *Store) ListUserHistory(userID string) ([]HistoryEntry, error) {

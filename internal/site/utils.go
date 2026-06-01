@@ -18,7 +18,7 @@ const (
 	maxSitemapBytes = 5 << 20          // sitemaps can be big
 )
 
-// fetchRobots reads /robots.txt, honouring only groups that target * or our UA.
+// reads /robots.txt, honouring only groups that target * or our UA.
 func fetchRobots(root *url.URL) (found, disallowAll bool, crawlDelay int, sitemaps []string) {
 	body, status := get(root.Scheme + "://" + root.Host + "/robots.txt")
 	if status != http.StatusOK || body == "" {
@@ -66,7 +66,7 @@ type sitemapXML struct {
 	} `xml:"sitemap"`
 }
 
-// fetchSitemap downloads and parses a sitemap, recursing one level into a sitemap index,
+// downloads and parses a sitemap, recursing one level into a sitemap index,
 // returning whether it was found and the (capped) list of page URLs.
 func fetchSitemap(sitemapURL string, depth int) (bool, []string) {
 	body, status := get(sitemapURL)
@@ -104,7 +104,7 @@ func fetchSitemap(sitemapURL string, depth int) (bool, []string) {
 	return true, urls
 }
 
-// checkHTTPS verifies the site serves HTTPS with a valid cert and redirects HTTP to HTTPS.
+// verifies the site serves HTTPS with a valid cert and redirects HTTP to HTTPS.
 func checkHTTPS(host string) (isHTTPS, httpsRedirect, certValid bool) {
 	noFollow := httpx.NewClient(probeTimeout, false)
 
@@ -125,7 +125,7 @@ func checkHTTPS(host string) (isHTTPS, httpsRedirect, certValid bool) {
 	return
 }
 
-// checkWWW determines which form the site canonicalizes to.
+// determines which form the site canonicalizes to.
 // "www" / "apex" means proper canonicalization; "both" means duplicate-content risk.
 func checkWWW(host string) string {
 	apex := strings.TrimPrefix(host, "www.")
@@ -169,7 +169,7 @@ func checkWWW(host string) string {
 	}
 }
 
-// get fetches a URL (robots/sitemap) and returns its body and status, or ("", 0) on error.
+// fetches a URL (robots/sitemap) and returns its body and status, or ("", 0) on error.
 func get(rawURL string) (string, int) {
 	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 	defer cancel()
@@ -180,7 +180,7 @@ func get(rawURL string) (string, int) {
 	return string(body), status
 }
 
-// cut splits "Key: value" on the first ':'. Lowercases the key, trims both sides.
+// splits "Key: value" on the first ':'. Lowercases the key, trims both sides.
 func cut(line string) (key, val string, ok bool) {
 	i := strings.Index(line, ":")
 	if i < 0 {

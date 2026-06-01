@@ -47,7 +47,7 @@ type Queue struct {
 	ch   *amqp.Channel
 }
 
-// New dials RabbitMQ, opens a channel, and declares the topology.
+// dials RabbitMQ, opens a channel, and declares the topology.
 func New(url string) (*Queue, error) {
 	conn, err := amqp.Dial(url)
 	if err != nil {
@@ -66,12 +66,12 @@ func New(url string) (*Queue, error) {
 	return q, nil
 }
 
-// Close closes the connection (and its channels).
+// closes the connection (and its channels).
 func (q *Queue) Close() error {
 	return q.conn.Close()
 }
 
-// publish JSON-marshals v and sends it to exchange/key as a persistent message.
+// jSON-marshals v and sends it to exchange/key as a persistent message.
 func (q *Queue) publish(exchange, key string, v any) error {
 	body, err := json.Marshal(v)
 	if err != nil {
@@ -90,18 +90,18 @@ func (q *Queue) publish(exchange, key string, v any) error {
 	)
 }
 
-// PublishPageJob enqueues a page to crawl onto the work queue.
+// enqueues a page to crawl onto the work queue.
 // Default exchange ("") + routing key = queue name routes straight to that queue.
 func (q *Queue) PublishPageJob(job PageJob) error {
 	return q.publish("", WorkQueue, job)
 }
 
-// PublishResult fans a checked-page result out to all result consumers (fanout ignores the key).
+// fans a checked-page result out to all result consumers (fanout ignores the key).
 func (q *Queue) PublishResult(r PageChecked) error {
 	return q.publish(ResultsEx, "", r)
 }
 
-// Consume opens its own channel (per concurrency rule) with prefetch set for backpressure.
+// opens its own channel (per concurrency rule) with prefetch set for backpressure.
 // Manual ack throughout: caller acks via d.Ack(false) / d.Nack(false, requeue).
 func (q *Queue) Consume(queueName string, prefetch int) (<-chan amqp.Delivery, *amqp.Channel, error) {
 	ch, err := q.conn.Channel()

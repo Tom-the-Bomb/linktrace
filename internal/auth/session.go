@@ -18,7 +18,7 @@ const SessionTTL = 7 * 24 * time.Hour
 // secureCookie sets the cookie Secure attribute (off for local HTTP dev, on behind HTTPS).
 var secureCookie = config.Load().CookieSecure
 
-// NewSessionID returns 32 random bytes as hex: an opaque, unguessable token. Uses crypto/rand,
+// returns 32 random bytes as hex: an opaque, unguessable token. Uses crypto/rand,
 // since math/rand is predictable and unsafe for security tokens.
 func NewSessionID() (string, error) {
 	b := make([]byte, 32)
@@ -28,7 +28,7 @@ func NewSessionID() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// SetSessionCookie writes the session cookie. HttpOnly so JS can't read it (XSS defence);
+// writes the session cookie. HttpOnly so JS can't read it (XSS defence);
 // SameSite=Lax + Secure (in prod) keeps it first-party and HTTPS-only.
 func SetSessionCookie(w http.ResponseWriter, sid string) {
 	http.SetCookie(w, &http.Cookie{
@@ -42,7 +42,7 @@ func SetSessionCookie(w http.ResponseWriter, sid string) {
 	})
 }
 
-// ClearSessionCookie expires the cookie immediately (logout). Secure must match the
+// expires the cookie immediately (logout). Secure must match the
 // attribute used when setting, or the browser won't overwrite the existing cookie.
 func ClearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{

@@ -41,18 +41,18 @@ type CheckResult struct {
 	FinalURL      string
 }
 
-// Checker holds only the per-request timeout; each Check builds its own client so the
+// holds only the per-request timeout; each Check builds its own client so the
 // CheckRedirect hook can record that request's redirect chain without shared state.
 type Checker struct {
 	timeout time.Duration
 }
 
-// New returns a Checker whose requests time out after the given duration.
+// returns a Checker whose requests time out after the given duration.
 func New(timeout time.Duration) *Checker {
 	return &Checker{timeout: timeout}
 }
 
-// Check fetches rawURL and returns its liveness + classified error type. For healthy HTML it
+// fetches rawURL and returns its liveness + classified error type. For healthy HTML it
 // also returns the response body (capped at maxBodyBytes) for downstream SEO analysis.
 func (c *Checker) Check(rawURL string) CheckResult {
 	start := time.Now()

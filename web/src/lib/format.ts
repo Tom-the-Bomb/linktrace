@@ -1,6 +1,6 @@
 // Shared display helpers: human date/time formatting and error-message extraction.
 
-// formatDate renders an ISO timestamp for display. With `withTime` it also shows the
+// renders an ISO timestamp for display. With `withTime` it also shows the
 // clock time. Empty input renders as a dash; an unparseable value falls back to the raw
 // string so we never show "Invalid Date".
 export function formatDate(iso: string, withTime = false): string {
@@ -15,7 +15,7 @@ export function formatDate(iso: string, withTime = false): string {
   });
 }
 
-// errMessage pulls a string message out of an unknown caught value.
+// pulls a string message out of an unknown caught value.
 export function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }

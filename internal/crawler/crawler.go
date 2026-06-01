@@ -10,7 +10,7 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/htmlx"
 )
 
-// NormalizeURL returns the canonical form of a raw URL, or the input unchanged if unparseable.
+// returns the canonical form of a raw URL, or the input unchanged if unparseable.
 func NormalizeURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -19,7 +19,7 @@ func NormalizeURL(raw string) string {
 	return canonicalize(u, false)
 }
 
-// CanonicalKey returns a URL's dedup key: the canonical form with the query dropped, so
+// returns a URL's dedup key: the canonical form with the query dropped, so
 // /endpoint and /endpoint?a=1 collapse to one. Dedup only; the original URL is still fetched.
 func CanonicalKey(raw string) string {
 	u, err := url.Parse(raw)
@@ -29,7 +29,7 @@ func CanonicalKey(raw string) string {
 	return canonicalize(u, true)
 }
 
-// ExtractLinks returns the deduped, canonicalized, same-host links in <a href>.
+// returns the deduped, canonicalized, same-host links in <a href>.
 func ExtractLinks(body []byte, base *url.URL) []string {
 	doc, err := html.Parse(bytes.NewReader(body))
 	if err != nil {

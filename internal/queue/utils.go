@@ -2,7 +2,7 @@ package queue
 
 import amqp "github.com/rabbitmq/amqp091-go"
 
-// declareTopology declares the exchanges, queues, and bindings. Idempotent, safe on every startup.
+// declares the exchanges, queues, and bindings. Idempotent, safe on every startup.
 func (q *Queue) declareTopology() error {
 	// dead-letter side
 	if err := q.ch.ExchangeDeclare(DeadFanout, "fanout", true, false, false, false, nil); err != nil {

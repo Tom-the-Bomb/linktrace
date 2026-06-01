@@ -40,7 +40,7 @@ const (
 	cancelCheckTimeout = 1 * time.Second
 )
 
-// New connects to Redis at addr and pings it to verify the connection.
+// connects to Redis at addr and pings it to verify the connection.
 func New(addr string) (*Cache, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr: addr,
@@ -56,19 +56,19 @@ func New(addr string) (*Cache, error) {
 	return &Cache{rdb: rdb}, nil
 }
 
-// Close closes the Redis client.
+// closes the Redis client.
 func (c *Cache) Close() error {
 	return c.rdb.Close()
 }
 
-// CreateSession maps a session id to a user id, expiring after sessionTTL.
+// maps a session id to a user id, expiring after sessionTTL.
 func (c *Cache) CreateSession(sid, userID string) error {
 	ctx, cancel := c.ctx()
 	defer cancel()
 	return c.rdb.Set(ctx, sessionKey(sid), userID, sessionTTL).Err()
 }
 
-// LookupSession returns the user id for a session id, or "" if missing/expired.
+// returns the user id for a session id, or "" if missing/expired.
 // redis.Nil is treated as "no session", not an error (same pattern as sql.ErrNoRows).
 func (c *Cache) LookupSession(sid string) (string, error) {
 	ctx, cancel := c.ctx()
@@ -80,19 +80,19 @@ func (c *Cache) LookupSession(sid string) (string, error) {
 	return userID, err
 }
 
-// DeleteSession invalidates a session immediately (logout).
+// invalidates a session immediately (logout).
 func (c *Cache) DeleteSession(sid string) error {
 	ctx, cancel := c.ctx()
 	defer cancel()
 	return c.rdb.Del(ctx, sessionKey(sid)).Err()
 }
 
-// IncDiscovered bumps the discovered counter; called each time a new page is queued.
+// bumps the discovered counter; called each time a new page is queued.
 func (c *Cache) IncDiscovered(jobID string) error {
 	return c.bump(jobID, fieldDiscovered, 1)
 }
 
-// IncChecked bumps the checked counter plus healthy or rotten; called once per crawled page.
+// bumps the checked counter plus healthy or rotten; called once per crawled page.
 func (c *Cache) IncChecked(jobID string, isAlive bool) error {
 	if err := c.bump(jobID, fieldChecked, 1); err != nil {
 		return err
@@ -104,7 +104,7 @@ func (c *Cache) IncChecked(jobID string, isAlive bool) error {
 	return c.bump(jobID, field, 1)
 }
 
-// GetProgress reads all four progress counters (discovered/checked/healthy/rotten) at once.
+// reads all four progress counters (discovered/checked/healthy/rotten) at once.
 func (c *Cache) GetProgress(jobID string) (map[string]int, error) {
 	ctx, cancel := c.ctx()
 	defer cancel()
@@ -137,7 +137,7 @@ end
 return n
 `)
 
-// Allow reports whether workers may still hit domain this minute, incrementing its counter.
+// reports whether workers may still hit domain this minute, incrementing its counter.
 // Returns false once perMinute is exceeded within the rolling one-minute window.
 func (c *Cache) Allow(domain string, perMinute int) (bool, error) {
 	ctx, cancel := c.ctx()
@@ -150,7 +150,7 @@ func (c *Cache) Allow(domain string, perMinute int) (bool, error) {
 	return n <= int64(perMinute), nil
 }
 
-// MarkSeen adds url to the job's seen-set, returning true if it wasn't already present.
+// adds url to the job's seen-set, returning true if it wasn't already present.
 func (c *Cache) MarkSeen(jobID, url string) (bool, error) {
 	ctx, cancel := c.ctx()
 	defer cancel()
@@ -163,14 +163,14 @@ func (c *Cache) MarkSeen(jobID, url string) (bool, error) {
 	return added == 1, nil
 }
 
-// Cancel marks jobID as cancelled. Workers see this on the next processPage tick and bail.
+// marks jobID as cancelled. Workers see this on the next processPage tick and bail.
 func (c *Cache) Cancel(jobID string) error {
 	ctx, cancel := c.ctx()
 	defer cancel()
 	return c.rdb.Set(ctx, cancelKey(jobID), "1", seenTTL).Err()
 }
 
-// PurgeJob clears a job's transient Redis state on deletion. First it (re)sets the cancel
+// clears a job's transient Redis state on deletion. First it (re)sets the cancel
 // tombstone: the work queue is shared and can't be selectively purged, so in-flight messages
 // for this job must be skipped by workers (via IsCancelled) instead of resurrecting rows
 // we're about to delete. The tombstone is left to self-expire after seenTTL, by which point
@@ -184,7 +184,7 @@ func (c *Cache) PurgeJob(jobID string) error {
 	return c.rdb.Del(ctx, progressKey(jobID), seenKey(jobID), catCountKey(jobID)).Err()
 }
 
-// IsCancelled reports whether jobID's cancel flag is set.
+// reports whether jobID's cancel flag is set.
 func (c *Cache) IsCancelled(jobID string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), cancelCheckTimeout)
 	defer cancel()
@@ -192,7 +192,7 @@ func (c *Cache) IsCancelled(jobID string) bool {
 	return err == nil && n > 0
 }
 
-// IncCategory atomically bumps the per-category counter for jobID and returns the new count, so
+// atomically bumps the per-category counter for jobID and returns the new count, so
 // the worker can enforce a soft cap (return value > MaxPerCategory means this enqueue overflowed).
 func (c *Cache) IncCategory(jobID, category string) (int, error) {
 	ctx, cancel := c.ctx()
@@ -205,7 +205,7 @@ func (c *Cache) IncCategory(jobID, category string) (int, error) {
 	return int(n), nil
 }
 
-// SeenCount returns how many distinct URLs have been seen for jobID.
+// returns how many distinct URLs have been seen for jobID.
 func (c *Cache) SeenCount(jobID string) (int, error) {
 	ctx, cancel := c.ctx()
 	defer cancel()

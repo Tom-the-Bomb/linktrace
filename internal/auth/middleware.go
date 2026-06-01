@@ -11,12 +11,12 @@ type ctxKey string
 
 const userIDKey ctxKey = "userID"
 
-// sessionLooker is satisfied by *cache.Cache; defined here to avoid an import cycle.
+// is satisfied by *cache.Cache; defined here to avoid an import cycle.
 type sessionLooker interface {
 	LookupSession(sid string) (string, error)
 }
 
-// Optional attaches the user id to the context if a valid session is present, else anonymous.
+// attaches the user id to the context if a valid session is present, else anonymous.
 func Optional(sessions sessionLooker) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +30,7 @@ func Optional(sessions sessionLooker) func(http.Handler) http.Handler {
 	}
 }
 
-// Require rejects the request with 401 unless a valid session is present.
+// rejects the request with 401 unless a valid session is present.
 func Require(sessions sessionLooker) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +50,7 @@ func Require(sessions sessionLooker) func(http.Handler) http.Handler {
 	}
 }
 
-// UserID pulls the authenticated user id out of the request context, or "" if anonymous.
+// pulls the authenticated user id out of the request context, or "" if anonymous.
 func UserID(r *http.Request) string {
 	if v, ok := r.Context().Value(userIDKey).(string); ok {
 		return v

@@ -158,7 +158,7 @@ export function cancelCheck(id: string): Promise<{ job_id: string; status: strin
   return jsonRequest(`/check/${id}/cancel`, { method: 'POST' });
 }
 
-// deleteJob removes a job and its data. the server tombstones it so a running crawl's
+// removes a job and its data. the server tombstones it so a running crawl's
 // workers stop and queued work drains.
 export function deleteJob(id: string): Promise<{ job_id: string; status: string }> {
   return jsonRequest(`/check/${id}`, { method: 'DELETE' });
@@ -285,13 +285,13 @@ export function logout(): Promise<{ ok: boolean }> {
   return jsonRequest('/auth/logout', { method: 'POST' });
 }
 
-// deleteAccount removes the user, all their jobs (stopping running ones), and ends the
+// removes the user, all their jobs (stopping running ones), and ends the
 // session. requires login.
 export function deleteAccount(): Promise<{ ok: boolean }> {
   return jsonRequest('/auth/account', { method: 'DELETE' });
 }
 
-// getMe returns null when anonymous (401 isn't an error here, it's a valid state)
+// returns null when anonymous (401 isn't an error here, it's a valid state)
 export function getMe(): Promise<Me | null> {
   return jsonRequest('/auth/me', undefined, 401);
 }

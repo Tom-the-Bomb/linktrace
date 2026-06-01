@@ -13,19 +13,19 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/store"
 )
 
-// writeJSON writes v as a JSON response with the given status code.
+// writes v as a JSON response with the given status code.
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// httpError writes a JSON {"error": msg} body with the given status.
+// writes a JSON {"error": msg} body with the given status.
 func httpError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-// short truncates an id to its first 8 chars for logging, guarding ids shorter than that.
+// truncates an id to its first 8 chars for logging, guarding ids shorter than that.
 func short(id string) string {
 	if len(id) > 8 {
 		return id[:8]
@@ -33,7 +33,7 @@ func short(id string) string {
 	return id
 }
 
-// decodeJSON decodes the request body into v; on failure it writes a 400 and returns false.
+// decodes the request body into v; on failure it writes a 400 and returns false.
 func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
 		httpError(w, http.StatusBadRequest, "bad request")
@@ -42,7 +42,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-// corsMiddleware sets CORS headers for the Vite dev server. Cookies require an EXACT origin
+// sets CORS headers for the Vite dev server. Cookies require an EXACT origin
 // (never "*") plus Allow-Credentials, and OPTIONS preflights short-circuit with 204.
 func corsMiddleware(origin string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -60,7 +60,7 @@ func corsMiddleware(origin string) func(http.Handler) http.Handler {
 	}
 }
 
-// requireJob returns the job by id, or writes 500/404 and returns nil.
+// returns the job by id, or writes 500/404 and returns nil.
 func (s *Server) requireJob(w http.ResponseWriter, id string) *store.Job {
 	job, err := s.store.GetJob(id)
 	if err != nil {
@@ -74,7 +74,7 @@ func (s *Server) requireJob(w http.ResponseWriter, id string) *store.Job {
 	return job
 }
 
-// requireOwnedJob is requireJob plus an owner check for mutations. Anonymous jobs stay
+// is requireJob plus an owner check for mutations. Anonymous jobs stay
 // UUID-gated; owned jobs require the owner. Writes 404/403 and returns nil if disallowed.
 func (s *Server) requireOwnedJob(w http.ResponseWriter, r *http.Request) *store.Job {
 	job := s.requireJob(w, chi.URLParam(r, "id"))
@@ -88,7 +88,7 @@ func (s *Server) requireOwnedJob(w http.ResponseWriter, r *http.Request) *store.
 	return job
 }
 
-// loadPagesAndAudits fetches a job's page rows + SEO audits, writing 500 and ok=false on failure.
+// fetches a job's page rows + SEO audits, writing 500 and ok=false on failure.
 func (s *Server) loadPagesAndAudits(w http.ResponseWriter, id string) (pages []store.PageResult, audits []store.SEOAudit, ok bool) {
 	pages, err := s.store.ListPageResults(id)
 	if err != nil {
@@ -105,7 +105,7 @@ func (s *Server) loadPagesAndAudits(w http.ResponseWriter, id string) (pages []s
 	return pages, audits, true
 }
 
-// scoreByURL indexes SEO audit scores by page URL for joining onto page rows.
+// indexes SEO audit scores by page URL for joining onto page rows.
 func scoreByURL(audits []store.SEOAudit) map[string]int {
 	m := make(map[string]int, len(audits))
 	for _, a := range audits {
@@ -114,7 +114,7 @@ func scoreByURL(audits []store.SEOAudit) map[string]int {
 	return m
 }
 
-// toStoreSiteAudit converts site.Audit to store.SiteAudit (keeps store from importing site).
+// converts site.Audit to store.SiteAudit (keeps store from importing site).
 func toStoreSiteAudit(a site.Audit) store.SiteAudit {
 	return store.SiteAudit{
 		RobotsFound:       a.RobotsFound,
@@ -131,7 +131,7 @@ func toStoreSiteAudit(a site.Audit) store.SiteAudit {
 	}
 }
 
-// computeOverall builds the report header: totals + average SEO score + top recurring issue codes.
+// builds the report header: totals + average SEO score + top recurring issue codes.
 func computeOverall(pages []store.PageResult, audits []store.SEOAudit) map[string]any {
 	var rotten, healthy, scoreSum int
 	for _, p := range pages {
@@ -186,7 +186,7 @@ func computeOverall(pages []store.PageResult, audits []store.SEOAudit) map[strin
 	}
 }
 
-// startSession mints a session id, stores it in Redis, and sets the HttpOnly cookie.
+// mints a session id, stores it in Redis, and sets the HttpOnly cookie.
 func (s *Server) startSession(w http.ResponseWriter, userID string) error {
 	sid, err := auth.NewSessionID()
 	if err != nil {

@@ -75,7 +75,7 @@ type KeywordCount struct {
 	Count int    `json:"count"`
 }
 
-// AnalyzeKeywords tokenizes page text, counts meaningful terms, and reports the top keywords
+// tokenizes page text, counts meaningful terms, and reports the top keywords
 // plus where the most frequent ("primary") one appears (title / first H1 / URL slug).
 func AnalyzeKeywords(text, title, firstH1, pageURL string) (top []KeywordCount,
 	primary string, inTitle, inH1, inURL bool) {
@@ -111,7 +111,7 @@ func AnalyzeKeywords(text, title, firstH1, pageURL string) (top []KeywordCount,
 	return
 }
 
-// AuditHTML parses page HTML and extracts the SEO-relevant signals, scored.
+// parses page HTML and extracts the SEO-relevant signals, scored.
 func AuditHTML(body []byte, pageURL string) Audit {
 	a := Audit{
 		OGTags:      map[string]string{},

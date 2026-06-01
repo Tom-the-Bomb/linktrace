@@ -19,7 +19,7 @@ type SiteAudit struct {
 	WWWCanonical      string   `json:"www_canonical"`
 }
 
-// SaveSiteAudit persists the one-shot domain checks. Called once per crawl at job creation.
+// persists the one-shot domain checks. Called once per crawl at job creation.
 func (s *Store) SaveSiteAudit(jobID string, a SiteAudit) error {
 	_, err := s.db.Exec(
 		`INSERT INTO site_audits (job_id, robots_found, robots_disallow_all, crawl_delay,
@@ -33,7 +33,7 @@ func (s *Store) SaveSiteAudit(jobID string, a SiteAudit) error {
 	return err
 }
 
-// GetSiteAudit retrieves the one-shot domain checks. Returns (nil, nil) if absent.
+// retrieves the one-shot domain checks. Returns (nil, nil) if absent.
 func (s *Store) GetSiteAudit(jobID string) (*SiteAudit, error) {
 	var a SiteAudit
 	var sitemapURL sql.NullString
@@ -66,7 +66,7 @@ type CrawlStats struct {
 	DurationSeconds int     `json:"duration_seconds"`
 }
 
-// GetCrawlStats aggregates per-page rows into the telemetry numbers. Pure SQL: nothing new stored.
+// aggregates per-page rows into the telemetry numbers. Pure SQL: nothing new stored.
 func (s *Store) GetCrawlStats(jobID string) (CrawlStats, error) {
 	var cs CrawlStats
 	var avg sql.NullFloat64
@@ -108,7 +108,7 @@ type SiteSEO struct {
 	MissingH1          int `json:"missing_h1"`
 }
 
-// GetSiteSEO aggregates the per-page seo_audits rows into site-wide signals.
+// aggregates the per-page seo_audits rows into site-wide signals.
 // Two queries: one row of counts, then a second for the duplicate-title set count.
 func (s *Store) GetSiteSEO(jobID string) (SiteSEO, error) {
 	var out SiteSEO

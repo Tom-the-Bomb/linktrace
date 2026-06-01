@@ -9,7 +9,7 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/crawler"
 )
 
-// Audit holds every domain-level fact (mirrors the site_audits table).
+// holds every domain-level fact (mirrors the site_audits table).
 type Audit struct {
 	RobotsFound       bool     `json:"robots_found"`
 	RobotsDisallowAll bool     `json:"robots_disallow_all"`
@@ -26,7 +26,7 @@ type Audit struct {
 
 const maxSitemapURLs = 2000
 
-// Run performs every domain-level check against the root URL.
+// performs every domain-level check against the root URL.
 func Run(rawRoot string) Audit {
 	var a Audit
 	root, err := url.Parse(rawRoot)
@@ -56,14 +56,14 @@ func Run(rawRoot string) Audit {
 	return a
 }
 
-// CoverageGap is the set difference between the sitemap and the crawled pages.
+// is the set difference between the sitemap and the crawled pages.
 type CoverageGap struct {
 	Orphans     []string `json:"orphans"`      // crawled, not in sitemap
 	NotCrawled  []string `json:"not_crawled"`  // in sitemap, never reached
 	SitemapDead []string `json:"sitemap_dead"` // in sitemap and crawled, but rotten
 }
 
-// ComputeCoverageGap is pure set arithmetic. Both sides run through crawler.NormalizeURL (the
+// is pure set arithmetic. Both sides run through crawler.NormalizeURL (the
 // same canonical form crawled URLs were stored under) so trailing-slash/host-case differences
 // don't masquerade as orphans or missed pages.
 func ComputeCoverageGap(sitemapURLs, crawledURLs, rottenURLs []string) CoverageGap {

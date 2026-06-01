@@ -41,7 +41,7 @@ var skipExtensions = []string{
 	".xml", ".json", ".txt", ".csv",
 }
 
-// isUnwantedPath reports whether a path is a framework/asset route or non-HTML file.
+// reports whether a path is a framework/asset route or non-HTML file.
 func isUnwantedPath(path string) bool {
 	lower := strings.ToLower(path)
 	for _, p := range skipPrefixes {
@@ -82,7 +82,7 @@ var trackingParams = map[string]bool{
 	"sessionid":    true,
 }
 
-// canonicalize collapses same-page URL variants: lowercase host, no fragment, trimmed trailing
+// collapses same-page URL variants: lowercase host, no fragment, trimmed trailing
 // slash (except root), tracking params removed and the rest sorted. dropQuery drops the query.
 func canonicalize(u *url.URL, dropQuery bool) string {
 	u.Host = strings.ToLower(u.Host)
@@ -111,7 +111,7 @@ func canonicalize(u *url.URL, dropQuery bool) string {
 	return u.String()
 }
 
-// resolve turns an href into a canonical same-host page URL, or "" if off-host,
+// turns an href into a canonical same-host page URL, or "" if off-host,
 // non-http(s), or an asset/framework path.
 func resolve(base *url.URL, href string) string {
 	u, err := base.Parse(href)
@@ -130,7 +130,7 @@ func resolve(base *url.URL, href string) string {
 	return canonicalize(u, false)
 }
 
-// dedupe removes duplicate URLs, preserving first-seen order.
+// removes duplicate URLs, preserving first-seen order.
 func dedupe(in []string) []string {
 	seen := map[string]bool{}
 	var out []string

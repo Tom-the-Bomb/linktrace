@@ -16,7 +16,7 @@ const (
 	maxBodyBytes = 1 << 20
 )
 
-// Available queries the Wayback "available" API for the closest snapshot of rawURL.
+// queries the Wayback "available" API for the closest snapshot of rawURL.
 // Returns the snapshot URL, or "" if none exists.
 func Available(rawURL string) (string, error) {
 	api := "https://archive.org/wayback/available?url=" + url.QueryEscape(rawURL)

@@ -5,12 +5,12 @@ import (
 	"time"
 )
 
-// ctx returns the standard 2s request context for cache operations.
+// returns the standard 2s request context for cache operations.
 func (c *Cache) ctx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 2*time.Second)
 }
 
-// bump adds delta to field of the progress hash for jobID and refreshes its TTL.
+// adds delta to field of the progress hash for jobID and refreshes its TTL.
 func (c *Cache) bump(jobID, field string, delta int64) error {
 	ctx, cancel := c.ctx()
 	defer cancel()

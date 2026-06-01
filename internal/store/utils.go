@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 )
 
-// queryRows runs q and scans every row through scan, collecting the results into a slice.
+// runs q and scans every row through scan, collecting the results into a slice.
 // It centralizes the Query -> defer Close -> for rows.Next -> scan -> rows.Err skeleton
 // shared by all the flat-slice list methods.
 func queryRows[T any](db *sql.DB, q string, scan func(*sql.Rows) (T, error), args ...any) ([]T, error) {
@@ -26,7 +26,7 @@ func queryRows[T any](db *sql.DB, q string, scan func(*sql.Rows) (T, error), arg
 	return out, rows.Err()
 }
 
-// getOne runs a single-row scan and maps sql.ErrNoRows to (nil, nil) so a missing row reads
+// runs a single-row scan and maps sql.ErrNoRows to (nil, nil) so a missing row reads
 // as "not found" rather than an error, removing the repeated guard in the single-row Gets.
 func getOne[T any](dest *T, scan func() error) (*T, error) {
 	switch err := scan(); err {
@@ -39,7 +39,7 @@ func getOne[T any](dest *T, scan func() error) (*T, error) {
 	}
 }
 
-// tx runs fn inside a transaction, committing on success and rolling back otherwise.
+// runs fn inside a transaction, committing on success and rolling back otherwise.
 func (s *Store) tx(fn func(*sql.Tx) error) error {
 	t, err := s.db.Begin()
 	if err != nil {
@@ -52,14 +52,14 @@ func (s *Store) tx(fn func(*sql.Tx) error) error {
 	return t.Commit()
 }
 
-// mustJSON marshals v, returning nil on the impossible error. The values passed here are
+// marshals v, returning nil on the impossible error. The values passed here are
 // plain maps/slices that never fail to encode, so callers skip the error ceremony.
 func mustJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
 }
 
-// nullIfEmpty maps "" to a SQL NULL so empty optional columns store as NULL, not "".
+// maps "" to a SQL NULL so empty optional columns store as NULL, not "".
 func nullIfEmpty(s string) any {
 	if s == "" {
 		return nil
@@ -80,12 +80,12 @@ const seoAuditColumns = `url, title, title_length, meta_description,
 	primary_keyword, keyword_in_title, keyword_in_h1,
 	keyword_in_url, issues, score`
 
-// scanner is implemented by both *sql.Row and *sql.Rows.
+// is implemented by both *sql.Row and *sql.Rows.
 type scanner interface {
 	Scan(dest ...any) error
 }
 
-// scanSEOAudit decodes one seoAuditColumns row (from a Row or Rows) into a SEOAudit, handling
+// decodes one seoAuditColumns row (from a Row or Rows) into a SEOAudit, handling
 // the nullable string columns and JSON blobs.
 func scanSEOAudit(s scanner, jobID string) (SEOAudit, error) {
 	var a SEOAudit

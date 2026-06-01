@@ -41,7 +41,7 @@ var stopwords = map[string]bool{
 	"any": true, "one": true, "two": true, "may": true, "also": true,
 }
 
-// handleJSONLD records a <script type="application/ld+json"> block's @type.
+// records a <script type="application/ld+json"> block's @type.
 func handleJSONLD(a *Audit, n *html.Node) {
 	if htmlx.GetAttr(n, "type") != "application/ld+json" || n.FirstChild == nil {
 		return
@@ -55,7 +55,7 @@ func handleJSONLD(a *Audit, n *html.Node) {
 	}
 }
 
-// handleImg tallies one <img>'s a11y/CWV signals (alt, dimensions, lazy, responsive).
+// tallies one <img>'s a11y/CWV signals (alt, dimensions, lazy, responsive).
 func handleImg(a *Audit, n *html.Node) {
 	a.ImagesTotal++
 	if htmlx.HasAttr(n, "alt") { // empty alt="" is the valid decorative signal
@@ -72,7 +72,7 @@ func handleImg(a *Audit, n *html.Node) {
 	}
 }
 
-// handleAnchor buckets one <a> as internal/external and counts nofollow, skipping non-nav hrefs.
+// buckets one <a> as internal/external and counts nofollow, skipping non-nav hrefs.
 func handleAnchor(a *Audit, pageHost string, n *html.Node) {
 	href := strings.TrimSpace(htmlx.GetAttr(n, "href"))
 	if href == "" {
@@ -95,7 +95,7 @@ func handleAnchor(a *Audit, pageHost string, n *html.Node) {
 	}
 }
 
-// handleMeta reads a <meta> element: description, viewport, robots noindex, OG / Twitter tags.
+// reads a <meta> element: description, viewport, robots noindex, OG / Twitter tags.
 func handleMeta(a *Audit, n *html.Node) {
 	name := htmlx.GetAttr(n, "name")
 	property := htmlx.GetAttr(n, "property")
@@ -116,7 +116,7 @@ func handleMeta(a *Audit, n *html.Node) {
 	}
 }
 
-// findIssues classifies findings by severity:
+// classifies findings by severity:
 //
 //	error   = breaks indexing (missing title, multiple H1, noindex)
 //	warning = suboptimal (too-long title, missing meta desc, no canonical)
@@ -225,7 +225,7 @@ func findIssues(a *Audit) []Issue {
 	return issues
 }
 
-// score returns 100 minus weighted issue penalties, clamped to [0, 100].
+// returns 100 minus weighted issue penalties, clamped to [0, 100].
 func score(issues []Issue) int {
 	s := 100
 	for _, iss := range issues {
@@ -241,14 +241,14 @@ func score(issues []Issue) int {
 	return max(0, s)
 }
 
-// tokenize lowercases s and splits it into runs of letters.
+// lowercases s and splits it into runs of letters.
 func tokenize(s string) []string {
 	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
 		return !unicode.IsLetter(r)
 	})
 }
 
-// slug turns a URL's path into space-separated words so keyword matching can scan it.
+// turns a URL's path into space-separated words so keyword matching can scan it.
 func slug(pageURL string) string {
 	u, err := url.Parse(pageURL)
 	if err != nil {

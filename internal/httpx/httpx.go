@@ -17,7 +17,7 @@ const (
 	CheckerUserAgent = "Mozilla/5.0 (compatible; LinkTrace/1.0)"
 )
 
-// NewClient returns a client with the given timeout. When followRedirects is false it surfaces
+// returns a client with the given timeout. When followRedirects is false it surfaces
 // the 3xx response (with its Location) instead of following it.
 func NewClient(timeout time.Duration, followRedirects bool) *http.Client {
 	c := &http.Client{Timeout: timeout}
@@ -27,7 +27,7 @@ func NewClient(timeout time.Duration, followRedirects bool) *http.Client {
 	return c
 }
 
-// Fetch GETs rawURL with the bot UA and returns the body (capped at limit bytes) and status.
+// gETs rawURL with the bot UA and returns the body (capped at limit bytes) and status.
 func Fetch(ctx context.Context, client *http.Client, rawURL string, limit int64) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
