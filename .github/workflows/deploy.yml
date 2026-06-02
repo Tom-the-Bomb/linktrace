@@ -1,0 +1,31 @@
+name: Deploy
+
+# Redeploy to the DigitalOcean droplet: SSH in, pull, rebuild the prod stack.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false # let an in-flight deploy finish rather than killing a half-built stack
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          port: 22
+          script_stop: true # abort on the first failing command
+          script: |
+            set -euo pipefail
+            cd linktrace
+            git fetch --all
+            git reset --hard origin/main
+            docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+            docker image prune -f
