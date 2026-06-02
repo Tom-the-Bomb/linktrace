@@ -95,6 +95,8 @@ Append `api`, `worker`, or `caddy` to the last command to rebuild just one.
 
 Point your domain's A record at the server and set `DOMAIN` + `ACME_EMAIL` so Caddy can issue HTTPS.
 
+Pushes to `main` auto-deploy: `.github/workflows/deploy.yml` SSHes into the droplet and reruns the command above (needs the `DROPLET_*` repo secrets).
+
 ## Config
 
 - **Worker config:** `WORKER_COUNT` (100), `MAX_PAGES` (10000), `MAX_DEPTH` (20), `MAX_PER_CATEGORY` (1000), `RATE_PER_MIN` (1000)
