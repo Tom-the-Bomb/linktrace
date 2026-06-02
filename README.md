@@ -88,7 +88,6 @@ git clone https://github.com/Tom-the-Bomb/linktrace.git && cd linktrace
 cp .env.production.example .env.production
 # run this to redeploy after changes too
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
-#
 ```
 
 Append `api`, `worker`, or `caddy` to the last command to rebuild just one.
