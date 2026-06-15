@@ -5,8 +5,6 @@ import (
 	"encoding/hex"
 	"net/http"
 	"time"
-
-	"github.com/Tom-the-Bomb/linktrace/internal/config"
 )
 
 const CookieName = "sid"
@@ -16,7 +14,11 @@ const CookieName = "sid"
 const SessionTTL = 7 * 24 * time.Hour
 
 // secureCookie sets the cookie Secure attribute (off for local HTTP dev, on behind HTTPS).
-var secureCookie = config.Load().CookieSecure
+// main wires it from config via SetCookieSecure before serving.
+var secureCookie bool
+
+// SetCookieSecure sets whether session cookies carry the Secure attribute. Call once at startup.
+func SetCookieSecure(secure bool) { secureCookie = secure }
 
 // returns 32 random bytes as hex: an opaque, unguessable token. Uses crypto/rand,
 // since math/rand is predictable and unsafe for security tokens.

@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
 
-import { Link2 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import { AuthForm } from '../components/AuthForm';
+import { Wordmark } from '../components/Wordmark';
 import { useAuth } from '../context/AuthContext';
 import { useSeo } from '../hooks/useSeo';
 
@@ -19,12 +19,8 @@ export default function AuthPage() {
 
   return (
     <div className="relative flex flex-1 flex-col">
-      {/* wordmark mirroring the Hero header */}
       <header className="px-6 py-4 sm:px-10">
-        <Link to="/" className="inline-flex items-center gap-2" aria-label="Go to home">
-          <Link2 className="h-4 w-4 text-accent" strokeWidth={2.25} />
-          <span className="display text-xl font-medium tracking-tight">linktrace</span>
-        </Link>
+        <Wordmark />
       </header>
 
       <div className="flex flex-1 items-center justify-center px-6 pb-16">

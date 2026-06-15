@@ -1,10 +1,8 @@
 import { type FormEvent } from 'react';
 
-import { Link2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
-
 import { AuthBar } from './AuthBar';
 import { CrawlForm } from './CrawlForm';
+import { Wordmark } from './Wordmark';
 
 interface CompactHeaderProps {
   // jobId is absent on /history (no job loaded)
@@ -32,10 +30,7 @@ export function CompactHeader({
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-10 sm:py-4">
         {/* mobile: logo left + auth right on their own line; desktop: dissolve into the row */}
         <div className="flex items-center justify-between gap-3 sm:contents">
-          <Link to="/" className="flex items-center gap-2" aria-label="Go to home">
-            <Link2 className="h-4 w-4 text-accent" strokeWidth={2.25} />
-            <span className="display text-lg font-medium tracking-tight">linktrace</span>
-          </Link>
+          <Wordmark size="lg" />
           {jobId && (
             <span className="hidden font-mono text-[10px] uppercase tracking-widest text-ink-300 sm:inline">
               / job · {jobId.slice(0, 8)}

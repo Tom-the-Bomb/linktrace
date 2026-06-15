@@ -253,7 +253,7 @@ func (w *worker) publishResult(job queue.PageJob, res checker.CheckResult, links
 	if hasHTML(res) {
 		audit := seo.AuditHTML(res.Body, job.URL)
 		sa := mapAudit(job.JobID, job.URL, audit)
-		msg.SEO, _ = json.Marshal(sa) // marshaling a plain struct can't realistically fail
+		msg.SEO, _ = json.Marshal(sa)
 	}
 	msg.Links = links
 
@@ -406,8 +406,8 @@ func (rb *reportBuilder) handle(msg queue.PageChecked) error {
 	return rb.maybeComplete(msg.JobID)
 }
 
-// marks the job done once `checked` catches up to `discovered`. The IsCancelled
-// guard is belt-and-suspenders for a result that was in-flight at cancel time.
+// marks the job done once `checked` catches up to `discovered`; re-checks cancel in case
+// it landed mid-handle.
 func (rb *reportBuilder) maybeComplete(jobID string) error {
 	if rb.cache.IsCancelled(jobID) {
 		return nil

@@ -25,7 +25,6 @@ func (q *Queue) declareTopology() error {
 
 	// results fanout + bound consumer queues
 	if err := q.ch.ExchangeDeclare(ResultsEx, "fanout", true, false, false, false, nil); err != nil {
-
 		return err
 	}
 	for _, name := range []string{QReport, QArchive, QAggregate} {

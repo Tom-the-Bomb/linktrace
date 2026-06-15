@@ -1,8 +1,6 @@
 // Shared display helpers: human date/time formatting and error-message extraction.
 
-// renders an ISO timestamp for display. With `withTime` it also shows the
-// clock time. Empty input renders as a dash; an unparseable value falls back to the raw
-// string so we never show "Invalid Date".
+// ISO timestamp -> localized date (+ time if withTime); '-' if empty, raw string if unparseable.
 export function formatDate(iso: string, withTime = false): string {
   if (!iso) return '-';
   const date = new Date(iso);

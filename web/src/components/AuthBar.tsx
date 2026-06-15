@@ -7,6 +7,10 @@ import { useAuth } from '../context/AuthContext';
 import { errMessage } from '../lib/format';
 import { ConfirmDialog } from './ConfirmDialog';
 
+// shared base for dropdown menu items; each appends its own text + hover colour
+const menuItem =
+  'block w-full px-4 py-2.5 text-left font-mono text-[11px] uppercase tracking-widest transition';
+
 // top-right widget: log in/register link when anonymous, username menu when logged in
 export function AuthBar() {
   const { user, loading, logout, deleteAccount } = useAuth();
@@ -76,7 +80,7 @@ export function AuthBar() {
                 navigate(historyOpen ? '/' : '/history');
                 close();
               }}
-              className="block w-full px-4 py-2.5 text-left font-mono text-[11px] uppercase tracking-widest text-ink-300 transition hover:bg-ink-700 hover:text-accent"
+              className={`${menuItem} text-ink-300 hover:bg-ink-700 hover:text-accent`}
             >
               {historyOpen ? 'back to crawl' : 'history'}
             </button>
@@ -87,7 +91,7 @@ export function AuthBar() {
                 close();
                 navigate('/');
               }}
-              className="block w-full px-4 py-2.5 text-left font-mono text-[11px] uppercase tracking-widest text-ink-300 transition hover:bg-ink-700 hover:text-rose-300"
+              className={`${menuItem} text-ink-300 hover:bg-ink-700 hover:text-rose-300`}
             >
               log out
             </button>
@@ -97,7 +101,7 @@ export function AuthBar() {
                 setConfirmDelete(true);
                 close();
               }}
-              className="block w-full px-4 py-2.5 text-left font-mono text-[11px] uppercase tracking-widest text-rose-400 transition hover:bg-rose-500/10 hover:text-rose-300"
+              className={`${menuItem} text-rose-400 hover:bg-rose-500/10 hover:text-rose-300`}
             >
               delete account
             </button>

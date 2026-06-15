@@ -1,7 +1,7 @@
-import { Link2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { useSeo } from '../hooks/useSeo';
+import { Wordmark } from './Wordmark';
 
 // standalone 404 state, reusable for any unmatched route
 export function NotFound({
@@ -18,10 +18,7 @@ export function NotFound({
   return (
     <div className="relative flex flex-1 flex-col">
       <header className="px-6 py-4 sm:px-10">
-        <Link to="/" className="flex items-center gap-2" aria-label="Go to home">
-          <Link2 className="h-4 w-4 text-accent" strokeWidth={2.25} />
-          <span className="display text-xl font-medium tracking-tight">linktrace</span>
-        </Link>
+        <Wordmark />
       </header>
 
       <section className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center px-6 pb-32 text-center">

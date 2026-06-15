@@ -178,11 +178,8 @@ func (c *Cache) Cancel(jobID string) error {
 	return c.rdb.Set(ctx, cancelKey(jobID), "1", seenTTL).Err()
 }
 
-// clears a job's transient Redis state on deletion. First it (re)sets the cancel
-// tombstone: the work queue is shared and can't be selectively purged, so in-flight messages
-// for this job must be skipped by workers (via IsCancelled) instead of resurrecting rows
-// we're about to delete. The tombstone is left to self-expire after seenTTL, by which point
-// the queue has drained. The progress/seen/category keys carry no such risk, deleted outright.
+// clears a job's transient Redis state. The cancel tombstone is (re)set first so in-flight
+// workers skip the job instead of re-creating rows mid-delete; it self-expires after seenTTL.
 func (c *Cache) PurgeJob(jobID string) error {
 	ctx, cancel := c.ctx()
 	defer cancel()

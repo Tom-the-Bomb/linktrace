@@ -1,11 +1,9 @@
 import { type FormEvent } from 'react';
 
-import { Link2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
-
 import { AuthBar } from './AuthBar';
 import { CrawlForm } from './CrawlForm';
 import { CrawlGraphBackdrop } from './CrawlGraphBackdrop';
+import { Wordmark } from './Wordmark';
 
 interface HeroProps {
   url: string;
@@ -25,10 +23,7 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
 
       {/* click-through so the canvas behind catches taps in empty space */}
       <header className="pointer-events-none relative z-10 flex items-center justify-between gap-4 px-6 py-4 sm:px-10 [&_*]:pointer-events-auto">
-        <Link to="/#" className="flex items-center gap-2" aria-label="Go to home">
-          <Link2 className="h-4 w-4 text-accent" strokeWidth={2.25} />
-          <span className="display text-xl font-medium tracking-tight">linktrace</span>
-        </Link>
+        <Wordmark to="/#" />
         <span className="hidden font-mono text-[10px] uppercase tracking-widest text-ink-300 sm:inline">
           v0.1 · distributed crawler
         </span>

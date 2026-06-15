@@ -6,8 +6,6 @@ import (
 )
 
 // runs q and scans every row through scan, collecting the results into a slice.
-// It centralizes the Query -> defer Close -> for rows.Next -> scan -> rows.Err skeleton
-// shared by all the flat-slice list methods.
 func queryRows[T any](db *sql.DB, q string, scan func(*sql.Rows) (T, error), args ...any) ([]T, error) {
 	rows, err := db.Query(q, args...)
 	if err != nil {

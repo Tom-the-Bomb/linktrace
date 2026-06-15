@@ -39,6 +39,7 @@ type Server struct {
 // wires up the store/cache/queue, mounts the routes, and serves until shutdown.
 func main() {
 	cfg := config.Load()
+	auth.SetCookieSecure(cfg.CookieSecure)
 
 	st, err := store.New(cfg.MySQLDSN)
 	if err != nil {
@@ -186,9 +187,8 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[api] job %s STOPPED by user", short(job.ID))
-	// cancelled jobs never complete, so free their lane here (maybeComplete won't)
+	// cancelled jobs never complete, so free the lane and set status here (maybeComplete won't)
 	_ = s.cache.ReleaseShard(job.ID)
-	// cancelled jobs never bump `checked`, so maybeComplete won't fire; set status here
 	_ = s.store.UpdateJobStatus(job.ID, "stopped")
 	writeJSON(w, http.StatusOK, map[string]string{"job_id": job.ID, "status": "stopped"})
 }
@@ -201,8 +201,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.cache.PurgeJob(job.ID); err != nil {
-		// Non-fatal: the tombstone/keys self-expire. Log and still remove the DB rows so the
-		// user-visible delete succeeds rather than failing on a transient Redis hiccup.
+		// non-fatal: keys self-expire; still delete the DB rows so the user-visible delete succeeds
 		log.Printf("[api] job %s purge cache: %v", short(job.ID), err)
 	}
 	if err := s.store.DeleteJob(job.ID); err != nil {

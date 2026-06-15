@@ -12,8 +12,7 @@ export function toneColour(tone?: Tone): string {
 
 export type ScoreTier = 'good' | 'ok' | 'poor';
 
-// is the single source of truth for the SEO score thresholds; both the text
-// and stroke colour maps key off it.
+// SEO score thresholds; the text and stroke colour maps key off this.
 export function scoreTier(score: number | null): ScoreTier {
   if (score === null) return 'poor'; // null has no text/stroke colour of its own; callers handle null first
   if (score >= 80) return 'good';
@@ -39,21 +38,9 @@ export function scoreTextColour(score: number | null): string {
   return SCORE_TEXT[scoreTier(score)];
 }
 
-// is the SVG stroke equivalent of scoreTextColour, for the gauge ring.
+// gauge-ring stroke variant of scoreTextColour.
 export function scoreStrokeColour(score: number): string {
   return SCORE_STROKE[scoreTier(score)];
-}
-
-// returns the repeated "soft chip" recipe (subtle border + tinted fill + bright
-// text) for a given colour family. Used by status/category/placement chips.
-export function chipTone(tone: 'emerald' | 'rose' | 'amber' | 'accent'): string {
-  const map: Record<typeof tone, string> = {
-    emerald: 'border-emerald-400/40 bg-emerald-500/5 text-emerald-300',
-    rose: 'border-rose-400/40 bg-rose-500/5 text-rose-300',
-    amber: 'border-amber-400/40 bg-amber-500/5 text-amber-300',
-    accent: 'border-accent/40 bg-accent/5 text-accent',
-  };
-  return map[tone];
 }
 
 // returns count/total as a rounded percentage, guarding divide-by-zero.

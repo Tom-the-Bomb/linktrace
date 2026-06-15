@@ -5,8 +5,7 @@ import { StatTile } from './ui/StatTile';
 
 // gauge + headline metric left, stats + issues right
 export function OverallReport({ report }: { report: Report }) {
-  const { total_pages, healthy, rotten, avg_seo_score } = report.overall;
-  const top_issues = report.overall.top_issues;
+  const { total_pages, healthy, rotten, avg_seo_score, top_issues } = report.overall;
   const rottenPct = total_pages > 0 ? Math.round((rotten / total_pages) * 100) : 0;
   const healthyPct = total_pages > 0 ? Math.round((healthy / total_pages) * 100) : 0;
 
