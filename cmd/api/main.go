@@ -46,13 +46,13 @@ func main() {
 	}
 	defer st.Close()
 
-	ca, err := cache.New(cfg.RedisAddr)
+	ca, err := cache.New(cfg.RedisAddr, cfg.ShardCount)
 	if err != nil {
 		log.Fatalf("redis: %v", err)
 	}
 	defer ca.Close()
 
-	q, err := queue.New(cfg.RabbitURL)
+	q, err := queue.New(cfg.RabbitURL, cfg.ShardCount)
 	if err != nil {
 		log.Fatalf("rabbitmq: %v", err)
 	}
@@ -151,14 +151,20 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = s.store.UpdateJobStatus(id, "crawling")
-	log.Printf("[api] job %s seeding queue with %s", short(id), seed)
+
+	// pin the crawl to the least-occupied shard lane; every page of this job rides that lane
+	shard, err := s.cache.PlaceJob(id)
+	if err != nil {
+		log.Printf("[api] place job %s: %v", short(id), err) // shard defaults to 0 on error
+	}
+	log.Printf("[api] job %s seeding shard %d with %s", short(id), shard, seed)
 
 	// mark+count before publishing so the seed is counted exactly once
 	if _, err := s.cache.MarkSeen(id, crawler.CanonicalKey(seed)); err != nil {
 		log.Printf("[api] MarkSeen seed: %v", err)
 	}
 	_ = s.cache.IncDiscovered(id)
-	if err := s.queue.PublishPageJob(queue.PageJob{JobID: id, URL: seed, Depth: 0}); err != nil {
+	if err := s.queue.PublishPageJob(queue.PageJob{JobID: id, URL: seed, Depth: 0, Shard: shard}); err != nil {
 		httpError(w, http.StatusInternalServerError, "could not enqueue")
 		return
 	}
@@ -180,6 +186,8 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[api] job %s STOPPED by user", short(job.ID))
+	// cancelled jobs never complete, so free their lane here (maybeComplete won't)
+	_ = s.cache.ReleaseShard(job.ID)
 	// cancelled jobs never bump `checked`, so maybeComplete won't fire; set status here
 	_ = s.store.UpdateJobStatus(job.ID, "stopped")
 	writeJSON(w, http.StatusOK, map[string]string{"job_id": job.ID, "status": "stopped"})

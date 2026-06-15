@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -25,9 +26,10 @@ import (
 )
 
 const (
-	maxRetries       = 3
-	checkTimeout     = 10 * time.Second // per-page fetch timeout
-	rateLimitBackoff = time.Second      // pause before requeueing a rate-limited job
+	maxRetries        = 3
+	checkTimeout      = 10 * time.Second // per-page fetch timeout
+	rateLimitBackoff  = time.Second      // pause before requeueing a rate-limited job
+	maxRetryAfterWait = 15 * time.Second // honor a 429 Retry-After up to this; longer → record as blocked
 )
 
 // starts the page-fetch workers and the result consumers, then waits for shutdown.
@@ -40,13 +42,13 @@ func main() {
 	}
 	defer st.Close()
 
-	ca, err := cache.New(cfg.RedisAddr)
+	ca, err := cache.New(cfg.RedisAddr, cfg.ShardCount)
 	if err != nil {
 		log.Fatalf("redis: %v", err)
 	}
 	defer ca.Close()
 
-	q, err := queue.New(cfg.RabbitURL)
+	q, err := queue.New(cfg.RabbitURL, cfg.ShardCount)
 	if err != nil {
 		log.Fatalf("rabbitmq: %v", err)
 	}
@@ -60,11 +62,11 @@ func main() {
 	var wg sync.WaitGroup
 	var channels []*amqp.Channel
 
-	pageCh, err := startPageWorkers(w, &wg)
+	pageChs, err := startPageWorkers(w, &wg)
 	if err != nil {
 		log.Fatalf("page workers: %v", err)
 	}
-	channels = append(channels, pageCh)
+	channels = append(channels, pageChs...)
 
 	consumers := []struct {
 		name    string
@@ -82,7 +84,8 @@ func main() {
 		channels = append(channels, ch)
 	}
 
-	log.Printf("worker running: %d page goroutines + %d result consumers", cfg.WorkerCount, len(consumers))
+	log.Printf("worker running: %d page goroutines across %d shards + %d result consumers",
+		cfg.WorkerCount, cfg.ShardCount, len(consumers))
 
 	// graceful shutdown: closing channels closes their delivery chans, ranging goroutines exit
 	stop := make(chan os.Signal, 1)
@@ -104,23 +107,33 @@ type worker struct {
 	chk   *checker.Checker
 }
 
-// launches cfg.WorkerCount goroutines, all consuming the same delivery channel.
-// Prefetch = WorkerCount applies broker-side backpressure (fair dispatch + bounded in-flight).
-func startPageWorkers(w *worker, wg *sync.WaitGroup) (*amqp.Channel, error) {
-	deliveries, ch, err := w.queue.Consume(queue.WorkQueue, w.cfg.WorkerCount)
-	if err != nil {
-		return nil, err
+// launches WorkerCount/ShardCount goroutines per shard lane, each consuming only its own
+// pages.<n> queue. A job is pinned to one lane, so a single crawl can occupy at most one lane's
+// workers — bounding it to ~1/ShardCount of the pool. Prefetch = per-lane goroutines keeps each
+// lane's broker-side backpressure matched to its workers.
+func startPageWorkers(w *worker, wg *sync.WaitGroup) ([]*amqp.Channel, error) {
+	perLane := w.cfg.WorkerCount / w.cfg.ShardCount
+	if perLane < 1 {
+		perLane = 1
 	}
-	for i := 0; i < w.cfg.WorkerCount; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for d := range deliveries {
-				w.processPage(d)
-			}
-		}()
+	var channels []*amqp.Channel
+	for shard := 0; shard < w.cfg.ShardCount; shard++ {
+		deliveries, ch, err := w.queue.Consume(queue.ShardQueue(shard), perLane)
+		if err != nil {
+			return channels, err
+		}
+		for i := 0; i < perLane; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for d := range deliveries {
+					w.processPage(d)
+				}
+			}()
+		}
+		channels = append(channels, ch)
 	}
-	return ch, nil
+	return channels, nil
 }
 
 // is the per-message decision tree: rate-limit -> fetch -> retry/ack/dead-letter.
@@ -155,18 +168,27 @@ func (w *worker) processPage(d amqp.Delivery) {
 
 	res := w.chk.Check(job.URL)
 
+	// 429: the origin asked us to slow down. If Retry-After is short enough to wait out, back off
+	// and requeue; a missing/oversized Retry-After falls through and is recorded as blocked.
+	if res.StatusCode == http.StatusTooManyRequests && job.RetryCount < maxRetries {
+		wait := res.RetryAfter
+		if wait <= 0 {
+			wait = rateLimitBackoff
+		}
+		if wait <= maxRetryAfterWait {
+			log.Printf("[worker] 429 on %s, backing off %s (retry %d/%d)",
+				job.URL, wait, job.RetryCount+1, maxRetries)
+			time.Sleep(wait)
+			w.requeue(d, job)
+			return
+		}
+	}
+
 	// transient failure: republish with incremented retry count
 	if isTransient(res.ErrorType) {
 		if job.RetryCount < maxRetries {
 			log.Printf("[worker] retry %d/%d (%s) %s", job.RetryCount+1, maxRetries, res.ErrorType, job.URL)
-			retry := job
-			retry.RetryCount++
-			if err := w.queue.PublishPageJob(retry); err != nil {
-				log.Printf("[worker] requeue failed: %v", err)
-				_ = d.Nack(false, true)
-				return
-			}
-			_ = d.Ack(false)
+			w.requeue(d, job)
 			return
 		}
 		// retries exhausted: record as rotten, then dead-letter for inspection
@@ -189,6 +211,18 @@ func (w *worker) processPage(d amqp.Delivery) {
 			res.StatusCode, res.ResponseTime, job.URL, len(links))
 	} else {
 		log.Printf("[worker] rotten %s  %dms  %s", res.ErrorType, res.ResponseTime, job.URL)
+	}
+	_ = d.Ack(false)
+}
+
+// requeue republishes job with one more retry and acks the current delivery; on publish
+// failure it nacks for redelivery instead. Either way the delivery is settled.
+func (w *worker) requeue(d amqp.Delivery, job queue.PageJob) {
+	job.RetryCount++
+	if err := w.queue.PublishPageJob(job); err != nil {
+		log.Printf("[worker] requeue %s failed: %v", job.URL, err)
+		_ = d.Nack(false, true)
+		return
 	}
 	_ = d.Ack(false)
 }
@@ -225,6 +259,14 @@ func (w *worker) publishResult(job queue.PageJob, res checker.CheckResult, links
 
 	if err := w.queue.PublishResult(msg); err != nil {
 		log.Printf("publish result failed: %v", err)
+	}
+}
+
+// publishChild counts a freshly-discovered page and publishes it onto its job's shard lane.
+func (w *worker) publishChild(child queue.PageJob) {
+	_ = w.cache.IncDiscovered(child.JobID)
+	if err := w.queue.PublishPageJob(child); err != nil {
+		log.Printf("[worker] publish child %s: %v", child.URL, err)
 	}
 }
 
@@ -271,12 +313,7 @@ func (w *worker) enqueueLinks(job queue.PageJob, res checker.CheckResult) []stri
 			}
 		}
 
-		_ = w.cache.IncDiscovered(job.JobID)
-		_ = w.queue.PublishPageJob(queue.PageJob{
-			JobID: job.JobID,
-			URL:   link,
-			Depth: childDepth,
-		})
+		w.publishChild(queue.PageJob{JobID: job.JobID, URL: link, Depth: childDepth, Shard: job.Shard})
 		discovered = append(discovered, link)
 	}
 	return discovered
@@ -385,6 +422,7 @@ func (rb *reportBuilder) maybeComplete(jobID string) error {
 		}
 		log.Printf("[report] job %s COMPLETE: %d pages (%d healthy, %d rotten)",
 			jobID[:8], prog["checked"], prog["healthy"], prog["rotten"])
+		_ = rb.cache.ReleaseShard(jobID) // free the lane for new crawls
 		return rb.store.UpdateJobStatus(jobID, "complete")
 	}
 	return nil

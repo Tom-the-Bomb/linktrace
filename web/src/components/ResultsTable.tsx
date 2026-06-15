@@ -93,7 +93,7 @@ export function ResultsTable({
           </span>
           <span className="display text-2xl font-light tabular-nums">{rows.length}</span>
         </div>
-        <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
+        <div className="flex flex-1 flex-wrap items-center justify-start gap-3 sm:justify-end">
           <div className="relative w-full max-w-xs sm:w-64">
             <Search
               className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-ink-400"

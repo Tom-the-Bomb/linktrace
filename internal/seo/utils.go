@@ -13,12 +13,13 @@ import (
 
 // SEO thresholds and score penalties.
 const (
-	titleMaxLen    = 60
-	titleMinLen    = 10
-	metaDescMaxLen = 160
-	metaDescMinLen = 50
-	minAltRatio    = 0.9 // share of images that must have alt text
-	minDimRatio    = 0.8 // share of images that must set width+height
+	titleMaxLen     = 60
+	titleMinLen     = 10
+	metaDescMaxLen  = 160
+	metaDescMinLen  = 50
+	minAltRatio     = 0.9 // share of images that must have alt text
+	minDimRatio     = 0.8 // share of images that must set width+height
+	minVisibleWords = 20  // below this, a 2xx HTML page reads as a JS shell with no real content
 
 	penaltyError   = 20
 	penaltyWarning = 10
@@ -121,10 +122,21 @@ func handleMeta(a *Audit, n *html.Node) {
 //	error   = breaks indexing (missing title, multiple H1, noindex)
 //	warning = suboptimal (too-long title, missing meta desc, no canonical)
 //	info    = nice-to-have (no OG, no JSON-LD, no viewport)
-func findIssues(a *Audit) []Issue {
+func findIssues(a *Audit, visibleWords int) []Issue {
 	var issues []Issue
 	add := func(code, msg, sev string) {
 		issues = append(issues, Issue{Code: code, Message: msg, Severity: sev})
+	}
+
+	// SPA shell = almost no text AND no rendered structure; the structure gate spares
+	// sparse-but-real pages like image portfolios (few words, many <img>/links).
+	hasStructure := a.ImagesTotal > 0 ||
+		a.LinksInternal+a.LinksExternal > 0 ||
+		a.H1Count+a.H2Count+a.H3Count > 0
+	if visibleWords < minVisibleWords && !hasStructure {
+		add("thin_content",
+			"Little server-rendered content; the page likely requires JavaScript (invisible to crawlers)",
+			SeverityError)
 	}
 
 	if a.Title == "" {
@@ -239,6 +251,19 @@ func score(issues []Issue) int {
 		}
 	}
 	return max(0, s)
+}
+
+// countWords counts whitespace-separated tokens without allocating a slice (unlike strings.Fields).
+func countWords(s string) int {
+	n, inWord := 0, false
+	for _, r := range s {
+		if unicode.IsSpace(r) {
+			inWord = false
+		} else if !inWord {
+			inWord, n = true, n+1
+		}
+	}
+	return n
 }
 
 // lowercases s and splits it into runs of letters.

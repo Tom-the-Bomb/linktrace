@@ -188,10 +188,11 @@ func AuditHTML(body []byte, pageURL string) Audit {
 		return true
 	})
 
+	text := textBuf.String()
 	a.TopKeywords, a.PrimaryKeyword, a.KeywordInTitle, a.KeywordInH1, a.KeywordInURL =
-		AnalyzeKeywords(textBuf.String(), a.Title, firstH1, pageURL)
+		AnalyzeKeywords(text, a.Title, firstH1, pageURL)
 
-	a.Issues = findIssues(&a)
+	a.Issues = findIssues(&a, countWords(text))
 	a.Score = score(a.Issues)
 	return a
 }

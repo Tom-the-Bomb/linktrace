@@ -67,7 +67,7 @@ export function Categories({ categories }: { categories: CategoryReport[] }) {
   }
 
   const controls = (
-    <div className="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:ml-auto sm:justify-end">
       <div className="flex items-center gap-3">
         {(['all', 'healthy', 'mixed', 'rotten'] as Filter[]).map((f) => (
           <TextChip key={f} active={filter === f} onClick={() => setFilterReset(f)}>
@@ -111,7 +111,7 @@ export function Categories({ categories }: { categories: CategoryReport[] }) {
 
 function Divider() {
   return (
-    <span aria-hidden="true" className="font-mono text-[10px] text-ink-400">
+    <span aria-hidden="true" className="hidden font-mono text-[10px] text-ink-400 sm:inline">
       ·
     </span>
   );
@@ -168,19 +168,20 @@ function CategoryRow({ cat, index }: { cat: CategoryReport; index: number }) {
   const style = patternStyle[cat.pattern] ?? patternStyle.mixed;
 
   return (
-    <li className="grid grid-cols-12 items-center gap-4 py-5">
-      <span className="col-span-1 font-mono text-[10px] uppercase tracking-widest text-ink-300">
+    <li className="flex items-center gap-4 py-5">
+      <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-ink-300">
         {String(index + 1).padStart(2, '0')}
       </span>
 
-      <div className="col-span-5 min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="display truncate text-xl font-light">{cat.category}</div>
         <div className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-ink-300">
           {cat.total_pages} pages · {cat.rotten_pages} rotten · seo {cat.avg_seo_score}
         </div>
       </div>
 
-      <div className="col-span-4">
+      {/* progress bar is supplementary — hidden on mobile so the row never overflows */}
+      <div className="hidden w-32 shrink-0 sm:block lg:w-48">
         <div className="h-px w-full overflow-hidden bg-ink-500">
           <div className={`h-full ${style.bar}`} style={{ width: `${rotPct}%` }} />
         </div>
@@ -189,9 +190,9 @@ function CategoryRow({ cat, index }: { cat: CategoryReport; index: number }) {
         </div>
       </div>
 
-      <div className="col-span-2 text-right">
-        <span className={`chip ${style.chip}`}>{cat.pattern.replace('_', ' ')}</span>
-      </div>
+      <span className={`chip shrink-0 whitespace-nowrap ${style.chip}`}>
+        {cat.pattern.replace('_', ' ')}
+      </span>
     </li>
   );
 }

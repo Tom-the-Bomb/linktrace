@@ -11,12 +11,14 @@ type Config struct {
 	MaxPerCategory int // soft cap per URL category like /blog (0 = unlimited)
 	RatePerMin     int
 	WorkerCount    int
+	ShardCount     int // work-queue lanes; a crawl is pinned to one lane
 	FrontendOrigin string
 	CookieSecure   bool // session cookie Secure attribute (true behind HTTPS in prod)
 }
 
 // reads the configuration from the environment, falling back to dev-friendly defaults.
 func Load() Config {
+	loadDotEnv(".env") // dev convenience; real env (compose/shell) already takes precedence
 	return Config{
 		MySQLDSN:       env("MYSQL_DSN", "linktrace:linktrace@tcp(localhost:3306)/linktrace?parseTime=true"),
 		RedisAddr:      env("REDIS_ADDR", "localhost:6379"),
@@ -27,6 +29,7 @@ func Load() Config {
 		MaxPerCategory: envInt("MAX_PER_CATEGORY", 1000),
 		RatePerMin:     envInt("RATE_PER_MIN", 1000),
 		WorkerCount:    envInt("WORKER_COUNT", 100),
+		ShardCount:     envInt("SHARD_COUNT", 5),
 		FrontendOrigin: env("FRONTEND_ORIGIN", "http://localhost:5173"),
 		CookieSecure:   envBool("COOKIE_SECURE", false),
 	}

@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"strconv"
 	"time"
 )
 
@@ -26,5 +27,6 @@ func progressKey(id string) string      { return "progress:" + id }
 func seenKey(id string) string          { return "seen:" + id }
 func ratelimitKey(domain string) string { return "ratelimit:" + domain }
 func catCountKey(jobID string) string   { return "catcount:" + jobID }
+func shardSetKey(i int) string          { return "shard:" + strconv.Itoa(i) + ":jobs" }
 func cancelKey(jobID string) string     { return "cancel:" + jobID }
 func sessionKey(sid string) string      { return "session:" + sid }

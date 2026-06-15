@@ -18,10 +18,10 @@ export function OverallReport({ report }: { report: Report }) {
         subtitle="Score, totals, recurring problems."
       />
 
-      <div className="grid grid-cols-1 gap-12 lg:grid-cols-12">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
         {/* featured score + verdict */}
         <div className="lg:col-span-7">
-          <div className="flex items-center gap-10">
+          <div className="flex items-center gap-6 sm:gap-10">
             <ScoreGauge score={avg_seo_score} />
             <div>
               <span className="eyebrow">avg SEO score</span>
@@ -39,7 +39,7 @@ export function OverallReport({ report }: { report: Report }) {
         </div>
 
         {/* recurring issues column */}
-        <aside className="border-l border-ink-500/60 lg:col-span-5 lg:pl-10">
+        <aside className="border-t border-ink-500/60 pt-8 lg:col-span-5 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
           <span className="eyebrow">recurring issues</span>
           {top_issues.length === 0 ? (
             <p className="mt-6 font-mono text-xs text-ink-300">No recurring issues detected.</p>

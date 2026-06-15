@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { ChevronRight, Trash2 } from 'lucide-react';
+import { ArrowRight, ChevronRight, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { type HistoryEntry, type HistoryRun, deleteJob, getHistory } from '../api';
@@ -148,10 +148,10 @@ function HistoryRow({
     <li>
       <div
         onClick={multi ? onToggle : undefined}
-        className={`group grid grid-cols-12 items-center gap-4 py-4 pr-4 transition hover:bg-ink-700/30 ${multi ? 'cursor-pointer' : ''}`}
+        className={`group flex items-center gap-3 py-4 pl-1 pr-3 transition hover:bg-ink-700/30 ${multi ? 'cursor-pointer' : ''}`}
       >
         {/* chevron: blank when single-run, lights up on row hover */}
-        <div className="col-span-1 flex justify-center">
+        <div className="flex w-4 shrink-0 justify-center">
           {multi ? (
             <ChevronRight
               className={`h-4 w-4 text-ink-300 transition-transform group-hover:text-accent ${expanded ? 'rotate-90' : ''}`}
@@ -159,26 +159,27 @@ function HistoryRow({
             />
           ) : null}
         </div>
-        {/* inline-block + max-w-full keeps the hover hit-box only as wide as the text */}
-        <div className="col-span-4 min-w-0">
+        {/* url with run-count + date stacked beneath; truncates so the row never overflows */}
+        <div className="min-w-0 flex-1">
           <a
             href={entry.url}
             target="_blank"
             rel="noreferrer"
             onClick={(ev) => ev.stopPropagation()}
-            className="inline-block max-w-full truncate align-middle font-mono text-sm text-paper hover:text-accent"
+            className="block truncate font-mono text-sm text-paper hover:text-accent"
           >
             {entry.url}
           </a>
+          <div className="mt-1 flex items-center gap-2 font-mono text-[10px] text-ink-300">
+            <span className="uppercase tracking-widest">
+              {entry.crawl_count}
+              {entry.crawl_count === 1 ? ' run' : ' runs'}
+            </span>
+            <span className="text-ink-500">·</span>
+            <span className="text-ink-400">{formatDate(entry.last_crawled)}</span>
+          </div>
         </div>
-        <div className="col-span-2 font-mono text-[10px] uppercase tracking-widest text-ink-300">
-          {entry.crawl_count}
-          {entry.crawl_count === 1 ? ' run' : ' runs'}
-        </div>
-        <div className="col-span-2 font-mono text-[10px] text-ink-300">
-          {formatDate(entry.last_crawled)}
-        </div>
-        <div className="col-span-3 flex items-center justify-end gap-3">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           {/* targets the latest run; older runs are deleted individually from RunRows below */}
           <DeleteButton
             onClick={(ev) => {
@@ -197,15 +198,17 @@ function HistoryRow({
               ev.stopPropagation();
               onOpen(entry.last_job_id);
             }}
-            className="border border-ink-500/70 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-ink-300 transition hover:border-accent hover:text-accent"
+            aria-label={multi ? 'View latest crawl' : 'View report'}
+            className="flex shrink-0 items-center whitespace-nowrap border border-ink-500/70 px-2 py-1.5 font-mono text-[10px] uppercase tracking-widest text-ink-300 transition hover:border-accent hover:text-accent sm:px-3"
           >
-            {multi ? 'view latest' : 'view report'}
+            <span className="hidden sm:inline">{multi ? 'view latest' : 'view report'}</span>
+            <ArrowRight className="size-3.5 sm:hidden" strokeWidth={2} />
           </button>
         </div>
       </div>
 
       {multi && expanded && (
-        <ul className="ml-[calc(8.333%+1rem)] border-l border-ink-500/60 py-1 pl-4">
+        <ul className="ml-8 border-l border-ink-500/60 py-1 pl-4">
           {entry.runs.map((run, i) => (
             <RunRow
               key={run.job_id}
@@ -238,11 +241,11 @@ function RunRow({
   onRequestDelete: () => void;
 }) {
   return (
-    <li className="group grid grid-cols-12 items-center gap-4 py-2 pr-4 transition hover:bg-ink-700/30">
-      <div className="col-span-1 font-mono text-[10px] tabular-nums text-ink-400">
+    <li className="group flex items-center gap-3 py-2 pr-3 transition hover:bg-ink-700/30">
+      <span className="shrink-0 font-mono text-[10px] tabular-nums text-ink-400">
         #{String(index).padStart(2, '0')}
-      </div>
-      <div className="col-span-5 font-mono text-[11px] text-ink-300">
+      </span>
+      <div className="min-w-0 flex-1 font-mono text-[11px] text-ink-300">
         {formatDate(run.created_at, true)}
         {isLatest && (
           <span className="ml-2 font-mono text-[9px] uppercase tracking-widest text-accent/70">
@@ -250,7 +253,7 @@ function RunRow({
           </span>
         )}
       </div>
-      <div className="col-span-6 flex items-center justify-end gap-3">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <DeleteButton
           small
           onClick={(ev) => {
@@ -264,9 +267,11 @@ function RunRow({
             ev.stopPropagation();
             onOpen();
           }}
-          className="btn-ghost"
+          aria-label="View report"
+          className="btn-ghost flex items-center whitespace-nowrap"
         >
-          view report →
+          <span className="hidden sm:inline">view report →</span>
+          <ArrowRight className="size-3.5 sm:hidden" strokeWidth={2} />
         </button>
       </div>
     </li>
@@ -289,7 +294,7 @@ function DeleteButton({
       onClick={onClick}
       aria-label="Delete crawl"
       title="Delete crawl"
-      className={`flex items-center text-ink-400 opacity-0 transition hover:text-rose-300 focus-visible:opacity-100 group-hover:opacity-100 ${className}`}
+      className={`flex items-center text-ink-400 opacity-100 transition hover:text-rose-300 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 ${className}`}
     >
       <Trash2 className={small ? 'h-3.5 w-3.5 translate-x-0.5' : 'h-4 w-4'} strokeWidth={2} />
     </button>
@@ -306,14 +311,30 @@ const STATUS_STYLES: Record<string, string> = {
   stopped: 'border-amber-400/40 text-amber-300',
 };
 
+// dot colour mirrors STATUS_STYLES, used for the compact mobile indicator
+const STATUS_DOT: Record<string, string> = {
+  complete: 'bg-emerald-400',
+  crawling: 'bg-accent',
+  checking: 'bg-accent',
+  pending: 'bg-ink-400',
+  failed: 'bg-rose-400',
+  stopped: 'bg-amber-400',
+};
+
 function StatusBadge({ status }: { status?: string }) {
   if (!status) return null;
   const cls = STATUS_STYLES[status] ?? 'border-ink-500/70 text-ink-300';
+  const dot = STATUS_DOT[status] ?? 'bg-ink-400';
   return (
-    <span
-      className={`inline-block whitespace-nowrap border px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest ${cls}`}
-    >
-      {status}
-    </span>
+    <>
+      {/* mobile: colour-coded dot to save horizontal space */}
+      <span title={status} className={`inline-block size-2 shrink-0 rounded-full sm:hidden ${dot}`} />
+      {/* desktop: full labelled badge */}
+      <span
+        className={`hidden whitespace-nowrap border px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest sm:inline-block ${cls}`}
+      >
+        {status}
+      </span>
+    </>
   );
 }

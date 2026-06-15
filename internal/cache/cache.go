@@ -1,5 +1,6 @@
 // Package cache wraps Redis for the crawler's transient state: live progress counters, the
-// per-job seen-set, per-domain rate limits, category caps, cancellation flags, and sessions.
+// per-job seen-set, per-domain rate limits, category caps, shard placement, cancellation
+// flags, and sessions.
 // Key builders and small helpers live in utils.go.
 package cache
 
@@ -14,12 +15,15 @@ import (
 )
 
 type Cache struct {
-	rdb *redis.Client
+	rdb    *redis.Client
+	shards int // number of work-queue lanes, for shard placement
 }
 
 const (
 	progressTTL = 2 * time.Hour
 	seenTTL     = 1 * time.Hour
+	// shardJobTTL outlives a crawl; expires leaked lane entries so a dead job can't wedge a lane.
+	shardJobTTL = 3 * time.Hour
 	// sessionTTL mirrors the cookie lifetime; auth.SessionTTL is the single source of truth.
 	sessionTTL = auth.SessionTTL
 )
@@ -40,8 +44,12 @@ const (
 	cancelCheckTimeout = 1 * time.Second
 )
 
-// connects to Redis at addr and pings it to verify the connection.
-func New(addr string) (*Cache, error) {
+// connects to Redis at addr and pings it to verify the connection. shards is the number of
+// work-queue lanes used for shard placement.
+func New(addr string, shards int) (*Cache, error) {
+	if shards < 1 {
+		shards = 1
+	}
 	rdb := redis.NewClient(&redis.Options{
 		Addr: addr,
 	})
@@ -53,7 +61,7 @@ func New(addr string) (*Cache, error) {
 		return nil, err
 	}
 
-	return &Cache{rdb: rdb}, nil
+	return &Cache{rdb: rdb, shards: shards}, nil
 }
 
 // closes the Redis client.
@@ -181,7 +189,10 @@ func (c *Cache) PurgeJob(jobID string) error {
 	if err := c.rdb.Set(ctx, cancelKey(jobID), "1", seenTTL).Err(); err != nil {
 		return err
 	}
-	return c.rdb.Del(ctx, progressKey(jobID), seenKey(jobID), catCountKey(jobID)).Err()
+	if err := c.rdb.Del(ctx, progressKey(jobID), seenKey(jobID), catCountKey(jobID)).Err(); err != nil {
+		return err
+	}
+	return c.ReleaseShard(jobID) // freeing the lane is part of tearing the job down
 }
 
 // reports whether jobID's cancel flag is set.
@@ -215,4 +226,49 @@ func (c *Cache) SeenCount(jobID string) (int, error) {
 		return 0, err
 	}
 	return int(size), nil
+}
+
+// placeScript assigns a new job to the least-occupied shard lane and returns its index.
+// Each lane is a sorted set of in-progress job ids scored by expiry; the script first evicts
+// expired entries (self-healing if a job dies without releasing), then picks the lane with the
+// fewest live jobs and adds this one. Done in one eval so concurrent placements can't both
+// claim the same empty lane. KEYS=[shard:0:jobs, ...]; ARGV=[now, expiry, jobID].
+var placeScript = redis.NewScript(`
+local best, bestCount = 1, -1
+for i = 1, #KEYS do
+  redis.call('ZREMRANGEBYSCORE', KEYS[i], '-inf', ARGV[1])
+  local c = redis.call('ZCARD', KEYS[i])
+  if bestCount < 0 or c < bestCount then
+    best, bestCount = i, c
+  end
+end
+redis.call('ZADD', KEYS[best], ARGV[2], ARGV[3])
+return best - 1
+`)
+
+// PlaceJob pins jobID to the least-occupied shard lane and returns its index. The lane membership
+// expires after shardJobTTL so a crash that skips ReleaseShard can't wedge a lane forever.
+func (c *Cache) PlaceJob(jobID string) (int, error) {
+	ctx, cancel := c.ctx()
+	defer cancel()
+	keys := make([]string, c.shards)
+	for i := range keys {
+		keys[i] = shardSetKey(i)
+	}
+	now := time.Now().Unix()
+	expiry := now + int64(shardJobTTL.Seconds())
+	return placeScript.Run(ctx, c.rdb, keys, now, expiry, jobID).Int()
+}
+
+// ReleaseShard frees jobID's lane slot once the crawl ends. It removes from every lane (the id
+// lives in only one) so the caller needn't know which shard the job landed on.
+func (c *Cache) ReleaseShard(jobID string) error {
+	ctx, cancel := c.ctx()
+	defer cancel()
+	pipe := c.rdb.Pipeline()
+	for i := 0; i < c.shards; i++ {
+		pipe.ZRem(ctx, shardSetKey(i), jobID)
+	}
+	_, err := pipe.Exec(ctx)
+	return err
 }

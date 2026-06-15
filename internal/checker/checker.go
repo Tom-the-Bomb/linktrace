@@ -22,6 +22,7 @@ const (
 	ErrSoft404      = "soft_404"
 	ErrHTTP4xx      = "http_4xx"
 	ErrServer5xx    = "server_error"
+	ErrBlocked      = "blocked" // anti-bot wall (429, or 403/503 challenge), not real rot
 	ErrUnknown      = "unknown"
 )
 
@@ -39,6 +40,7 @@ type CheckResult struct {
 	ContentType   string
 	Body          []byte
 	FinalURL      string
+	RetryAfter    time.Duration // parsed Retry-After header on a 429 (0 if absent/unparseable)
 }
 
 // holds only the per-request timeout; each Check builds its own client so the
@@ -63,7 +65,7 @@ func (c *Checker) Check(rawURL string) CheckResult {
 		res.ErrorType = ErrUnknown // malformed URL / bad scheme, not a DNS failure
 		return res
 	}
-	req.Header.Set("User-Agent", httpx.CheckerUserAgent)
+	httpx.SetBrowserHeaders(req)
 
 	var chain []string
 	client := &http.Client{
@@ -93,6 +95,9 @@ func (c *Checker) Check(rawURL string) CheckResult {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 
 	switch {
+	case looksBlocked(resp.StatusCode, resp.Header, body):
+		res.ErrorType = ErrBlocked
+		res.RetryAfter = parseRetryAfter(resp.Header.Get("Retry-After"))
 	case resp.StatusCode >= 500:
 		res.ErrorType = ErrServer5xx
 	case resp.StatusCode >= 400:

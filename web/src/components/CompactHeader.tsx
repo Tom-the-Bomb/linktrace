@@ -29,16 +29,22 @@ export function CompactHeader({
 }: CompactHeaderProps) {
   return (
     <header className="sticky top-0 z-30 border-b border-ink-500/70 bg-ink-900/85 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-4 sm:px-10">
-        <Link to="/" className="flex items-center gap-2" aria-label="Go to home">
-          <Link2 className="h-4 w-4 text-accent" strokeWidth={2.25} />
-          <span className="display text-lg font-medium tracking-tight">linktrace</span>
-        </Link>
-        {jobId && (
-          <span className="hidden font-mono text-[10px] uppercase tracking-widest text-ink-300 sm:inline">
-            / job · {jobId.slice(0, 8)}
-          </span>
-        )}
+      <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-10 sm:py-4">
+        {/* mobile: logo left + auth right on their own line; desktop: dissolve into the row */}
+        <div className="flex items-center justify-between gap-3 sm:contents">
+          <Link to="/" className="flex items-center gap-2" aria-label="Go to home">
+            <Link2 className="h-4 w-4 text-accent" strokeWidth={2.25} />
+            <span className="display text-lg font-medium tracking-tight">linktrace</span>
+          </Link>
+          {jobId && (
+            <span className="hidden font-mono text-[10px] uppercase tracking-widest text-ink-300 sm:inline">
+              / job · {jobId.slice(0, 8)}
+            </span>
+          )}
+          <div className="sm:order-last sm:ml-2">
+            <AuthBar />
+          </div>
+        </div>
         <CrawlForm
           variant="compact"
           url={url}
@@ -60,10 +66,6 @@ export function CompactHeader({
             </button>
           )}
         </CrawlForm>
-
-        <div className="ml-2">
-          <AuthBar />
-        </div>
       </div>
     </header>
   );

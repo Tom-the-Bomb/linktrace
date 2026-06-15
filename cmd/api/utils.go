@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -42,12 +43,23 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-// sets CORS headers for the Vite dev server. Cookies require an EXACT origin
+// sets CORS headers for the configured frontend origin(s). origins is a comma-separated
+// allowlist (e.g. "http://localhost:5173,http://10.0.0.168:5173" for LAN mobile testing); the
+// request's Origin is echoed back only when it's on the list. Cookies require an EXACT origin
 // (never "*") plus Allow-Credentials, and OPTIONS preflights short-circuit with 204.
-func corsMiddleware(origin string) func(http.Handler) http.Handler {
+func corsMiddleware(origins string) func(http.Handler) http.Handler {
+	allowed := map[string]bool{}
+	for _, o := range strings.Split(origins, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			allowed[o] = true
+		}
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
+			if origin := r.Header.Get("Origin"); allowed[origin] {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Add("Vary", "Origin")
+			}
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")

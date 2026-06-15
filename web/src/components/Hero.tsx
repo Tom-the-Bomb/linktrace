@@ -24,17 +24,15 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
       </div>
 
       {/* click-through so the canvas behind catches taps in empty space */}
-      <header className="pointer-events-none relative z-10 grid grid-cols-3 items-center gap-4 px-6 py-4 sm:px-10 [&_*]:pointer-events-auto">
-        <Link to="/#" className="flex items-center gap-2 justify-self-start" aria-label="Go to home">
+      <header className="pointer-events-none relative z-10 flex items-center justify-between gap-4 px-6 py-4 sm:px-10 [&_*]:pointer-events-auto">
+        <Link to="/#" className="flex items-center gap-2" aria-label="Go to home">
           <Link2 className="h-4 w-4 text-accent" strokeWidth={2.25} />
           <span className="display text-xl font-medium tracking-tight">linktrace</span>
         </Link>
-        <span className="hidden justify-self-center font-mono text-[10px] uppercase tracking-widest text-ink-300 sm:inline">
+        <span className="hidden font-mono text-[10px] uppercase tracking-widest text-ink-300 sm:inline">
           v0.1 · distributed crawler
         </span>
-        <div className="justify-self-end">
-          <AuthBar />
-        </div>
+        <AuthBar />
       </header>
 
       <section className="pointer-events-none relative z-10 mx-auto flex max-w-5xl flex-col items-center px-6 pb-40 pt-24 sm:pt-32 [&_article]:pointer-events-auto [&_form]:pointer-events-auto [&_h1]:pointer-events-auto [&_p]:pointer-events-auto [&_span]:pointer-events-auto">
@@ -51,7 +49,13 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
           an interactive graph.
         </p>
 
-        <CrawlForm url={url} setUrl={setUrl} onSubmit={onSubmit} submitting={submitting} error={error} />
+        <CrawlForm
+          url={url}
+          setUrl={setUrl}
+          onSubmit={onSubmit}
+          submitting={submitting}
+          error={error}
+        />
 
         <Features />
       </section>
@@ -63,19 +67,19 @@ const FEATURES = [
   {
     n: '01',
     title: 'Crawl',
-    body: 'A self-expanding BFS feeds itself through RabbitMQ. Eight workers, deduped via Redis, rate-limited per domain.',
+    body: 'Enter your homepage and we map your entire site automatically, following every link so no page goes unchecked.',
     offset: 'sm:translate-y-0',
   },
   {
     n: '02',
     title: 'Classify',
-    body: 'DNS failure, timeout, SSL error, soft 404, 4xx/5xx, redirect loop, every dead link gets a reason, not just a status code.',
+    body: 'We find every broken link and tell you exactly why it broke, so you know what to fix instead of guessing.',
     offset: 'sm:translate-y-10',
   },
   {
     n: '03',
     title: 'Audit',
-    body: 'Healthy pages get a full SEO read: title, meta, headings, structured data, on-page keywords, and a weighted score.',
+    body: 'Every page gets a clear SEO score and the specific changes that help it climb the search rankings.',
     offset: 'sm:translate-y-20',
   },
 ];

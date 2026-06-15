@@ -26,14 +26,14 @@ export function CrawlForm({
 }: Props) {
   if (variant === 'compact') {
     return (
-      <form onSubmit={onSubmit} className="ml-auto flex max-w-md flex-1 gap-2">
+      <form onSubmit={onSubmit} className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto sm:max-w-md sm:flex-1">
         <input
           type="text"
           required
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="new domain…"
-          className="input flex-1 px-3 py-2 text-xs"
+          className="input h-[34px] flex-1 px-3 text-xs"
         />
         <button
           type="submit"

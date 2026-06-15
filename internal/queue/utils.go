@@ -15,10 +15,12 @@ func (q *Queue) declareTopology() error {
 		return err
 	}
 
-	// work queue dead-letters into DeadFanout on nack(requeue=false)
+	// one work-queue lane per shard; each dead-letters into DeadFanout on nack(requeue=false)
 	workArgs := amqp.Table{"x-dead-letter-exchange": DeadFanout}
-	if _, err := q.ch.QueueDeclare(WorkQueue, true, false, false, false, workArgs); err != nil {
-		return err
+	for i := 0; i < q.shards; i++ {
+		if _, err := q.ch.QueueDeclare(ShardQueue(i), true, false, false, false, workArgs); err != nil {
+			return err
+		}
 	}
 
 	// results fanout + bound consumer queues
