@@ -16,7 +16,7 @@ export function ConfirmDeleteDialog({ url, startedAt, busy, error, onConfirm, on
   return (
     <ConfirmDialog
       eyebrow="delete crawl"
-      title="This can’t be undone"
+      title="This can't be undone"
       message="Permanently delete this crawl and all of its results. If it's still running, it will be stopped and its workers freed."
       confirmLabel="delete"
       busyLabel="deleting…"
