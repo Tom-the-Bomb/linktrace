@@ -24,9 +24,6 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
       {/* click-through so the canvas behind catches taps in empty space */}
       <header className="pointer-events-none relative z-10 flex items-center justify-between gap-4 px-6 py-4 sm:px-10 [&_*]:pointer-events-auto">
         <Wordmark to="/#" />
-        <span className="hidden font-mono text-[10px] uppercase tracking-widest text-ink-300 sm:inline">
-          v0.1 · distributed crawler
-        </span>
         <AuthBar />
       </header>
 
