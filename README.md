@@ -7,98 +7,74 @@
 
 </div>
 
-Open-source **distributed** site auditor. Give it a domain; it BFS-crawls every internal link from the homepage out and reports:
+Open-source distributed site auditor. Point it at a domain. It crawls outward from the homepage, following every internal link, and reports:
 
-- broken links, each with a reason (DNS, timeout, SSL, soft 404, 4xx/5xx, redirect loop)
-- an on-page SEO audit and score for every healthy page
+- what's broken, and why (DNS, timeout, SSL, soft 404, 4xx/5xx, redirect loop)
+- an SEO score and issue list for every page that isn't
 - the whole site as an interactive graph
-- per-category rollups, site checks, crawl stats, and sitemap coverage
 
-## Architecture
+## How it works
 
-- **api** (`cmd/api`): HTTP server. Creates jobs, serves reports. No crawling.
-- **worker** (`cmd/worker`): crawl engine. Fetch, classify, extract links, SEO-audit, save. Many goroutines per process; scale out with more replicas.
-- **RabbitMQ**: work queue + results fanout between api and workers.
-- **Redis**: hot state. Progress counters, dedupe seen-set, per-domain rate limits, sessions.
-- **MySQL**: durable data. Jobs, pages, SEO audits, link graph, users.
-- **Caddy**: serves the frontend (`web/`), proxies `/api`, terminates HTTPS.
+`cmd/api` is the HTTP server. It creates jobs and serves reports, and never crawls anything itself. `cmd/worker` is the crawler: fetch, classify, pull out links, audit, save. Each worker process runs a pool of goroutines, so to go faster you add replicas.
 
-## Report
+The rest is off the shelf. RabbitMQ carries work out to the workers and results back. Redis holds whatever changes constantly: progress counters, the seen-set, per-domain rate limits, sessions. MySQL holds jobs, pages, audits, the link graph and users. Caddy serves `web/`, proxies `/api`, and does HTTPS.
 
-Open `/jobs/<id>`. Streams in live, freezes when the crawl finishes.
+## The report
 
-- live progress (checked vs discovered, healthy vs rotten)
-- per-category rollups (pages, rot %, average SEO score)
-- interactive graph and a table of every page
-- site audit (robots, sitemap, HTTPS, cert)
-- crawl stats (response times, error rate, duration)
-- coverage gap (sitemap URLs the crawl never reached)
-- per-page SEO drilldown (score + issues)
-- crawl history when logged in
+`/jobs/<id>` fills in live and freezes once the crawl finishes. Alongside progress and the graph, it has per-category rollups, a row per page with its SEO drilldown, site-level checks (robots, sitemap, HTTPS, cert), crawl stats, and any sitemap URLs the crawl never reached. Logged-in users keep their history.
 
 ## API
 
-Base path is `/api` in prod. All JSON. `{id}` is a job UUID.
+Base path `/api` in prod, JSON throughout, `{id}` is a job UUID.
 
-**Crawl**
+```
+POST   /check                  start a crawl
+GET    /check/{id}             status + live progress
+GET    /check/{id}/results     per-page rows
+GET    /check/{id}/report      aggregated report
+GET    /check/{id}/graph       nodes + edges
+GET    /check/{id}/seo?url=    one page's SEO audit
+POST   /check/{id}/cancel
+DELETE /check/{id}             job + all its data
 
-- `POST /check`: start a crawl
-- `GET /check/{id}`: status + live progress
-- `GET /check/{id}/results`: per-page rows
-- `GET /check/{id}/report`: aggregated report
-- `GET /check/{id}/graph`: graph nodes + edges
-- `GET /check/{id}/seo?url=`: one page's SEO audit
-- `POST /check/{id}/cancel`: stop a running crawl
-- `DELETE /check/{id}`: delete a job and its data
+POST   /auth/register
+POST   /auth/login
+POST   /auth/logout
+GET    /auth/me                null if anonymous
+DELETE /auth/account           account + all jobs
 
-**Auth**
+GET    /history                past crawls (auth)
+```
 
-- `POST /auth/register`: create account, start session
-- `POST /auth/login`: start session
-- `POST /auth/logout`: end session
-- `GET /auth/me`: current user (null if anonymous)
-- `DELETE /auth/account`: delete account + all jobs (auth required)
+## Running it locally
 
-**History**
-
-- `GET /history`: your past crawls (auth required)
-
-## Local development
-
-Needs Docker, Go 1.26+ and Node 20+. In dev, only MySQL, Redis, and RabbitMQ run in Docker. (`docker-compose.yml`)
+Docker, Go 1.26+, Node 20+. Only MySQL, Redis and RabbitMQ run in containers.
 
 ```bash
 cp .env.example .env        # fill in the empty passwords
-docker compose up -d        # mysql, redis, rabbitmq
+docker compose up -d
 
-go run ./cmd/api            # API on :8080
-go run ./cmd/worker         # workers (separate terminal)
+go run ./cmd/api            # :8080
+go run ./cmd/worker         # separate terminal
 
-cd web && npm install && npm run dev   # frontend on :5173
+cd web && npm install && npm run dev   # :5173
 ```
 
-## Deploy
+## Deploying
 
-The whole stack is one docker compose file; only Caddy is exposed.
+One compose file, and only Caddy is exposed. Point your domain's A record at the server first, then:
 
 ```bash
 ssh root@YOUR_SERVER_IP
 git clone https://github.com/Tom-the-Bomb/linktrace.git && cd linktrace
-# set DOMAIN, ACME_EMAIL, passwords
-cp .env.production.example .env.production
-# run this to redeploy after changes too
+cp .env.production.example .env.production   # DOMAIN, ACME_EMAIL, passwords
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-Append `api`, `worker`, or `caddy` to the last command to rebuild just one.
-
-Point your domain's A record at the server and set `DOMAIN` + `ACME_EMAIL` so Caddy can issue HTTPS.
-
-Pushes to `main` auto-deploy: `.github/workflows/deploy.yml` SSHes into the droplet and reruns the command above (needs the `DROPLET_*` repo secrets).
+The same command redeploys; append `api`, `worker` or `caddy` to rebuild just one. Pushes to `main` run it for you over SSH (`.github/workflows/deploy.yml`, needs the `DROPLET_*` secrets).
 
 ## Config
 
-- **Worker config:** `WORKER_COUNT` (100), `MAX_PAGES` (10000), `MAX_DEPTH` (20), `MAX_PER_CATEGORY` (1000), `RATE_PER_MIN` (1000)
-- **Connections:** `MYSQL_DSN`, `REDIS_ADDR`, `RABBIT_URL`, `HTTP_ADDR`, `FRONTEND_ORIGIN`, `COOKIE_SECURE` (`true` over HTTPS)
+Worker limits: `WORKER_COUNT` (100), `MAX_PAGES` (10000), `MAX_DEPTH` (20), `MAX_PER_CATEGORY` (1000), `RATE_PER_MIN` (1000).
 
-Defaults match the dev containers. Prod values live in `.env.production`.
+Connections: `MYSQL_DSN`, `REDIS_ADDR`, `RABBIT_URL`, `HTTP_ADDR`, `FRONTEND_ORIGIN`, `COOKIE_SECURE`. Defaults point at the dev containers; prod values go in `.env.production`.
