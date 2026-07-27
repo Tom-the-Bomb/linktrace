@@ -32,6 +32,18 @@ const (
 	maxRetryAfterWait = 15 * time.Second // honor a 429 Retry-After up to this; longer → record as blocked
 )
 
+// Result-consumer concurrency. Unlike the sharded work queue, these three queues are shared by
+// every job, so draining one slower than the fetchers fill it parks a big crawl's backlog in
+// front of everyone else's results — and since the report consumer owns the progress counters,
+// other users' jobs then sit at 0% until it clears. Keeping the queues near-empty is the fix.
+const (
+	reportConsumers  = 16 // DB-bound; gates progress and completion
+	archiveConsumers = 8  // blocks on the Wayback API, so keep it modest to avoid throttling
+	// serial by necessity: the aggregator snapshots its tally under a lock but writes outside
+	// it, so concurrent handlers could land category rows out of order
+	aggregateConsumers = 1
+)
+
 // starts the page-fetch workers and the result consumers, then waits for shutdown.
 func main() {
 	cfg := config.Load()
@@ -69,23 +81,26 @@ func main() {
 	channels = append(channels, pageChs...)
 
 	consumers := []struct {
-		name    string
-		handler func(queue.PageChecked) error
+		name        string
+		concurrency int
+		handler     func(queue.PageChecked) error
 	}{
-		{queue.QReport, rb.handle},
-		{queue.QArchive, ac.handle},
-		{queue.QAggregate, ag.handle},
+		{queue.QReport, reportConsumers, rb.handle},
+		{queue.QArchive, archiveConsumers, ac.handle},
+		{queue.QAggregate, aggregateConsumers, ag.handle},
 	}
+	totalConsumers := 0
 	for _, c := range consumers {
-		ch, err := runConsumer(q, c.name, &wg, c.handler)
+		ch, err := runConsumer(q, c.name, c.concurrency, &wg, c.handler)
 		if err != nil {
 			log.Fatalf("consumer %s: %v", c.name, err)
 		}
 		channels = append(channels, ch)
+		totalConsumers += c.concurrency
 	}
 
 	log.Printf("worker running: %d page goroutines across %d shards + %d result consumers",
-		cfg.WorkerCount, cfg.ShardCount, len(consumers))
+		cfg.WorkerCount, cfg.ShardCount, totalConsumers)
 
 	// graceful shutdown: closing channels closes their delivery chans, ranging goroutines exit
 	stop := make(chan os.Signal, 1)
@@ -319,33 +334,39 @@ func (w *worker) enqueueLinks(job queue.PageJob, res checker.CheckResult) []stri
 	return discovered
 }
 
-// drains queueName one at a time: nil acks; a handler error requeues once, then
-// dead-letters on the retry (so a transient blip doesn't drop a result, nor loop forever).
-func runConsumer(q *queue.Queue, queueName string, wg *sync.WaitGroup,
+// drains queueName with `concurrency` goroutines sharing one channel, prefetch matched so each
+// has a message ready: nil acks; a handler error requeues once, then dead-letters on the retry
+// (so a transient blip doesn't drop a result, nor loop forever).
+func runConsumer(q *queue.Queue, queueName string, concurrency int, wg *sync.WaitGroup,
 	handle func(queue.PageChecked) error) (*amqp.Channel, error) {
 
-	deliveries, ch, err := q.Consume(queueName, 1)
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	deliveries, ch, err := q.Consume(queueName, concurrency)
 	if err != nil {
 		return nil, err
 	}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for d := range deliveries {
-			var msg queue.PageChecked
-			if err := json.Unmarshal(d.Body, &msg); err != nil {
-				_ = d.Nack(false, false) // unparseable: requeue can't help
-				continue
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for d := range deliveries {
+				var msg queue.PageChecked
+				if err := json.Unmarshal(d.Body, &msg); err != nil {
+					_ = d.Nack(false, false) // unparseable: requeue can't help
+					continue
+				}
+				if err := handle(msg); err != nil {
+					requeue := !d.Redelivered // retry once, then dead-letter
+					log.Printf("[%s] handler error (requeue=%v): %v", queueName, requeue, err)
+					_ = d.Nack(false, requeue)
+					continue
+				}
+				_ = d.Ack(false)
 			}
-			if err := handle(msg); err != nil {
-				requeue := !d.Redelivered // retry once, then dead-letter
-				log.Printf("[%s] handler error (requeue=%v): %v", queueName, requeue, err)
-				_ = d.Nack(false, requeue)
-				continue
-			}
-			_ = d.Ack(false)
-		}
-	}()
+		}()
+	}
 	return ch, nil
 }
 
@@ -392,10 +413,8 @@ func (rb *reportBuilder) handle(msg queue.PageChecked) error {
 	}
 
 	// persist outbound edges for the graph view (INSERT IGNORE dedupes DB-side)
-	for _, target := range msg.Links {
-		if err := rb.store.InsertLink(msg.JobID, msg.URL, target); err != nil {
-			log.Printf("[report] insert link failed: %v", err)
-		}
+	if err := rb.store.InsertLinks(msg.JobID, msg.URL, msg.Links); err != nil {
+		log.Printf("[report] insert links failed: %v", err)
 	}
 
 	log.Printf("[report] saved %s  seo=%v  links=%d", msg.URL, hasSEO, len(msg.Links))
@@ -420,10 +439,18 @@ func (rb *reportBuilder) maybeComplete(jobID string) error {
 		if err := rb.store.SetTotalPages(jobID, prog["checked"]); err != nil {
 			return err
 		}
+		if err := rb.store.UpdateJobStatus(jobID, "complete"); err != nil {
+			return err
+		}
+		// the writes above are idempotent, so they run before the claim: claiming first would
+		// mean a failed write leaves the job wedged in `crawling`, since its redelivery would
+		// lose the claim and bail. Only the winner logs and frees the lane.
+		if won, err := rb.cache.ClaimComplete(jobID); err != nil || !won {
+			return err
+		}
 		log.Printf("[report] job %s COMPLETE: %d pages (%d healthy, %d rotten)",
 			jobID[:8], prog["checked"], prog["healthy"], prog["rotten"])
 		_ = rb.cache.ReleaseShard(jobID) // free the lane for new crawls
-		return rb.store.UpdateJobStatus(jobID, "complete")
 	}
 	return nil
 }

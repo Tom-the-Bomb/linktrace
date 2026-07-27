@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -35,6 +36,10 @@ func loadDotEnv(path string) {
 		if _, set := os.LookupEnv(key); !set {
 			_ = os.Setenv(key, val)
 		}
+	}
+
+	if err := sc.Err(); err != nil {
+		log.Printf("[config] %s: %v", path, err)
 	}
 }
 

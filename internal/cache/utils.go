@@ -29,4 +29,5 @@ func ratelimitKey(domain string) string { return "ratelimit:" + domain }
 func catCountKey(jobID string) string   { return "catcount:" + jobID }
 func shardSetKey(i int) string          { return "shard:" + strconv.Itoa(i) + ":jobs" }
 func cancelKey(jobID string) string     { return "cancel:" + jobID }
+func completeKey(jobID string) string   { return "complete:" + jobID }
 func sessionKey(sid string) string      { return "session:" + sid }

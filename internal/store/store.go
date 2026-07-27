@@ -7,6 +7,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -217,13 +218,29 @@ type Link struct {
 	Target string
 }
 
-// records a discovered edge; INSERT IGNORE silently no-ops on duplicate (job, src, tgt).
-func (s *Store) InsertLink(jobID, source, target string) error {
-	_, err := s.db.Exec(
-		"INSERT IGNORE INTO links (job_id, source_url, target_url) VALUES (UUID_TO_BIN(?), ?, ?)",
-		jobID, source, target,
-	)
-	return err
+// linkBatchSize bounds one multi-row INSERT so a link-heavy page stays well under
+// max_allowed_packet and the 65535-placeholder limit.
+const linkBatchSize = 200
+
+// records a page's discovered edges; INSERT IGNORE silently no-ops on duplicate (job, src, tgt).
+// Batched because a nav-heavy page carries hundreds of links and this runs on every result.
+func (s *Store) InsertLinks(jobID, source string, targets []string) error {
+	for start := 0; start < len(targets); start += linkBatchSize {
+		batch := targets[start:min(start+linkBatchSize, len(targets))]
+
+		args := make([]any, 0, len(batch)*3)
+		for _, target := range batch {
+			args = append(args, jobID, source, target)
+		}
+		values := strings.Repeat(",(UUID_TO_BIN(?), ?, ?)", len(batch))[1:]
+
+		if _, err := s.db.Exec(
+			"INSERT IGNORE INTO links (job_id, source_url, target_url) VALUES "+values, args...,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // returns every recorded edge for a job, for building the graph view.

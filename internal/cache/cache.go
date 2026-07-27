@@ -186,10 +186,19 @@ func (c *Cache) PurgeJob(jobID string) error {
 	if err := c.rdb.Set(ctx, cancelKey(jobID), "1", seenTTL).Err(); err != nil {
 		return err
 	}
-	if err := c.rdb.Del(ctx, progressKey(jobID), seenKey(jobID), catCountKey(jobID)).Err(); err != nil {
+	if err := c.rdb.Del(ctx, progressKey(jobID), seenKey(jobID), catCountKey(jobID), completeKey(jobID)).Err(); err != nil {
 		return err
 	}
 	return c.ReleaseShard(jobID) // freeing the lane is part of tearing the job down
+}
+
+// ClaimComplete returns true only for the first caller, so the job is finalised exactly once.
+// Several report consumers run concurrently and can all observe checked >= discovered on the
+// last page; without this they'd each rewrite the job row and log a duplicate completion.
+func (c *Cache) ClaimComplete(jobID string) (bool, error) {
+	ctx, cancel := c.ctx()
+	defer cancel()
+	return c.rdb.SetNX(ctx, completeKey(jobID), "1", progressTTL).Result()
 }
 
 // reports whether jobID's cancel flag is set.
