@@ -14,7 +14,9 @@ export default function AuthPage() {
   const { user, loading } = useAuth();
 
   useEffect(() => {
-    if (!loading && user) navigate('/', { replace: true });
+    if (!loading && user) {
+      navigate('/', { replace: true });
+    }
   }, [loading, user, navigate]);
 
   return (

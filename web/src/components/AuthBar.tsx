@@ -26,15 +26,21 @@ export function AuthBar() {
 
   // dismiss the dropdown on any click outside its container
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen) {
+      return;
+    }
     const onDocClick = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setMenuOpen(false);
+      if (!containerRef.current?.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
     };
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [menuOpen]);
 
-  if (loading) return null;
+  if (loading) {
+    return null;
+  }
 
   if (!user) {
     return (

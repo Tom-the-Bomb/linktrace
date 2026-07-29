@@ -12,9 +12,15 @@ type SortKey = 'pages' | 'rot' | 'seo';
 type SortDir = 'asc' | 'desc';
 
 function inFilter(pattern: string, filter: Filter): boolean {
-  if (filter === 'all') return true;
-  if (filter === 'healthy') return pattern === 'healthy';
-  if (filter === 'mixed') return pattern === 'mixed';
+  if (filter === 'all') {
+    return true;
+  }
+  if (filter === 'healthy') {
+    return pattern === 'healthy';
+  }
+  if (filter === 'mixed') {
+    return pattern === 'mixed';
+  }
   return pattern === 'mostly_rotten' || pattern === 'all_rotten';
 }
 
@@ -37,7 +43,9 @@ export function Categories({ categories }: { categories: CategoryReport[] }) {
 
   const filtered = useMemo(() => {
     let r = categories;
-    if (filter !== 'all') r = r.filter((c) => inFilter(c.pattern, filter));
+    if (filter !== 'all') {
+      r = r.filter((c) => inFilter(c.pattern, filter));
+    }
     const value = SORT_VALUE[sortKey];
     return r.slice().sort((a, b) => {
       const diff = value(a) - value(b);

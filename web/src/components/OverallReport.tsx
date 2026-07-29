@@ -61,9 +61,15 @@ export function OverallReport({ report }: { report: Report }) {
 }
 
 function scoreVerdict(s: number) {
-  if (s >= 85) return 'Strong. The basics are in place across most pages.';
-  if (s >= 65) return 'Decent. A handful of recurring fixes would lift this site significantly.';
-  if (s >= 40) return 'Mixed. Several pages need real work before they read well to search.';
+  if (s >= 85) {
+    return 'Strong. The basics are in place across most pages.';
+  }
+  if (s >= 65) {
+    return 'Decent. A handful of recurring fixes would lift this site significantly.';
+  }
+  if (s >= 40) {
+    return 'Mixed. Several pages need real work before they read well to search.';
+  }
   return 'Rough. Foundational SEO is missing across the site.';
 }
 

@@ -18,6 +18,15 @@ func hostOf(raw string) string {
 	return u.Host
 }
 
+// converts a robots.txt Crawl-delay (seconds between requests) into a per-minute budget and
+// takes the stricter of it and our own limit, so a site asking to be crawled slowly gets that.
+func effectiveRate(configured, crawlDelay int) int {
+	if crawlDelay <= 0 {
+		return configured
+	}
+	return min(configured, max(1, 60/crawlDelay))
+}
+
 // reports whether a result is a live page with a body worth parsing (links + SEO).
 func hasHTML(res checker.CheckResult) bool {
 	return res.IsAlive && len(res.Body) > 0

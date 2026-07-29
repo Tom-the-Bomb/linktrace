@@ -341,25 +341,23 @@ func (s *Store) ListSEOAudits(jobID string) ([]SEOAudit, error) {
 		}, jobID)
 }
 
-// upserts a category's rollup row (delete + insert in one tx), since
-// the aggregator rewrites it on every tick as counts change.
+// upserts a category's rollup row; the aggregator rewrites it on every tick as counts change.
+// PRIMARY KEY (job_id, category) makes this a single statement — the previous delete+insert in a
+// transaction cost four round-trips and took gap locks that would deadlock concurrent tickers.
 func (s *Store) ReplaceCategoryReport(jobID string, report CategoryReport) error {
-	return s.tx(func(t *sql.Tx) error {
-		if _, err := t.Exec(
-			"DELETE FROM category_reports WHERE job_id = UUID_TO_BIN(?) AND category = ?",
-			jobID, report.Category,
-		); err != nil {
-			return err
-		}
-		_, err := t.Exec(
-			`INSERT INTO category_reports (job_id, category, total_pages,
-			rotten_pages, avg_seo_score, pattern)
-			VALUES (UUID_TO_BIN(?), ?, ?, ?, ?, ?)`,
-			jobID, report.Category, report.TotalPages,
-			report.RottenPages, report.AvgSEOScore, report.Pattern,
-		)
-		return err
-	})
+	_, err := s.db.Exec(
+		`INSERT INTO category_reports (job_id, category, total_pages,
+		rotten_pages, avg_seo_score, pattern)
+		VALUES (UUID_TO_BIN(?), ?, ?, ?, ?, ?) AS new
+		ON DUPLICATE KEY UPDATE
+			total_pages   = new.total_pages,
+			rotten_pages  = new.rotten_pages,
+			avg_seo_score = new.avg_seo_score,
+			pattern       = new.pattern`,
+		jobID, report.Category, report.TotalPages,
+		report.RottenPages, report.AvgSEOScore, report.Pattern,
+	)
+	return err
 }
 
 // returns the per-category rollups for a job.

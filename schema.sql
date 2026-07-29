@@ -14,7 +14,6 @@ CREATE TABLE IF NOT EXISTS jobs (
     status ENUM(
         'pending',
         'crawling',
-        'checking',
         'complete',
         'failed',
         'stopped'

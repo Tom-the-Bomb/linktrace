@@ -26,6 +26,7 @@ func (c *Cache) bump(jobID, field string, delta int64) error {
 func progressKey(id string) string      { return "progress:" + id }
 func seenKey(id string) string          { return "seen:" + id }
 func ratelimitKey(domain string) string { return "ratelimit:" + domain }
+func apiRateKey(key string) string      { return "apirate:" + key }
 func catCountKey(jobID string) string   { return "catcount:" + jobID }
 func shardSetKey(i int) string          { return "shard:" + strconv.Itoa(i) + ":jobs" }
 func cancelKey(jobID string) string     { return "cancel:" + jobID }

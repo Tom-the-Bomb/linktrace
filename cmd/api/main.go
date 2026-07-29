@@ -28,6 +28,20 @@ import (
 
 const shutdownTimeout = 5 * time.Second
 
+// Per-minute request budgets, counted per account when logged in and per client IP otherwise.
+// The split is by cost to serve, not by HTTP verb — the standard bucket holds mutations too.
+const (
+	// Crawl creation and auth: cheap to call, expensive to serve (thousands of outbound fetches;
+	// ~100ms of bcrypt), and reachable without an account. The only bucket that meaningfully
+	// bounds abuse.
+	expensivePerMinAnon = 10
+	expensivePerMinUser = 20
+	// Everything else. Deliberately roomy: one open report tab polls ~96 requests/min, and
+	// anonymous callers are keyed by IP, so an office NAT or mobile CGNAT can put many real
+	// users in one bucket. Accidental 429s are likelier here than an attacker.
+	standardPerMin = 1200
+)
+
 // bundles shared dependencies so handlers can reach them without globals.
 type Server struct {
 	cfg   config.Config
@@ -67,23 +81,33 @@ func main() {
 	r.Use(corsMiddleware(cfg.FrontendOrigin))
 	r.Use(auth.Optional(s.cache)) // tags the request with a user id if logged in; never blocks
 
-	r.Post("/auth/register", s.handleRegister)
-	r.Post("/auth/login", s.handleLogin)
-	r.Post("/auth/logout", s.handleLogout)
-	r.Get("/auth/me", s.handleMe)
+	// Every route is rate limited. OPTIONS preflights never reach these — corsMiddleware
+	// short-circuits them above, so they don't consume budget.
+	r.Group(func(r chi.Router) {
+		r.Use(s.limitPerMin("expensive", expensivePerMinAnon, expensivePerMinUser))
+		r.Post("/check", s.handleCreate)
+		r.Post("/auth/register", s.handleRegister)
+		r.Post("/auth/login", s.handleLogin)
+	})
 
-	// crawl endpoints are anonymous-friendly; Optional tags ownership when a cookie is present
-	r.Post("/check", s.handleCreate)
-	r.Post("/check/{id}/cancel", s.handleCancel)
-	r.Delete("/check/{id}", s.handleDelete)
-	r.Get("/check/{id}", s.handleStatus)
-	r.Get("/check/{id}/results", s.handleResults)
-	r.Get("/check/{id}/report", s.handleReport)
-	r.Get("/check/{id}/graph", s.handleGraph)
-	r.Get("/check/{id}/seo", s.handleSEODetail)
+	r.Group(func(r chi.Router) {
+		r.Use(s.limitPerMin("standard", standardPerMin, standardPerMin))
 
-	r.With(auth.Require(s.cache)).Get("/history", s.handleHistory)
-	r.With(auth.Require(s.cache)).Delete("/auth/account", s.handleDeleteAccount)
+		r.Post("/auth/logout", s.handleLogout)
+		r.Get("/auth/me", s.handleMe)
+
+		// crawl endpoints are anonymous-friendly; Optional tags ownership when a cookie is present
+		r.Post("/check/{id}/cancel", s.handleCancel)
+		r.Delete("/check/{id}", s.handleDelete)
+		r.Get("/check/{id}", s.handleStatus)
+		r.Get("/check/{id}/results", s.handleResults)
+		r.Get("/check/{id}/report", s.handleReport)
+		r.Get("/check/{id}/graph", s.handleGraph)
+		r.Get("/check/{id}/seo", s.handleSEODetail)
+
+		r.With(auth.Require(s.cache)).Get("/history", s.handleHistory)
+		r.With(auth.Require(s.cache)).Delete("/auth/account", s.handleDeleteAccount)
+	})
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r}
 
@@ -165,7 +189,11 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[api] MarkSeen seed: %v", err)
 	}
 	_ = s.cache.IncDiscovered(id)
-	if err := s.queue.PublishPageJob(queue.PageJob{JobID: id, URL: seed, Depth: 0, Shard: shard}); err != nil {
+	seedJob := queue.PageJob{
+		JobID: id, URL: seed, Depth: 0, Shard: shard,
+		CrawlDelay: siteAudit.CrawlDelay, // inherited by every child, throttling the whole crawl
+	}
+	if err := s.queue.PublishPageJob(seedJob); err != nil {
 		httpError(w, http.StatusInternalServerError, "could not enqueue")
 		return
 	}
@@ -426,6 +454,9 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 // GET /check/{id}/seo?url=..., full SEO audit row for one page (drilldown panel).
 func (s *Server) handleSEODetail(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if s.requireJob(w, id) == nil {
+		return
+	}
 	pageURL := r.URL.Query().Get("url")
 	if pageURL == "" {
 		httpError(w, http.StatusBadRequest, "missing ?url")

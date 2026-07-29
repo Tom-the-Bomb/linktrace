@@ -26,8 +26,12 @@ const NODE_HEX: Record<'good' | 'ok' | 'poor', string> = {
 
 // node colour by liveness + SEO score
 function nodeColour(n: GraphNode): string {
-  if (!n.is_alive) return '#fb7185'; // rose-400
-  if (n.seo_score === null) return '#3a425e'; // ink-300
+  if (!n.is_alive) {
+    return '#fb7185'; // rose-400
+  }
+  if (n.seo_score === null) {
+    return '#3a425e'; // ink-300
+  }
   return NODE_HEX[scoreTier(n.seo_score)];
 }
 
@@ -36,7 +40,9 @@ const MAX_ZOOM = 2.5;
 
 // node size shrinks with depth; homepage biggest, leaves smallest
 function nodeRadius(depth: number): number {
-  if (depth === 0) return 4.5; // root, a touch larger than other top-level nodes
+  if (depth === 0) {
+    return 4.5; // root, a touch larger than other top-level nodes
+  }
   return Math.max(1.8, 3.5 - depth * 0.35);
 }
 
@@ -64,17 +70,23 @@ export function GraphView({ data, onSelect }: Props) {
   // manual hit-testing; lib's onNodeClick/Hover are unreliable with a custom painter
   useEffect(() => {
     const el = containerRef.current;
-    if (!el) return;
+    if (!el) {
+      return;
+    }
 
     const pickNode = (clientX: number, clientY: number): FgNode | null => {
       const fg = fgRef.current;
-      if (!fg) return null;
+      if (!fg) {
+        return null;
+      }
       const rect = el.getBoundingClientRect();
       const { x: gx, y: gy } = fg.screen2GraphCoords(clientX - rect.left, clientY - rect.top);
       let best: FgNode | null = null;
       let bestDist = Infinity;
       for (const n of graphRef.current.nodes) {
-        if (n.x === undefined || n.y === undefined) continue;
+        if (n.x === undefined || n.y === undefined) {
+          continue;
+        }
         const dx = n.x - gx;
         const dy = n.y - gy;
         const d2 = dx * dx + dy * dy;
@@ -103,7 +115,9 @@ export function GraphView({ data, onSelect }: Props) {
     };
     const onClick = (e: MouseEvent) => {
       const node = pickNode(e.clientX, e.clientY);
-      if (node) onSelect(node.url);
+      if (node) {
+        onSelect(node.url);
+      }
     };
 
     el.addEventListener('pointermove', onMove);
@@ -118,7 +132,9 @@ export function GraphView({ data, onSelect }: Props) {
 
   // resize the canvas to the container (lib doesn't auto-fit)
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current) {
+      return;
+    }
     const obs = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       setSize({ width, height: Math.max(420, height) });
@@ -167,19 +183,26 @@ export function GraphView({ data, onSelect }: Props) {
       }
 
       // new wrapper even with no structural change, so field updates reach the painter
-      const next = nodesChanged || linksChanged ? { nodes, links } : { ...prev };
-      graphRef.current = next;
-      return next;
+      return nodesChanged || linksChanged ? { nodes, links } : { ...prev };
     });
   }, [data]);
+
+  // mirrored outside the updater: updaters must stay pure (StrictMode runs them twice in dev)
+  useEffect(() => {
+    graphRef.current = graph;
+  }, [graph]);
 
   // fit once after layout settles, never again (would yank the view mid-crawl)
   const fittedRef = useRef(false);
   useEffect(() => {
-    if (fittedRef.current || graphRef.current.nodes.length === 0) return;
+    if (fittedRef.current || graphRef.current.nodes.length === 0) {
+      return;
+    }
     const id = setTimeout(() => {
       const fg = fgRef.current;
-      if (!fg) return;
+      if (!fg) {
+        return;
+      }
       fg.zoomToFit(400, 40);
       // zoomToFit has no max-zoom; clamp a tiny graph after the fit lands
       setTimeout(() => {
@@ -235,7 +258,9 @@ export function GraphView({ data, onSelect }: Props) {
           // paint nodes ourselves so radius matches nodeRadius(depth) and the hit-testing
           nodeCanvasObject={(node, ctx) => {
             const n = node as FgNode;
-            if (n.x === undefined || n.y === undefined) return;
+            if (n.x === undefined || n.y === undefined) {
+              return;
+            }
             const r = nodeRadius(n.depth);
             const colour = nodeColour(n);
             const dimmed = hasQuery && !matchesQuery(n);
@@ -302,8 +327,12 @@ const TOOLTIP_COLOUR: Record<'good' | 'ok' | 'poor', string> = {
 
 // tooltip value colour by liveness + SEO score
 function scoreColour(n: GraphNode): string {
-  if (!n.is_alive) return 'text-rose-300';
-  if (n.seo_score === null) return 'text-ink-300';
+  if (!n.is_alive) {
+    return 'text-rose-300';
+  }
+  if (n.seo_score === null) {
+    return 'text-ink-300';
+  }
   return TOOLTIP_COLOUR[scoreTier(n.seo_score)];
 }
 
@@ -319,7 +348,11 @@ function pathOnly(url: string): string {
 
 // right value: SEO score, else the failure reason
 function tooltipDetail(n: GraphNode): string {
-  if (n.seo_score !== null) return String(n.seo_score);
-  if (!n.is_alive) return n.error_type || (n.status_code ? `http_${n.status_code}` : 'dead');
+  if (n.seo_score !== null) {
+    return String(n.seo_score);
+  }
+  if (!n.is_alive) {
+    return n.error_type || (n.status_code ? `http_${n.status_code}` : 'dead');
+  }
   return '—';
 }

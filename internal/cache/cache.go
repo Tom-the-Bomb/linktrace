@@ -78,10 +78,12 @@ func (c *Cache) CreateSession(sid, userID string) error {
 
 // returns the user id for a session id, or "" if missing/expired.
 // redis.Nil is treated as "no session", not an error (same pattern as sql.ErrNoRows).
+// GETEX slides the expiry on every hit, so the TTL measures inactivity rather than account age —
+// an active user isn't logged out mid-session. Atomic, so it costs no extra round-trip.
 func (c *Cache) LookupSession(sid string) (string, error) {
 	ctx, cancel := c.ctx()
 	defer cancel()
-	userID, err := c.rdb.Get(ctx, sessionKey(sid)).Result()
+	userID, err := c.rdb.GetEx(ctx, sessionKey(sid), sessionTTL).Result()
 	if err == redis.Nil {
 		return "", nil
 	}
@@ -146,12 +148,25 @@ return n
 `)
 
 // reports whether workers may still hit domain this minute, incrementing its counter.
-// Returns false once perMinute is exceeded within the rolling one-minute window.
+// Returns false once perMinute is exceeded within the current window.
 func (c *Cache) Allow(domain string, perMinute int) (bool, error) {
+	return c.allow(ratelimitKey(domain), perMinute)
+}
+
+// AllowRequest reports whether an API caller may make another request this minute. key is the
+// route group plus the caller's identity, so groups don't share a budget.
+func (c *Cache) AllowRequest(key string, perMinute int) (bool, error) {
+	return c.allow(apiRateKey(key), perMinute)
+}
+
+// increments key's counter and reports whether it's still within budget. Fixed window, not
+// sliding: the TTL starts on the first hit and the count resets wholesale when it expires, so a
+// caller can spend two budgets back-to-back across a boundary. Fine for abuse control.
+func (c *Cache) allow(key string, perMinute int) (bool, error) {
 	ctx, cancel := c.ctx()
 	defer cancel()
 
-	n, err := allowScript.Run(ctx, c.rdb, []string{ratelimitKey(domain)}, rateLimitWindow).Int64()
+	n, err := allowScript.Run(ctx, c.rdb, []string{key}, rateLimitWindow).Int64()
 	if err != nil {
 		return false, err
 	}

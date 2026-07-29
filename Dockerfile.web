@@ -6,11 +6,20 @@ COPY web/package.json web/package-lock.json ./
 RUN npm ci
 
 COPY web/ ./
-# VITE_API_BASE is baked in at build time. "/api" makes the frontend call the same
-# origin it's served from; Caddy reverse-proxies /api/* to the Go API below.
+# Both are baked in at build time. "/api" makes the frontend call the same origin it's served
+# from; Caddy reverse-proxies /api/* to the Go API below. VITE_SITE_URL is the public origin used
+# for canonical + og:url, so it must track DOMAIN rather than a hardcoded default.
 ARG VITE_API_BASE=/api
+ARG VITE_SITE_URL=https://linktrace.tomthebomb.dev
 ENV VITE_API_BASE=$VITE_API_BASE
+ENV VITE_SITE_URL=$VITE_SITE_URL
 RUN npm run build
+
+# index.html, robots.txt and sitemap.xml are static assets Vite copies verbatim, so their
+# hardcoded origin has to be rewritten here or a deploy on any other domain emits canonical
+# tags, OG URLs and a sitemap pointing at someone else's site.
+RUN find dist -type f \( -name '*.html' -o -name '*.xml' -o -name '*.txt' \) \
+      -exec sed -i "s|https://linktrace.tomthebomb.dev|${VITE_SITE_URL}|g" {} \;
 
 # ---- run stage: Caddy serves static files AND reverse-proxies the API ----
 FROM caddy:2-alpine

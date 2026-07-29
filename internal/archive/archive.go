@@ -4,7 +4,6 @@ package archive
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"net/url"
 	"time"
 
@@ -16,6 +15,10 @@ const (
 	maxBodyBytes = 1 << 20
 )
 
+// shared across lookups so connections to archive.org are pooled; its own timeout backstops the
+// per-request context.
+var client = httpx.NewClient(fetchTimeout, true)
+
 // queries the Wayback "available" API for the closest snapshot of rawURL.
 // Returns the snapshot URL, or "" if none exists.
 func Available(rawURL string) (string, error) {
@@ -24,7 +27,7 @@ func Available(rawURL string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 	defer cancel()
 
-	body, _, err := httpx.Fetch(ctx, http.DefaultClient, api, maxBodyBytes)
+	body, _, err := httpx.Fetch(ctx, client, api, maxBodyBytes)
 	if err != nil {
 		return "", err
 	}

@@ -35,6 +35,10 @@ import { useSeo } from '../hooks/useSeo';
 import { errMessage } from '../lib/format';
 import { isTerminalStatus } from '../lib/status';
 
+const POLL_MS = 1000;
+const HEAVY_EVERY_TICKS = 5; // ~5s between full results/report/graph refreshes
+const MAX_POLL_FAILURES = 3; // consecutive errors before giving up on live updates
+
 // Route /jobs/:jobId: live polling plus all report sections.
 export default function JobReportPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -63,9 +67,11 @@ export default function JobReportPage() {
     noindex: true,
   });
 
-  // poll all four endpoints each tick so partial results stream in; setTimeout recursion (not setInterval) avoids overlapping requests
+  // setTimeout recursion (not setInterval) so requests can't overlap
   useEffect(() => {
-    if (!jobId) return;
+    if (!jobId) {
+      return;
+    }
     // reset when switching jobs
     setStatus(null);
     setRows([]);
@@ -75,31 +81,63 @@ export default function JobReportPage() {
     setNotFound(false);
 
     let stop = false;
-    const tick = async () => {
+    let timer: number | undefined;
+    let tick = 0;
+    let failures = 0;
+
+    const poll = async () => {
       try {
-        const [s, r, rep, g] = await Promise.all([
-          getStatus(jobId),
-          getResults(jobId),
-          getReport(jobId),
-          getGraph(jobId),
-        ]);
-        if (stop) return;
+        const s = await getStatus(jobId);
+        if (stop) {
+          return;
+        }
         setStatus(s);
-        setRows(r);
-        setReport(rep);
-        setGraph(g);
-        if (isTerminalStatus(s.status)) return;
+        const done = isTerminalStatus(s.status);
+
+        // results/report/graph are unbounded — a 10k-page crawl ships every row, node and edge.
+        // Only /status is cheap enough for every tick; the rest refresh slowly, then once at the end.
+        if (done || tick % HEAVY_EVERY_TICKS === 0) {
+          const [r, rep, g] = await Promise.all([
+            getResults(jobId),
+            getReport(jobId),
+            getGraph(jobId),
+          ]);
+          if (stop) {
+            return;
+          }
+          setRows(r);
+          setReport(rep);
+          setGraph(g);
+        }
+        failures = 0;
+        setError(null);
+        if (done) {
+          return;
+        }
       } catch (err) {
-        if (stop) return;
-        if (err instanceof ApiError && err.status === 404) setNotFound(true);
-        else setError(errMessage(err));
-        return;
+        if (stop) {
+          return;
+        }
+        if (err instanceof ApiError && err.status === 404) {
+          setNotFound(true);
+          return;
+        }
+        // one blip shouldn't end live updates for good; only surface a persistent failure
+        if (++failures >= MAX_POLL_FAILURES) {
+          setError(errMessage(err));
+          return;
+        }
       }
-      if (!stop) setTimeout(tick, 1000);
+      tick++;
+      if (!stop) {
+        timer = window.setTimeout(poll, POLL_MS);
+      }
     };
-    void tick();
+
+    void poll();
     return () => {
       stop = true;
+      window.clearTimeout(timer);
     };
   }, [jobId]);
 
@@ -107,7 +145,9 @@ export default function JobReportPage() {
 
   // running: cancel + flip status to Back; done: go to hero
   const onStopOrBack = async () => {
-    if (!jobId) return;
+    if (!jobId) {
+      return;
+    }
     if (isDone) {
       navigate('/');
       return;
@@ -126,7 +166,9 @@ export default function JobReportPage() {
   }
 
   async function onConfirmDelete() {
-    if (!jobId) return;
+    if (!jobId) {
+      return;
+    }
     setDeleting(true);
     setDeleteError(null);
     try {
@@ -139,7 +181,9 @@ export default function JobReportPage() {
     }
   }
 
-  if (!jobId) return null;
+  if (!jobId) {
+    return null;
+  }
 
   if (notFound) {
     return (
@@ -166,6 +210,13 @@ export default function JobReportPage() {
       <main className="mx-auto w-full max-w-7xl px-6 pb-24 pt-10 sm:px-10">
         {(error ?? createError) && (
           <ErrorBanner className="mb-8 px-5">{error ?? createError}</ErrorBanner>
+        )}
+
+        {/* the API refuses these jobs up front; without this the page is just a bare FAILED badge */}
+        {status?.status === 'failed' && report?.site_audit?.robots_disallow_all && (
+          <ErrorBanner className="mb-8 px-5">
+            This site's robots.txt disallows crawling, so no pages were checked.
+          </ErrorBanner>
         )}
 
         <ProgressView status={status} onDelete={() => setConfirmingDelete(true)} />

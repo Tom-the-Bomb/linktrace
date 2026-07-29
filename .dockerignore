@@ -2,7 +2,6 @@
 .git
 .gitignore
 *.md
-guide/
 
 # Go
 /bin/

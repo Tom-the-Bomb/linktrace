@@ -42,8 +42,11 @@ export function AuthForm({ onDone }: { onDone?: () => void }) {
     setError(null);
     setBusy(true);
     try {
-      if (mode === 'register') await register(username, password);
-      else await login(username, password);
+      if (mode === 'register') {
+        await register(username, password);
+      } else {
+        await login(username, password);
+      }
       onDone?.();
     } catch (err) {
       setError(friendlyError(err, mode));

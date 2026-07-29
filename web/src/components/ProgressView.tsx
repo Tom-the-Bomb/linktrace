@@ -13,7 +13,9 @@ export function ProgressView({
   status: Status | null;
   onDelete?: () => void;
 }) {
-  if (!status) return null;
+  if (!status) {
+    return null;
+  }
   const { discovered, checked, healthy, rotten, status: state, url } = status;
   const pending = Math.max(0, discovered - checked);
   const isDone = isTerminalStatus(state);
@@ -104,7 +106,6 @@ function StatusBadge({ status, pulse }: { status: string; pulse: boolean }) {
   const tone: Record<string, string> = {
     pending: 'border-ink-400 text-ink-300',
     crawling: 'border-accent/60 text-accent',
-    checking: 'border-accent/60 text-accent-soft',
     complete: 'border-emerald-400/60 text-emerald-300',
     failed: 'border-rose-400/60 text-rose-300',
     stopped: 'border-ink-400 text-ink-200',

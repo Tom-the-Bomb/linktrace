@@ -97,9 +97,11 @@ func handleAnchor(a *Audit, pageHost string, n *html.Node) {
 }
 
 // reads a <meta> element: description, viewport, robots noindex, OG / Twitter tags.
+// Attribute *values* are matched case-insensitively (<meta name="Description"> is valid and
+// common); the parser already lowercases attribute names.
 func handleMeta(a *Audit, n *html.Node) {
-	name := htmlx.GetAttr(n, "name")
-	property := htmlx.GetAttr(n, "property")
+	name := strings.ToLower(htmlx.GetAttr(n, "name"))
+	property := strings.ToLower(htmlx.GetAttr(n, "property"))
 	content := htmlx.GetAttr(n, "content")
 
 	switch {

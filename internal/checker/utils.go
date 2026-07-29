@@ -57,9 +57,8 @@ func classifyNetworkError(err error) string {
 	if errors.Is(err, syscall.ECONNRESET) {
 		return ErrConnReset
 	}
-	if strings.Contains(err.Error(), "redirect") {
-		return ErrRedirectLoop
-	}
+	// redirect loops never reach here: Check's CheckRedirect returns ErrUseLastResponse (not an
+	// error) and flags them from the surfaced response instead.
 	return ErrUnknown
 }
 
@@ -146,10 +145,10 @@ func visibleBodyText(body []byte) (string, bool) {
 	var inBody bool
 	htmlx.Walk(doc, func(n *html.Node) bool {
 		if n.Type == html.ElementNode {
-			switch n.Data {
-			case "script", "style", "template", "noscript":
+			if htmlx.IsNonRendered(n.Data) {
 				return false // entire subtree is non-visible
-			case "body":
+			}
+			if n.Data == "body" {
 				inBody = true
 			}
 		}

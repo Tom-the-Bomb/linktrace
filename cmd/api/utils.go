@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
 	"sort"
 	"strings"
@@ -34,13 +35,35 @@ func short(id string) string {
 	return id
 }
 
+// maxBodyBytes caps request bodies. Every payload here is a small JSON object, so anything
+// larger is a mistake or an attempt to make the server buffer an unbounded read.
+const maxBodyBytes = 64 << 10
+
 // decodes the request body into v; on failure it writes a 400 and returns false.
 func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(v); err != nil {
 		httpError(w, http.StatusBadRequest, "bad request")
 		return false
 	}
 	return true
+}
+
+// returns the client IP for rate limiting. Behind Caddy the socket address is always the proxy,
+// so the LAST X-Forwarded-For hop is used — Caddy appends the real peer, so a caller who sends
+// their own header gets it overwritten in that position. Taking the first would be spoofable.
+//
+// This assumes exactly one trusted proxy and that nothing reaches the API directly (in prod only
+// Caddy publishes ports). Publishing 8080, or adding a CDN in front, invalidates that: with a
+// CDN the real client moves one position further left.
+func clientIP(r *http.Request) string {
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		hops := strings.Split(fwd, ",")
+		return strings.TrimSpace(hops[len(hops)-1])
+	}
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
 }
 
 // sets CORS headers for the configured frontend origin(s). origins is a comma-separated
@@ -56,15 +79,38 @@ func corsMiddleware(origins string) func(http.Handler) http.Handler {
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// all three headers are meaningless without Allow-Origin, so they travel together
 			if origin := r.Header.Get("Origin"); allowed[origin] {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Add("Vary", "Origin")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 			}
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// limitPerMin caps requests for the routes it wraps. Logged-in callers are counted per account
+// at perUser; everyone else per client IP at perAnon. bucket namespaces the counter so route
+// groups don't share a budget. Must be mounted below auth.Optional, which resolves the identity.
+func (s *Server) limitPerMin(bucket string, perAnon, perUser int) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			key, limit := bucket+":ip:"+clientIP(r), perAnon
+			if userID := auth.UserID(r); userID != "" {
+				key, limit = bucket+":u:"+userID, perUser
+			}
+			// fail open: a Redis blip shouldn't be reported to the user as rate limiting
+			if allowed, err := s.cache.AllowRequest(key, limit); err != nil {
+				log.Printf("[api] ratelimit %s: %v", key, err)
+			} else if !allowed {
+				httpError(w, http.StatusTooManyRequests, "too many requests, slow down")
 				return
 			}
 			next.ServeHTTP(w, r)

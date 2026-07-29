@@ -169,7 +169,7 @@ func (w *worker) processPage(d amqp.Delivery) {
 
 	log.Printf("[worker] crawling depth=%d %s", job.Depth, job.URL)
 
-	allowed, err := w.cache.Allow(hostOf(job.URL), w.cfg.RatePerMin)
+	allowed, err := w.cache.Allow(hostOf(job.URL), effectiveRate(w.cfg.RatePerMin, job.CrawlDelay))
 	if err != nil {
 		log.Printf("[worker] ratelimit error: %v", err)
 	}
@@ -328,7 +328,10 @@ func (w *worker) enqueueLinks(job queue.PageJob, res checker.CheckResult) []stri
 			}
 		}
 
-		w.publishChild(queue.PageJob{JobID: job.JobID, URL: link, Depth: childDepth, Shard: job.Shard})
+		w.publishChild(queue.PageJob{
+			JobID: job.JobID, URL: link, Depth: childDepth,
+			Shard: job.Shard, CrawlDelay: job.CrawlDelay,
+		})
 		discovered = append(discovered, link)
 	}
 	return discovered

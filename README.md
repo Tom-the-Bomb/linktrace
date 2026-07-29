@@ -7,29 +7,32 @@
 
 </div>
 
-Open-source distributed site auditor. Point it at a domain. It crawls outward from the homepage, following every internal link, and reports:
+An open-source distributed site auditor. Give it a domain, the site will crawl outward from the homepage, audit the page content,
+repeat for every internal link in the page. It finds:
 
-- what's broken, and why (DNS, timeout, SSL, soft 404, 4xx/5xx, redirect loop)
-- an SEO score and issue list for every page that isn't
-- the whole site as an interactive graph
+- what links are broken, and the reason: DNS, timeout, SSL, soft 404, 4xx/5xx, redirect loop etc.
+- report an SEO score and list of issues for every page that returns HTML
+- all of these details can be accessed via an interactive table/graph
 
 ## How it works
 
-`cmd/api` is the HTTP server. It creates jobs and serves reports, and never crawls anything itself. `cmd/worker` is the crawler: fetch, classify, pull out links, audit, save. Each worker process runs a pool of goroutines, so to go faster you add replicas.
+- `cmd/api`: HTTP server that creates jobs and serves reports (orchestrator).
+- `cmd/worker`: the actual crawler that fetches, classifies, extracts links, and audits the page. Each `cmd/worker` process manages a pool of goroutines, so we can easily horizontally scale!
 
-The rest is off the shelf. RabbitMQ carries work out to the workers and results back. Redis holds whatever changes constantly: progress counters, the seen-set, per-domain rate limits, sessions. MySQL holds jobs, pages, audits, the link graph and users. Caddy serves `web/`, proxies `/api`, and does HTTPS.
+- RabbitMQ manages delivering jobs out to the workers and getting results back.
+- Redis stores the status of running jobs such as progress counters, a 'seen' set, self-imposed per-domain ratelimits, and sessions.
+- MySQL stores jobs, pages, results, the site graph and users.
+- Caddy serves `web/`, proxies `/api`, and does HTTPS.
 
-## The report
-
-`/jobs/<id>` fills in live and freezes once the crawl finishes. Alongside progress and the graph, it has per-category rollups, a row per page with its SEO drilldown, site-level checks (robots, sitemap, HTTPS, cert), crawl stats, and any sitemap URLs the crawl never reached. Logged-in users keep their history.
+Frontend: `/jobs/<id>` receives live updates (polling) until the crawl finishes.
 
 ## API
 
-Base path `/api` in prod, JSON throughout, `{id}` is a job UUID.
+The base path is `/api` in production, everything is JSON
 
 ```
 POST   /check                  start a crawl
-GET    /check/{id}             status + live progress
+GET    /check/{id}             status + live progress ({id} is a job UUID)
 GET    /check/{id}/results     per-page rows
 GET    /check/{id}/report      aggregated report
 GET    /check/{id}/graph       nodes + edges
@@ -46,13 +49,13 @@ DELETE /auth/account           account + all jobs
 GET    /history                past crawls (auth)
 ```
 
-## Running it locally
+## Localhost
 
-Docker, Go 1.26+, Node 20+. Only MySQL, Redis and RabbitMQ run in containers.
+Docker, Go 1.26+, Node 20+ are needed as MySQL, Redis and RabbitMQ all run in containers.
 
 ```bash
 cp .env.example .env        # fill in the empty passwords
-docker compose up -d
+docker compose up -d        # spin up docker
 
 go run ./cmd/api            # :8080
 go run ./cmd/worker         # separate terminal
@@ -62,7 +65,7 @@ cd web && npm install && npm run dev   # :5173
 
 ## Deploying
 
-One compose file, and only Caddy is exposed. Point your domain's A record at the server first, then:
+For Caddy to get a certificate, must point A record to server
 
 ```bash
 ssh root@YOUR_SERVER_IP
@@ -71,10 +74,14 @@ cp .env.production.example .env.production   # DOMAIN, ACME_EMAIL, passwords
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-The same command redeploys; append `api`, `worker` or `caddy` to rebuild just one. Pushes to `main` run it for you over SSH (`.github/workflows/deploy.yml`, needs the `DROPLET_*` secrets).
+Redeploy using the same command, you can append `api`, `worker` or `caddy` to rebuild just one.
+There is a GH workflow (`.github/workflows/deploy.yml`, needs the `DROPLET_*` secrets) auto-deploy using SSH on push to `main`.
 
 ## Config
 
 Worker limits: `WORKER_COUNT` (100), `MAX_PAGES` (10000), `MAX_DEPTH` (20), `MAX_PER_CATEGORY` (1000), `RATE_PER_MIN` (1000).
 
-Connections: `MYSQL_DSN`, `REDIS_ADDR`, `RABBIT_URL`, `HTTP_ADDR`, `FRONTEND_ORIGIN`, `COOKIE_SECURE`. Defaults point at the dev containers; prod values go in `.env.production`.
+`SHARD_COUNT` (5) is the # of work-queue lanes so that each crawl (no matter how large) is limited to 1 lane so it doesn't block other crawls. (i.e. takes up 1/SHARD_COUNT fraction of the fetch goroutines) Set it to the same value on the api and the worker.
+
+Connections: `MYSQL_DSN`, `REDIS_ADDR`, `RABBIT_URL`, `HTTP_ADDR`, `FRONTEND_ORIGIN` (comma-separated), `COOKIE_SECURE`.
+Default values point at the dev containers. Production values should go in `.env.production`.

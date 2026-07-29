@@ -2,7 +2,11 @@
 // and seo packages.
 package htmlx
 
-import "golang.org/x/net/html"
+import (
+	"strings"
+
+	"golang.org/x/net/html"
+)
 
 // visits n and its descendants pre-order. When visit returns false for a node, its subtree
 // is skipped (used to drop script/style/svg etc.).
@@ -13,6 +17,38 @@ func Walk(n *html.Node, visit func(*html.Node) bool) {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		Walk(c, visit)
 	}
+}
+
+// nonRendered are elements whose subtrees never contribute visible page text. Shared so the
+// SEO audit and the soft-404 scan agree on what "the text of a page" means.
+var nonRendered = map[string]bool{
+	"script": true, "style": true, "template": true, "noscript": true, "svg": true,
+}
+
+// IsNonRendered reports whether an element's subtree should be skipped when collecting text.
+func IsNonRendered(tag string) bool { return nonRendered[tag] }
+
+// TextContent returns n's descendant text, space-separated and trimmed. Unlike reading
+// FirstChild.Data it survives nested markup, so <h1><span>Title</span></h1> yields "Title"
+// rather than the tag name.
+func TextContent(n *html.Node) string {
+	var buf strings.Builder
+	Walk(n, func(c *html.Node) bool {
+		if c.Type == html.ElementNode && IsNonRendered(c.Data) {
+			return false
+		}
+		if c.Type != html.TextNode {
+			return true
+		}
+		if t := strings.TrimSpace(c.Data); t != "" {
+			if buf.Len() > 0 {
+				buf.WriteByte(' ')
+			}
+			buf.WriteString(t)
+		}
+		return true
+	})
+	return buf.String()
 }
 
 // returns the value of n's attribute key and whether it was present.

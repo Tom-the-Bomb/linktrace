@@ -17,10 +17,23 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
-      # schema.sql only runs on a FRESH volume (first boot). See guide for re-applying.
+      # schema.sql only runs on a FRESH volume (first boot) — redeploying does NOT re-apply it.
+      # To apply a change to a live database:
+      #   docker exec -i linktrace-mysql mysql -ulinktrace -p"$MYSQL_PASSWORD" linktrace < schema.sql
+      # Safe to re-run (every statement is CREATE TABLE IF NOT EXISTS), but it won't alter
+      # existing tables — changed columns still need their own ALTER TABLE.
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-uroot",
+          "-p${MYSQL_ROOT_PASSWORD}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -81,7 +94,7 @@ services:
       MYSQL_DSN: "${MYSQL_USER:-linktrace}:${MYSQL_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-linktrace}?parseTime=true"
       REDIS_ADDR: "redis:6379"
       RABBIT_URL: "amqp://${RABBITMQ_USER:-linktrace}:${RABBITMQ_PASS}@rabbitmq:5672/"
-      WORKER_COUNT: "${WORKER_COUNT:-50}"
+      WORKER_COUNT: "${WORKER_COUNT:-100}"
       MAX_PAGES: "${MAX_PAGES:-10000}"
       MAX_DEPTH: "${MAX_DEPTH:-20}"
       MAX_PER_CATEGORY: "${MAX_PER_CATEGORY:-1000}"
@@ -98,6 +111,9 @@ services:
       dockerfile: Dockerfile.web
       args:
         VITE_API_BASE: /api
+        # public origin for canonical/og:url + robots/sitemap. Deliberately NOT derived from
+        # DOMAIN, which is a Caddy listener spec (e.g. ":80") and often isn't a hostname at all.
+        VITE_SITE_URL: "${VITE_SITE_URL:-https://linktrace.tomthebomb.dev}"
     container_name: linktrace-caddy
     restart: unless-stopped
     ports:
@@ -107,7 +123,7 @@ services:
       DOMAIN: ${DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
-      - caddy_data:/data      # persists TLS certs across restarts (avoids LE rate limits)
+      - caddy_data:/data # persists TLS certs across restarts (avoids LE rate limits)
       - caddy_config:/config
     depends_on:
       - api

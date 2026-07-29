@@ -67,12 +67,16 @@ func (c *Checker) Check(rawURL string) CheckResult {
 	}
 	httpx.SetBrowserHeaders(req)
 
+	// looped is set when the hop limit is hit. ErrUseLastResponse is deliberate: returning a real
+	// error here would discard the response (and the chain) that the report wants to show.
 	var chain []string
+	var looped bool
 	client := &http.Client{
 		Timeout: c.timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			chain = append(chain, req.URL.String())
 			if len(via) >= maxRedirects {
+				looped = true
 				return http.ErrUseLastResponse
 			}
 			return nil
@@ -95,6 +99,10 @@ func (c *Checker) Check(rawURL string) CheckResult {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 
 	switch {
+	// checked before the status buckets: the surfaced response is the last 3xx of the chain,
+	// which would otherwise fall through to the 2xx/3xx branch and be recorded as alive
+	case looped:
+		res.ErrorType = ErrRedirectLoop
 	case looksBlocked(resp.StatusCode, resp.Header, body):
 		res.ErrorType = ErrBlocked
 		res.RetryAfter = parseRetryAfter(resp.Header.Get("Retry-After"))

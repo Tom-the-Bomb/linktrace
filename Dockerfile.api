@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/api ./c
 # ---- run stage ----
 FROM alpine:3.20
 # ca-certificates: the API does outbound HTTPS (domain audit / archive lookups).
-# wget: handy for debugging; tini: clean signal handling for graceful shutdown.
+# tini: clean signal handling for graceful shutdown.
 RUN apk add --no-cache ca-certificates tini
 COPY --from=build /out/api /usr/local/bin/api
 EXPOSE 8080

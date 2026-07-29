@@ -5,6 +5,7 @@ package site
 import (
 	"log"
 	"net/url"
+	"sort"
 
 	"github.com/Tom-the-Bomb/linktrace/internal/crawler"
 )
@@ -93,5 +94,10 @@ func ComputeCoverageGap(sitemapURLs, crawledURLs, rottenURLs []string) CoverageG
 			g.SitemapDead = append(g.SitemapDead, u)
 		}
 	}
+	// map iteration is randomised, and the report page re-fetches this every poll: without a
+	// stable order the panel's lists visibly reshuffle while a crawl runs
+	sort.Strings(g.Orphans)
+	sort.Strings(g.NotCrawled)
+	sort.Strings(g.SitemapDead)
 	return g
 }

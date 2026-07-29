@@ -7,7 +7,9 @@ export function useTypingPlaceholder(active: boolean): string {
   // pre-typed so first paint shows a domain, not an empty field
   const [text, setText] = useState(DEMO_DOMAINS[0]);
   useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      return;
+    }
     let cancelled = false;
     let domainIdx = 0;
     let charIdx = DEMO_DOMAINS[0].length;
@@ -15,12 +17,16 @@ export function useTypingPlaceholder(active: boolean): string {
     setText(DEMO_DOMAINS[0]);
 
     const tick = () => {
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
       const word = DEMO_DOMAINS[domainIdx];
       let delay = 130; // typing speed
       if (phase === 'typing') {
         charIdx++;
-        if (charIdx >= word.length) phase = 'holding';
+        if (charIdx >= word.length) {
+          phase = 'holding';
+        }
       } else if (phase === 'holding') {
         delay = 2800; // pause at full word
         phase = 'deleting';

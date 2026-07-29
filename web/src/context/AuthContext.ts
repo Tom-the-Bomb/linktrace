@@ -16,6 +16,8 @@ export const AuthContext = createContext<AuthState | null>(null);
 // kept apart from <AuthProvider> so that file exports only a component (Fast Refresh)
 export function useAuth(): AuthState {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');
+  if (!ctx) {
+    throw new Error('useAuth must be used inside <AuthProvider>');
+  }
   return ctx;
 }

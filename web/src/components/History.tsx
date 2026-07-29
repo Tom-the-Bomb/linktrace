@@ -36,8 +36,11 @@ export function History() {
   const toggle = (url: string) =>
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(url)) next.delete(url);
-      else next.add(url);
+      if (next.has(url)) {
+        next.delete(url);
+      } else {
+        next.add(url);
+      }
       return next;
     });
 
@@ -46,9 +49,13 @@ export function History() {
     setEntries((prev) =>
       prev
         ? prev.flatMap((e) => {
-            if (!e.runs.some((r) => r.job_id === jobId)) return [e];
+            if (!e.runs.some((r) => r.job_id === jobId)) {
+              return [e];
+            }
             const runs = e.runs.filter((r) => r.job_id !== jobId);
-            if (runs.length === 0) return [];
+            if (runs.length === 0) {
+              return [];
+            }
             // runs stay newest-first, so runs[0] is the new latest
             return [
               {
@@ -64,7 +71,9 @@ export function History() {
     );
 
   async function confirmDelete() {
-    if (!pendingDelete) return;
+    if (!pendingDelete) {
+      return;
+    }
     setDeleting(true);
     setDeleteError(null);
     try {
@@ -322,13 +331,18 @@ const STATUS_DOT: Record<string, string> = {
 };
 
 function StatusBadge({ status }: { status?: string }) {
-  if (!status) return null;
+  if (!status) {
+    return null;
+  }
   const cls = STATUS_STYLES[status] ?? 'border-ink-500/70 text-ink-300';
   const dot = STATUS_DOT[status] ?? 'bg-ink-400';
   return (
     <>
       {/* mobile: colour-coded dot to save horizontal space */}
-      <span title={status} className={`inline-block size-2 shrink-0 rounded-full sm:hidden ${dot}`} />
+      <span
+        title={status}
+        className={`inline-block size-2 shrink-0 rounded-full sm:hidden ${dot}`}
+      />
       {/* desktop: full labelled badge */}
       <span
         className={`hidden whitespace-nowrap border px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest sm:inline-block ${cls}`}

@@ -74,8 +74,12 @@ const TONE_COLOUR: Record<NodeTone, string> = {
 
 // node tone -> tooltip score text colour
 function tooltipToneClass(tone: NodeTone): string {
-  if (tone === 'live') return 'text-teal';
-  if (tone === 'mid') return 'text-accent';
+  if (tone === 'live') {
+    return 'text-teal';
+  }
+  if (tone === 'mid') {
+    return 'text-accent';
+  }
   return 'text-rose-300';
 }
 
@@ -116,9 +120,13 @@ export function CrawlGraphBackdrop() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      return;
+    }
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      return;
+    }
 
     const dpr = window.devicePixelRatio || 1;
     let width = 0;
@@ -156,7 +164,9 @@ export function CrawlGraphBackdrop() {
         const n = nodes[i];
         const dx = n.x - lx;
         const dy = n.y - ly;
-        if (dx * dx + dy * dy <= (n.r + 14) * (n.r + 14)) return i;
+        if (dx * dx + dy * dy <= (n.r + 14) * (n.r + 14)) {
+          return i;
+        }
       }
       return null;
     };
@@ -164,7 +174,9 @@ export function CrawlGraphBackdrop() {
     const onPointerDown = (e: PointerEvent) => {
       const { x, y } = toLogical(e.clientX, e.clientY);
       const idx = pickNode(x, y);
-      if (idx === null) return;
+      if (idx === null) {
+        return;
+      }
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
       dragRef.current = { idx, lx: x, ly: y };
@@ -183,15 +195,18 @@ export function CrawlGraphBackdrop() {
       if (idx !== hoverRef.current) {
         hoverRef.current = idx;
         canvas.style.cursor = idx !== null ? 'grab' : 'default';
-        if (idx === null) setTooltipContent(null);
-        else {
+        if (idx === null) {
+          setTooltipContent(null);
+        } else {
           const n = nodesRef.current[idx];
           setTooltipContent({ path: n.path, score: n.score, tone: n.tone });
         }
       }
     };
     const onPointerUp = (e: PointerEvent) => {
-      if (!dragRef.current) return;
+      if (!dragRef.current) {
+        return;
+      }
       canvas.releasePointerCapture(e.pointerId);
       dragRef.current = null;
       canvas.style.cursor = hoverRef.current !== null ? 'grab' : 'default';

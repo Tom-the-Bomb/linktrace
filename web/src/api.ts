@@ -2,7 +2,7 @@
 
 const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080';
 
-export type JobStatus = 'pending' | 'crawling' | 'checking' | 'complete' | 'failed' | 'stopped';
+export type JobStatus = 'pending' | 'crawling' | 'complete' | 'failed' | 'stopped';
 
 export interface Status {
   job_id: string;
@@ -47,6 +47,7 @@ export interface CategoryReport {
 
 export interface SiteAudit {
   robots_found: boolean;
+  // set when robots.txt disallows everything; the crawl is refused before any page is fetched
   robots_disallow_all: boolean;
   crawl_delay: number;
   sitemap_found: boolean;
@@ -116,7 +117,11 @@ export class ApiError extends Error {
 // nullOn lets a single status (e.g. 404/401) resolve to null instead of throwing —
 // for endpoints where "not found"/"not logged in" is a valid, expected state.
 function jsonRequest<T>(path: string, init?: RequestInit): Promise<T>;
-function jsonRequest<T>(path: string, init: RequestInit | undefined, nullOn: number): Promise<T | null>;
+function jsonRequest<T>(
+  path: string,
+  init: RequestInit | undefined,
+  nullOn: number,
+): Promise<T | null>;
 async function jsonRequest<T>(
   path: string,
   init?: RequestInit,
@@ -127,13 +132,17 @@ async function jsonRequest<T>(
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
   });
-  if (res.status === nullOn) return null;
+  if (res.status === nullOn) {
+    return null;
+  }
   if (!res.ok) {
     // prefer the server {error} message, fall back to status text
     let msg = `${res.status} ${res.statusText || 'request failed'}`;
     try {
       const body = (await res.json()) as { error?: string };
-      if (body?.error) msg = body.error;
+      if (body?.error) {
+        msg = body.error;
+      }
     } catch {
       /* response wasn't JSON, keep the default */
     }

@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect } from 'react';
+
 import { createPortal } from 'react-dom';
 
 interface Props {
@@ -29,7 +30,9 @@ export function ConfirmDialog({
 }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onCancel();
+      if (e.key === 'Escape' && !busy) {
+        onCancel();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

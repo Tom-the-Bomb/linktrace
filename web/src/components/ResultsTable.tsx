@@ -34,10 +34,15 @@ export function ResultsTable({
 
   const filtered = useMemo(() => {
     let r = rows;
-    if (filter === 'rotten') r = r.filter((x) => !x.is_alive);
-    else if (filter === 'healthy') r = r.filter((x) => x.is_alive);
+    if (filter === 'rotten') {
+      r = r.filter((x) => !x.is_alive);
+    } else if (filter === 'healthy') {
+      r = r.filter((x) => x.is_alive);
+    }
     const q = query.trim().toLowerCase();
-    if (q) r = r.filter((x) => x.url.toLowerCase().includes(q));
+    if (q) {
+      r = r.filter((x) => x.url.toLowerCase().includes(q));
+    }
     return r;
   }, [rows, filter, query]);
 
@@ -46,8 +51,12 @@ export function ResultsTable({
     return [...filtered].sort((a, b) => {
       if (sortKey === 'seo') {
         // no-score pages always sink to the bottom, regardless of direction
-        if (a.seo_score === null) return b.seo_score === null ? 0 : 1;
-        if (b.seo_score === null) return -1;
+        if (a.seo_score === null) {
+          return b.seo_score === null ? 0 : 1;
+        }
+        if (b.seo_score === null) {
+          return -1;
+        }
         return (a.seo_score - b.seo_score) * dir;
       }
       return (a.depth - b.depth) * dir;
@@ -82,7 +91,9 @@ export function ResultsTable({
     setPage(1);
   }
 
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    return null;
+  }
 
   return (
     <section className="border border-ink-500/70 bg-ink-700/40">
@@ -112,7 +123,12 @@ export function ResultsTable({
               sort
             </span>
             {(['depth', 'seo'] as SortKey[]).map((k) => (
-              <SegButton key={k} variant="sort" active={sortKey === k} onClick={() => selectSort(k)}>
+              <SegButton
+                key={k}
+                variant="sort"
+                active={sortKey === k}
+                onClick={() => selectSort(k)}
+              >
                 {k}
               </SegButton>
             ))}
@@ -225,7 +241,9 @@ function StatusBadge({ alive, code, error }: { alive: boolean; code: number; err
 }
 
 function SeoScore({ score }: { score: number | null }) {
-  if (score === null) return <span className="text-xs text-ink-400">—</span>;
+  if (score === null) {
+    return <span className="text-xs text-ink-400">—</span>;
+  }
   return (
     <span className={`display text-lg font-light tabular-nums ${scoreTextColour(score)}`}>
       {score}

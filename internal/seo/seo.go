@@ -131,34 +131,42 @@ func AuditHTML(body []byte, pageURL string) Audit {
 
 	var textBuf strings.Builder
 	var firstH1 string
+	var inBody bool
 
 	htmlx.Walk(doc, func(n *html.Node) bool {
 		if n.Type == html.TextNode {
-			textBuf.WriteString(" ")
-			textBuf.WriteString(n.Data)
+			// body-only, matching the checker's soft-404 scan: <head> text (notably <title>)
+			// isn't page content and would inflate the thin-content word count
+			if inBody {
+				textBuf.WriteString(" ")
+				textBuf.WriteString(n.Data)
+			}
 			return true
 		}
 		if n.Type != html.ElementNode {
 			return true
 		}
-		switch n.Data {
-		case "script":
+		if n.Data == "script" {
 			handleJSONLD(&a, n)
 			return false // never descend into scripts
-		case "style":
+		}
+		// style/template/noscript/svg carry no page text; inline svg <title> would also
+		// clobber the document title
+		if htmlx.IsNonRendered(n.Data) {
 			return false
-		case "svg":
-			// inline icons often carry <title> a11y labels that would clobber the page title
-			return false
+		}
+		switch n.Data {
+		case "body":
+			inBody = true
 		case "title":
-			if a.Title == "" && n.FirstChild != nil {
-				a.Title = strings.TrimSpace(n.FirstChild.Data)
+			if a.Title == "" {
+				a.Title = htmlx.TextContent(n)
 				a.TitleLength = len(a.Title)
 			}
 		case "h1":
 			a.H1Count++
-			if firstH1 == "" && n.FirstChild != nil {
-				firstH1 = strings.TrimSpace(n.FirstChild.Data)
+			if firstH1 == "" {
+				firstH1 = htmlx.TextContent(n)
 			}
 		case "h2":
 			a.H2Count++
@@ -173,7 +181,7 @@ func AuditHTML(body []byte, pageURL string) Audit {
 		case "meta":
 			handleMeta(&a, n)
 		case "link":
-			if htmlx.GetAttr(n, "rel") == "canonical" {
+			if strings.EqualFold(htmlx.GetAttr(n, "rel"), "canonical") {
 				a.Canonical = htmlx.GetAttr(n, "href")
 			}
 		case "html":

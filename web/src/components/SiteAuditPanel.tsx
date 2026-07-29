@@ -129,8 +129,12 @@ function PctStat({
 }) {
   const ratio = total > 0 ? count / total : 0;
   let colour = 'text-ink-300';
-  if (goodAbove !== undefined) colour = ratio >= goodAbove ? 'text-emerald-300' : 'text-amber-300';
-  if (badAbove !== undefined) colour = ratio > badAbove ? 'text-rose-300' : 'text-emerald-300';
+  if (goodAbove !== undefined) {
+    colour = ratio >= goodAbove ? 'text-emerald-300' : 'text-amber-300';
+  }
+  if (badAbove !== undefined) {
+    colour = ratio > badAbove ? 'text-rose-300' : 'text-emerald-300';
+  }
   return (
     <DataRow compact label={label}>
       <span className={`tabular-nums ${colour}`}>

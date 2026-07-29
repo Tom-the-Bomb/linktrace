@@ -34,6 +34,9 @@ type PageJob struct {
 	Depth      int    `json:"depth"`
 	RetryCount int    `json:"retry_count"`
 	Shard      int    `json:"shard"` // work-queue lane this job is pinned to
+	// CrawlDelay carries the site's robots.txt Crawl-delay (seconds, 0 = unset) so workers can
+	// throttle to it. Travels on the message rather than being re-read from Redis per page.
+	CrawlDelay int `json:"crawl_delay,omitempty"`
 }
 
 // JSON-encoded result + SEO fields avoid importing store/seo here (would cycle)

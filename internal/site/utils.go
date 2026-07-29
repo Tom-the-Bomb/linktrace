@@ -25,7 +25,9 @@ func fetchRobots(root *url.URL) (found, disallowAll bool, crawlDelay int, sitema
 		return false, false, 0, nil
 	}
 	found = true
-	applies := false
+	// applies tracks whether the current group targets us. Consecutive User-agent lines form one
+	// group, so within a run we OR rather than overwrite; the first rule line ends the run.
+	applies, inUARun := false, false
 	for _, raw := range strings.Split(body, "\n") {
 		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -35,9 +37,17 @@ func fetchRobots(root *url.URL) (found, disallowAll bool, crawlDelay int, sitema
 		if !ok {
 			continue
 		}
+		if key != "user-agent" && key != "sitemap" {
+			inUARun = false
+		}
 		switch key {
 		case "user-agent":
-			applies = val == "*" || strings.Contains(strings.ToLower(val), "linktrace")
+			targetsUs := val == "*" || strings.Contains(strings.ToLower(val), "linktrace")
+			if inUARun {
+				applies = applies || targetsUs
+			} else {
+				applies, inUARun = targetsUs, true
+			}
 		case "disallow":
 			if applies && val == "/" {
 				disallowAll = true
@@ -116,7 +126,8 @@ func checkHTTPS(host string) (isHTTPS, httpsRedirect, certValid bool) {
 		}
 	}
 
-	// HTTPS reachable + cert valid (a bad cert errors out, leaving both false)
+	// Go verifies the chain and hostname during the handshake, so reaching here means the cert
+	// is valid. A bad cert and an unreachable host both leave these false.
 	if resp, err := httpx.NewClient(probeTimeout, true).Get("https://" + host); err == nil {
 		defer resp.Body.Close()
 		isHTTPS = true
@@ -133,37 +144,49 @@ func checkWWW(host string) string {
 
 	noFollow := httpx.NewClient(probeTimeout, false)
 
-	land := func(rawURL string) string {
+	// land reports the host a form settles on, and whether it got there by redirecting. Both
+	// facts are needed: a form that redirects elsewhere is not canonical, while one that serves
+	// itself is — collapsing them to a bare host made every apex->www site look like "both".
+	land := func(rawURL, self string) (dest string, redirected bool) {
 		resp, err := noFollow.Get(rawURL)
 		if err != nil {
-			return ""
+			return "", false
 		}
 		defer resp.Body.Close()
-		// a 3xx redirect tells us where the canonical form lives
-		if loc := resp.Header.Get("Location"); loc != "" {
-			if u, err := url.Parse(loc); err == nil && u.Host != "" {
-				return strings.TrimPrefix(u.Host, "www.")
+		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+			// only a cross-host redirect says where the canonical form lives; a relative or
+			// same-host Location is internal routing, so this form still serves itself
+			if loc, lerr := url.Parse(resp.Header.Get("Location")); lerr == nil && loc.Host != "" {
+				if h := strings.ToLower(loc.Host); h != self {
+					return h, true
+				}
 			}
+			return self, false
 		}
-		// served directly (no redirect) -> this is itself a live canonical form
-		if resp.StatusCode >= 200 && resp.StatusCode < 400 {
-			return strings.TrimPrefix(rawURL, "https://")
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return self, false
 		}
-		return ""
+		return "", false
 	}
 
-	wwwLands := land("https://" + wwwHost)
-	apexLands := land("https://" + apex)
+	wwwDest, wwwRedirected := land("https://"+wwwHost, wwwHost)
+	apexDest, apexRedirected := land("https://"+apex, apex)
 
 	switch {
-	case wwwLands == "" || apexLands == "":
+	case wwwDest == "" || apexDest == "":
 		return "inconsistent"
-	case strings.HasPrefix(wwwLands, wwwHost) && strings.HasPrefix(apexLands, wwwHost):
-		return "www"
-	case wwwLands == apex && apexLands == apex:
-		return "apex"
-	case strings.HasPrefix(wwwLands, wwwHost) && apexLands == apex:
-		return "both" // both serve themselves, no redirect either way
+	// both forms converge on one host: that host is the canonical form
+	case wwwDest == apexDest:
+		if wwwDest == wwwHost {
+			return "www"
+		}
+		if wwwDest == apex {
+			return "apex"
+		}
+		return "inconsistent" // converge somewhere off-domain
+	// neither redirects, so each serves its own duplicate copy
+	case !wwwRedirected && !apexRedirected:
+		return "both"
 	default:
 		return "inconsistent"
 	}

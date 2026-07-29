@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { type SEODetail, getSEODetail } from '../api';
 import { pct, scoreTextColour } from '../lib/colours';
+import { errMessage } from '../lib/format';
 import { DataRow } from './ui/DataRow';
 import { ErrorBanner } from './ui/ErrorBanner';
 
@@ -18,14 +19,16 @@ export function SeoDrawer({ jobId, url, onClose }: Props) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!url) return;
+    if (!url) {
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
     setDetail(null);
     getSEODetail(jobId, url)
       .then((d) => !cancelled && setDetail(d))
-      .catch((e) => !cancelled && setError(String(e)))
+      .catch((e) => !cancelled && setError(errMessage(e)))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
@@ -33,18 +36,31 @@ export function SeoDrawer({ jobId, url, onClose }: Props) {
   }, [jobId, url]);
 
   useEffect(() => {
-    if (!url) return;
+    if (!url) {
+      return;
+    }
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [url, onClose]);
 
-  if (!url) return null;
+  if (!url) {
+    return null;
+  }
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-ink-900/70 backdrop-blur-sm" onClick={onClose} />
-      <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-ink-500/70 bg-ink-800 shadow-2xl">
+      <div
+        className="fixed inset-0 z-40 bg-ink-900/70 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label="Page audit"
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-ink-500/70 bg-ink-800 shadow-2xl"
+      >
         <header className="flex items-start justify-between gap-3 border-b border-ink-500/70 px-6 py-5">
           <div className="min-w-0">
             <div className="eyebrow">page audit</div>
@@ -147,17 +163,36 @@ function SeoBody({ detail }: { detail: SEODetail }) {
             ok={!!detail.twitter_tags && Object.keys(detail.twitter_tags).length > 0}
           />
           <Signal label="indexable" ok={!detail.noindex} />
-          <Signal label={`html lang${detail.html_lang ? ` · ${detail.html_lang}` : ''}`} ok={!!detail.html_lang} />
+          <Signal
+            label={`html lang${detail.html_lang ? ` · ${detail.html_lang}` : ''}`}
+            ok={!!detail.html_lang}
+          />
         </ul>
       </Section>
 
       {detail.images_total > 0 && (
         <Section label={`images · ${detail.images_total}`}>
           <ul className="divide-y divide-ink-500/60 border-y border-ink-500/60">
-            <CountSignal label="alt text" count={detail.images_with_alt} total={detail.images_total} />
-            <CountSignal label="width/height" count={detail.images_with_dims} total={detail.images_total} />
-            <CountSignal label="lazy loaded" count={detail.images_lazy_loaded} total={detail.images_total} />
-            <CountSignal label="responsive (srcset)" count={detail.images_responsive} total={detail.images_total} />
+            <CountSignal
+              label="alt text"
+              count={detail.images_with_alt}
+              total={detail.images_total}
+            />
+            <CountSignal
+              label="width/height"
+              count={detail.images_with_dims}
+              total={detail.images_total}
+            />
+            <CountSignal
+              label="lazy loaded"
+              count={detail.images_lazy_loaded}
+              total={detail.images_total}
+            />
+            <CountSignal
+              label="responsive (srcset)"
+              count={detail.images_responsive}
+              total={detail.images_total}
+            />
           </ul>
         </Section>
       )}
@@ -308,7 +343,7 @@ function CountSignal({ label, count, total }: { label: string; count: number; to
 function RawStat({ label, value }: { label: string; value: number }) {
   return (
     <DataRow label={label}>
-      <span className="font-mono text-xs tabular-nums text-ink-200">{value}</span>
+      <span className="text-ink-200 font-mono text-xs tabular-nums">{value}</span>
     </DataRow>
   );
 }
