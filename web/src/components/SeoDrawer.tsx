@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+import { Check, ExternalLink, X } from 'lucide-react';
 
 import { type SEODetail, getSEODetail } from '../api';
-import { pct, scoreTextColour } from '../lib/colours';
+import { pct, scoreTierChip, toneColour } from '../lib/colours';
 import { errMessage } from '../lib/format';
 import { DataRow } from './ui/DataRow';
 import { ErrorBanner } from './ui/ErrorBanner';
@@ -12,11 +14,12 @@ interface Props {
   onClose: () => void;
 }
 
-// slide-in audit panel; fetches on URL change, closes on backdrop click or Esc
+// slide-in audit sheet; fetches on URL change, closes on backdrop click or Esc
 export function SeoDrawer({ jobId, url, onClose }: Props) {
   const [detail, setDetail] = useState<SEODetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!url) {
@@ -39,9 +42,15 @@ export function SeoDrawer({ jobId, url, onClose }: Props) {
     if (!url) {
       return;
     }
+    // move focus into the sheet, give it back on close
+    const prev = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      prev?.focus?.();
+    };
   }, [url, onClose]);
 
   if (!url) {
@@ -50,41 +59,44 @@ export function SeoDrawer({ jobId, url, onClose }: Props) {
 
   return (
     <>
-      <div
-        className="fixed inset-0 z-40 bg-ink-900/70 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
+      <div className="fixed inset-0 z-40 bg-ink/30" onClick={onClose} aria-hidden="true" />
       <aside
         role="dialog"
         aria-modal="true"
         aria-label="Page audit"
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-ink-500/70 bg-ink-800 shadow-2xl"
+        className="fixed inset-y-2 right-2 z-50 flex w-[calc(100%-1rem)] max-w-xl animate-row-in flex-col overflow-hidden rounded-panel bg-panel shadow-lift"
       >
-        <header className="flex items-start justify-between gap-3 border-b border-ink-500/70 px-6 py-5">
+        <header className="flex items-start justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
           <div className="min-w-0">
-            <div className="eyebrow">page audit</div>
+            <h2 className="truncate text-lg font-semibold tracking-[-0.02em]">
+              Audit of <span className="font-mono text-[16px] font-medium">{pathOf(url)}</span>
+            </h2>
             <a
               href={url}
               target="_blank"
               rel="noreferrer"
-              className="mt-2 block truncate font-mono text-sm text-paper hover:text-accent"
+              className="mt-0.5 flex items-center gap-1.5 font-mono text-[12px] text-ink-3 hover:text-accent-600"
             >
-              {url}
+              <span className="truncate">{url}</span>
+              <ExternalLink className="size-3 shrink-0" strokeWidth={2.25} aria-hidden="true" />
             </a>
           </div>
           <button
+            ref={closeRef}
             onClick={onClose}
-            aria-label="Close"
-            className="border border-ink-500/70 px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest text-ink-300 transition hover:bg-ink-600 hover:text-paper"
+            aria-label="Close audit"
+            className="btn-quiet shrink-0 !px-1.5 text-[13px]"
           >
-            esc
+            <span className="kbd !h-5 !text-[10px]" aria-hidden="true">
+              esc
+            </span>
+            <X className="size-4" strokeWidth={2.25} />
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          {loading && <SkeletonRow />}
-          {error && <ErrorBanner className="px-4">{error}</ErrorBanner>}
+        <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+          {loading && <Skeleton />}
+          {error && <ErrorBanner>{error}</ErrorBanner>}
           {!loading && !error && !detail && <NoAuditState />}
           {detail && <SeoBody detail={detail} />}
         </div>
@@ -95,51 +107,71 @@ export function SeoDrawer({ jobId, url, onClose }: Props) {
 
 function NoAuditState() {
   return (
-    <div className="flex flex-col items-start gap-3 border-l-2 border-ink-500/70 bg-ink-700/30 px-5 py-6">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-ink-300">
-        no audit available
-      </span>
-      <p className="text-ink-200 text-sm leading-relaxed">
-        This page didn't return a healthy response, so no SEO audit was performed.
-      </p>
-      <p className="font-mono text-[10px] uppercase tracking-widest text-ink-300">
-        check the page status in the table or graph for the failure reason.
+    <div>
+      <p className="font-semibold">No SEO audit for this page</p>
+      <p className="mt-1.5 text-[15px] leading-relaxed text-ink-2">
+        This page didn&rsquo;t load as a normal HTML page, so there was nothing to audit. Its status
+        in the table or graph shows why it failed.
       </p>
     </div>
   );
 }
 
-function SkeletonRow() {
+function Skeleton() {
   return (
-    <div className="space-y-4">
-      <div className="h-24 animate-pulse bg-ink-700" />
-      <div className="h-32 animate-pulse bg-ink-700" />
-      <div className="h-24 animate-pulse bg-ink-700" />
+    <div className="space-y-4" aria-busy="true" aria-label="Loading audit">
+      <div className="h-20 animate-pulse rounded-xl bg-sunken" />
+      <div className="h-32 animate-pulse rounded-xl bg-sunken" />
+      <div className="h-24 animate-pulse rounded-xl bg-sunken" />
     </div>
   );
 }
 
 function SeoBody({ detail }: { detail: SEODetail }) {
   return (
-    <div className="space-y-8">
-      <ScoreRow score={detail.score} />
+    <div className="space-y-7">
+      <div className="flex items-end justify-between border-b border-line pb-6">
+        <span>
+          <span className="block text-[13px] font-medium text-ink-3">SEO score</span>
+          <span className={`chip mt-1.5 ${scoreTierChip(detail.score).chip}`}>
+            {scoreTierChip(detail.score).label}
+          </span>
+        </span>
+        <span className="flex items-baseline gap-1">
+          <span className="num text-5xl font-semibold tracking-[-0.05em]">{detail.score}</span>
+          <span className="text-base font-semibold text-ink-3">/100</span>
+        </span>
+      </div>
 
-      <Section label="title">
-        <p className="display text-lg font-light leading-snug text-paper">
-          {detail.title || <em className="italic text-ink-300">missing</em>}
+      {detail.issues && detail.issues.length > 0 && (
+        <Section label="Issues" count={detail.issues.length}>
+          <ul className="divide-y divide-line">
+            {detail.issues.map((iss) => (
+              <li key={iss.code} className="flex items-start gap-3 py-2.5 text-[15px] leading-snug">
+                <span className={`chip mt-px ${severityChip(iss.severity)}`}>{iss.severity}</span>
+                <span>{iss.message}</span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      <Section label="Title">
+        <p className="text-[17px] font-semibold leading-snug">
+          {detail.title || <em className="font-normal not-italic text-bad-fg">Missing</em>}
         </p>
-        <Meta value={`${detail.title_length} chars`} />
+        <Meta value={`${detail.title_length} characters`} />
       </Section>
 
-      <Section label="meta description">
-        <p className="text-sm leading-relaxed text-paper/90">
-          {detail.meta_description || <em className="italic text-ink-300">missing</em>}
+      <Section label="Meta description">
+        <p className="text-[15px] leading-relaxed text-ink-2">
+          {detail.meta_description || <em className="not-italic text-bad-fg">Missing</em>}
         </p>
-        <Meta value={`${detail.meta_description_length} chars`} />
+        <Meta value={`${detail.meta_description_length} characters`} />
       </Section>
 
-      <Section label="headings">
-        <div className="grid grid-cols-3 gap-3">
+      <Section label="Headings">
+        <div className="grid grid-cols-6 divide-x divide-line rounded-control ring-1 ring-inset ring-line">
           <HeadingTile label="h1" count={detail.h1_count} flagWhen={(n) => n !== 1} />
           <HeadingTile label="h2" count={detail.h2_count} />
           <HeadingTile label="h3" count={detail.h3_count} />
@@ -149,47 +181,47 @@ function SeoBody({ detail }: { detail: SEODetail }) {
         </div>
       </Section>
 
-      <Section label="signals">
-        <ul className="divide-y divide-ink-500/60 border-y border-ink-500/60">
-          <Signal label="canonical" ok={!!detail.canonical} />
-          <Signal label="viewport" ok={detail.has_viewport} />
-          <Signal label="json-ld" ok={detail.jsonld_count > 0} />
+      <Section label="Signals">
+        <ul className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
+          <Signal label="Canonical" ok={!!detail.canonical} />
+          <Signal label="Viewport" ok={detail.has_viewport} />
+          <Signal label="JSON-LD" ok={detail.jsonld_count > 0} />
           <Signal
-            label="open graph"
+            label="Open Graph"
             ok={!!detail.og_tags && Object.keys(detail.og_tags).length > 0}
           />
           <Signal
-            label="twitter cards"
+            label="Twitter cards"
             ok={!!detail.twitter_tags && Object.keys(detail.twitter_tags).length > 0}
           />
-          <Signal label="indexable" ok={!detail.noindex} />
+          <Signal label="Indexable" ok={!detail.noindex} />
           <Signal
-            label={`html lang${detail.html_lang ? ` · ${detail.html_lang}` : ''}`}
+            label={`html lang${detail.html_lang ? ` (${detail.html_lang})` : ''}`}
             ok={!!detail.html_lang}
           />
         </ul>
       </Section>
 
       {detail.images_total > 0 && (
-        <Section label={`images · ${detail.images_total}`}>
-          <ul className="divide-y divide-ink-500/60 border-y border-ink-500/60">
+        <Section label="Images" count={detail.images_total}>
+          <ul className="divide-y divide-line">
             <CountSignal
-              label="alt text"
+              label="Alt text"
               count={detail.images_with_alt}
               total={detail.images_total}
             />
             <CountSignal
-              label="width/height"
+              label="Width and height"
               count={detail.images_with_dims}
               total={detail.images_total}
             />
             <CountSignal
-              label="lazy loaded"
+              label="Lazy loaded"
               count={detail.images_lazy_loaded}
               total={detail.images_total}
             />
             <CountSignal
-              label="responsive (srcset)"
+              label="Responsive (srcset)"
               count={detail.images_responsive}
               total={detail.images_total}
             />
@@ -198,93 +230,68 @@ function SeoBody({ detail }: { detail: SEODetail }) {
       )}
 
       {detail.links_internal + detail.links_external > 0 && (
-        <Section label="links">
-          <ul className="divide-y divide-ink-500/60 border-y border-ink-500/60">
-            <RawStat label="internal" value={detail.links_internal} />
-            <RawStat label="external" value={detail.links_external} />
+        <Section label="Links">
+          <ul className="divide-y divide-line">
+            <RawStat label="Internal" value={detail.links_internal} />
+            <RawStat label="External" value={detail.links_external} />
             <RawStat label="nofollow" value={detail.links_nofollow} />
           </ul>
         </Section>
       )}
 
       {detail.primary_keyword && (
-        <Section label="keywords">
-          <div className="mb-3 flex items-baseline gap-3">
-            <span className="display text-2xl font-light text-accent">
+        <Section label="Keywords">
+          <p className="flex items-baseline gap-2">
+            <span className="text-2xl font-semibold tracking-[-0.03em]">
               {detail.primary_keyword}
             </span>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-ink-300">
-              primary
-            </span>
-          </div>
-          <div className="mb-4 flex flex-wrap gap-2">
-            <Placement label="title" ok={detail.keyword_in_title} />
-            <Placement label="h1" ok={detail.keyword_in_h1} />
-            <Placement label="url" ok={detail.keyword_in_url} />
+            <span className="text-[13px] text-ink-3">primary</span>
+          </p>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            <Placement label="in title" ok={detail.keyword_in_title} />
+            <Placement label="in h1" ok={detail.keyword_in_h1} />
+            <Placement label="in URL" ok={detail.keyword_in_url} />
           </div>
           {detail.top_keywords && detail.top_keywords.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
+            <div className="mt-4 flex flex-wrap gap-1.5">
               {detail.top_keywords.slice(0, 12).map((k) => (
-                <span
-                  key={k.term}
-                  className="chip text-ink-200 border-ink-500/70 bg-ink-700/60 font-mono"
-                >
+                <span key={k.term} className="chip chip-neutral">
                   {k.term}
-                  <span className="text-ink-400">{k.count}</span>
+                  <span className="num text-ink-3">{k.count}</span>
                 </span>
               ))}
             </div>
           )}
         </Section>
       )}
-
-      {detail.issues && detail.issues.length > 0 && (
-        <Section label={`issues · ${detail.issues.length}`}>
-          <ul className="space-y-2">
-            {detail.issues.map((iss) => (
-              <li
-                key={iss.code}
-                className={`flex items-baseline gap-3 border-l-2 px-4 py-2 text-sm ${severityStyle(iss.severity)}`}
-              >
-                <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">
-                  {iss.severity}
-                </span>
-                <span>{iss.message}</span>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
     </div>
   );
 }
 
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
+function Section({
+  label,
+  count,
+  children,
+}: {
+  label: string;
+  count?: number;
+  children: React.ReactNode;
+}) {
   return (
     <section>
-      <div className="eyebrow mb-3">{label}</div>
+      <h3 className="mb-2 flex items-baseline gap-2 text-[15px] font-bold tracking-tight">
+        {label}
+        {count !== undefined && (
+          <span className="num font-mono text-[12px] font-medium text-ink-3">{count}</span>
+        )}
+      </h3>
       {children}
     </section>
   );
 }
 
-function ScoreRow({ score }: { score: number }) {
-  const colour = scoreTextColour(score);
-  return (
-    <div className="flex items-baseline justify-between border-y border-ink-500/60 py-5">
-      <span className="eyebrow">score</span>
-      <div className="flex items-baseline gap-2">
-        <span className={`display text-6xl font-light tabular-nums ${colour}`}>{score}</span>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-ink-300">/ 100</span>
-      </div>
-    </div>
-  );
-}
-
 function Meta({ value }: { value: string }) {
-  return (
-    <div className="mt-2 font-mono text-[10px] uppercase tracking-widest text-ink-300">{value}</div>
-  );
+  return <p className="mt-1.5 font-mono text-[11px] text-ink-3">{value}</p>;
 }
 
 function HeadingTile({
@@ -298,42 +305,42 @@ function HeadingTile({
 }) {
   const flagged = flagWhen?.(count);
   return (
-    <div
-      className={`border px-3 py-3 ${
-        flagged ? 'border-rose-400/40 bg-rose-500/5' : 'border-ink-500/60 bg-ink-700/40'
-      }`}
-    >
-      <div className="font-mono text-[10px] uppercase tracking-widest text-ink-300">{label}</div>
-      <div
-        className={`display text-3xl font-light tabular-nums ${
-          flagged ? 'text-rose-300' : 'text-paper'
-        }`}
-      >
-        {count}
-      </div>
+    <div className={`px-2 py-2 text-center ${flagged ? 'bg-bad-bg' : ''}`}>
+      <div className="font-mono text-[11px] text-ink-3">{label}</div>
+      <div className={`num text-lg font-bold ${flagged ? 'text-bad-fg' : ''}`}>{count}</div>
     </div>
   );
 }
 
 function Signal({ label, ok }: { label: string; ok: boolean }) {
   return (
-    <DataRow label={label}>
-      <span className={`font-mono text-xs ${ok ? 'text-emerald-300' : 'text-rose-300'}`}>
-        {ok ? '● present' : '○ missing'}
+    <li className="flex items-center gap-2.5 border-b border-line py-2 text-sm">
+      <span
+        className={`flex size-[18px] items-center justify-center rounded-md ${ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}
+      >
+        {ok ? (
+          <Check className="size-3" strokeWidth={3} />
+        ) : (
+          <X className="size-3" strokeWidth={3} />
+        )}
       </span>
-    </DataRow>
+      {label}
+      <span className="sr-only">{ok ? 'present' : 'missing'}</span>
+    </li>
   );
 }
 
-// "X of Y (NN%)", colour bucketed by ratio
+// "NN% X/Y", colour bucketed by ratio
 function CountSignal({ label, count, total }: { label: string; count: number; total: number }) {
   const ratio = total > 0 ? count / total : 0;
-  const colour =
-    ratio >= 0.9 ? 'text-emerald-300' : ratio >= 0.5 ? 'text-amber-300' : 'text-rose-300';
+  const tone = ratio >= 0.9 ? 'ok' : ratio >= 0.5 ? 'warn' : 'bad';
   return (
     <DataRow label={label}>
-      <span className={`font-mono text-xs tabular-nums ${colour}`}>
-        {count}/{total} <span className="text-ink-400">({pct(count, total)}%)</span>
+      <span className="num font-mono text-[13px]">
+        <span className={`font-medium ${toneColour(tone)}`}>{pct(count, total)}%</span>{' '}
+        <span className="text-ink-3">
+          {count}/{total}
+        </span>
       </span>
     </DataRow>
   );
@@ -343,32 +350,42 @@ function CountSignal({ label, count, total }: { label: string; count: number; to
 function RawStat({ label, value }: { label: string; value: number }) {
   return (
     <DataRow label={label}>
-      <span className="text-ink-200 font-mono text-xs tabular-nums">{value}</span>
+      <span className="num font-mono text-[13px] text-ink-2">{value.toLocaleString()}</span>
     </DataRow>
   );
 }
 
 function Placement({ label, ok }: { label: string; ok: boolean }) {
   return (
-    <span
-      className={`chip font-mono ${
-        ok
-          ? 'border-emerald-400/30 bg-emerald-500/5 text-emerald-300'
-          : 'border-rose-400/30 bg-rose-500/5 text-rose-300'
-      }`}
-    >
-      {ok ? '✓' : '✗'} {label}
+    <span className={`chip ${ok ? 'chip-ok' : 'chip-bad'}`}>
+      {ok ? (
+        <Check className="size-3" strokeWidth={3} aria-hidden="true" />
+      ) : (
+        <X className="size-3" strokeWidth={3} aria-hidden="true" />
+      )}
+      {label}
+      <span className="sr-only">{ok ? 'yes' : 'no'}</span>
     </span>
   );
 }
 
-function severityStyle(sev: string): string {
+function severityChip(sev: string): string {
   switch (sev) {
     case 'error':
-      return 'border-rose-400 bg-rose-500/5 text-rose-200';
+      return 'chip-bad';
     case 'warning':
-      return 'border-accent bg-accent/5 text-accent-soft';
+      return 'chip-warn';
     default:
-      return 'border-ink-400 bg-ink-700/40 text-ink-200';
+      return 'chip-neutral';
+  }
+}
+
+// path + query for the title; the full URL sits beneath it
+function pathOf(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.pathname + u.search || '/';
+  } catch {
+    return url;
   }
 }

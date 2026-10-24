@@ -1,11 +1,11 @@
 {
   "name": "LinkTrace",
   "short_name": "LinkTrace",
-  "description": "Enter a domain. Find broken links, score your on-page SEO, and explore your whole site as an interactive graph.",
+  "description": "Give LinkTrace a domain and it finds the broken links on your site, tells you why each one broke, scores each page's SEO and maps the whole site.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#06080f",
-  "theme_color": "#06080f",
+  "background_color": "#fafafa",
+  "theme_color": "#fafafa",
   "icons": [
     { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any" },
     { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "maskable" },

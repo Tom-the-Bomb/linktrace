@@ -7,10 +7,11 @@ import HistoryPage from './pages/HistoryPage';
 import HomePage from './pages/HomePage';
 import JobReportPage from './pages/JobReportPage';
 
-// routing shell; flex column pins the Footer to the bottom on short pages
+// routing shell; flex column pins the Footer to the bottom on short pages,
+// overflow-x-clip trims edge crosshairs without creating a scroll container (sticky still works)
 export default function App() {
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col overflow-x-clip">
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/auth" element={<AuthPage />} />

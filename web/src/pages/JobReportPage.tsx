@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -30,8 +30,10 @@ import { SeoDrawer } from '../components/SeoDrawer';
 import { SiteAuditPanel } from '../components/SiteAuditPanel';
 import { type Tab, Tabs } from '../components/Tabs';
 import { ErrorBanner } from '../components/ui/ErrorBanner';
+import { GridRow } from '../components/ui/GridRow';
 import { useCreateCrawl } from '../hooks/useCreateCrawl';
 import { useSeo } from '../hooks/useSeo';
+import { sectionColourMap } from '../lib/colours';
 import { errMessage } from '../lib/format';
 import { isTerminalStatus } from '../lib/status';
 
@@ -143,6 +145,15 @@ export default function JobReportPage() {
 
   const isDone = isTerminalStatus(status?.status);
 
+  // one colour per section, shared by the section list, graph and table
+  const categories = report?.categories;
+  const colourFor = useMemo(() => sectionColourMap(categories ?? []), [categories]);
+  const sections = useMemo(
+    () =>
+      [...(categories ?? [])].sort((a, b) => b.total_pages - a.total_pages).map((c) => c.category),
+    [categories],
+  );
+
   // running: cancel + flip status to Back; done: go to hero
   const onStopOrBack = async () => {
     if (!jobId) {
@@ -188,9 +199,8 @@ export default function JobReportPage() {
   if (notFound) {
     return (
       <NotFound
-        eyebrow="error 404"
-        title="Report not found"
-        message="No crawl matches this ID — it may have been deleted, or never existed. Start a new one from the home page."
+        title="No report with this ID"
+        message="It may have been deleted, or the link is mistyped. Start a new crawl from the home page."
       />
     );
   }
@@ -207,64 +217,85 @@ export default function JobReportPage() {
         onStopOrBack={onStopOrBack}
       />
 
-      <main className="mx-auto w-full max-w-7xl px-6 pb-24 pt-10 sm:px-10">
-        {(error ?? createError) && (
-          <ErrorBanner className="mb-8 px-5">{error ?? createError}</ErrorBanner>
-        )}
+      <main className="frame flex-1 pb-16">
+        <div>
+          {(error ?? createError) && (
+            <ErrorBanner className="mx-5 mt-6 sm:mx-8">{error ?? createError}</ErrorBanner>
+          )}
 
-        {/* the API refuses these jobs up front; without this the page is just a bare FAILED badge */}
-        {status?.status === 'failed' && report?.site_audit?.robots_disallow_all && (
-          <ErrorBanner className="mb-8 px-5">
-            This site's robots.txt disallows crawling, so no pages were checked.
-          </ErrorBanner>
-        )}
+          {/* the API refuses these jobs up front; without this the page is just a bare Failed badge */}
+          {status?.status === 'failed' && report?.site_audit?.robots_disallow_all && (
+            <ErrorBanner className="mx-5 mt-6 sm:mx-8">
+              This site&rsquo;s robots.txt disallows crawling, so no pages were checked.
+            </ErrorBanner>
+          )}
 
-        <ProgressView status={status} onDelete={() => setConfirmingDelete(true)} />
+          <ProgressView status={status} onDelete={() => setConfirmingDelete(true)} />
+        </div>
 
         {report && (
-          <div className="mt-16">
+          <GridRow>
             <OverallReport report={report} />
-          </div>
-        )}
-
-        {report && report.categories.length > 0 && (
-          <div className="mt-16">
-            <Categories categories={report.categories} />
-          </div>
+          </GridRow>
         )}
 
         {rows.length > 0 && (
-          <div className="mt-16">
-            <SectionHeader number="04" title="Explore" subtitle="Browse the crawl" />
-            <Tabs
-              tab={tab}
-              onChange={setTab}
-              graphCount={graph?.nodes.length ?? 0}
-              tableCount={rows.length}
+          <GridRow>
+            <SectionHeader
+              title="All pages"
+              subtitle="Click a page to see its full SEO audit."
+              right={
+                <Tabs
+                  tab={tab}
+                  onChange={setTab}
+                  graphCount={graph?.nodes.length ?? 0}
+                  tableCount={rows.length}
+                />
+              }
             />
-            <div className="mt-6">
-              {tab === 'graph' && graph && <GraphView data={graph} onSelect={setDrilldownUrl} />}
-              {tab === 'table' && <ResultsTable rows={rows} onSelect={setDrilldownUrl} />}
-            </div>
-          </div>
+            {tab === 'graph' && graph && (
+              <GraphView
+                data={graph}
+                onSelect={setDrilldownUrl}
+                colourFor={colourFor}
+                sections={sections}
+              />
+            )}
+            {tab === 'table' && (
+              <ResultsTable rows={rows} onSelect={setDrilldownUrl} colourFor={colourFor} />
+            )}
+          </GridRow>
+        )}
+
+        {report && report.categories.length > 0 && (
+          <GridRow>
+            <Categories categories={report.categories} colourFor={colourFor} />
+          </GridRow>
         )}
 
         {report?.site_audit && (
-          <div className="mt-16">
+          <GridRow>
             <SiteAuditPanel audit={report.site_audit} seo={report.site_seo} />
-          </div>
-        )}
-
-        {report?.crawl_stats && (
-          <div className="mt-16">
-            <CrawlStatsPanel stats={report.crawl_stats} />
-          </div>
+          </GridRow>
         )}
 
         {report?.coverage_gap && report.site_audit?.sitemap_found && (
-          <div className="mt-16">
+          <GridRow>
             <CoverageGapPanel gap={report.coverage_gap} />
-          </div>
+          </GridRow>
+        )}
+
+        {report?.crawl_stats && (
+          <GridRow>
+            <CrawlStatsPanel stats={report.crawl_stats} />
+          </GridRow>
+        )}
+
+        {/* close the last cell so it doesn't float on the canvas */}
+        {report && (
+          <GridRow>
+            <div />
+          </GridRow>
         )}
       </main>
 

@@ -1,133 +1,146 @@
-import type { Report } from '../api';
-import { scoreStrokeColour, scoreTextColour } from '../lib/colours';
-import { SectionHeader } from './SectionHeader';
-import { StatTile } from './ui/StatTile';
+import { TriangleAlert } from 'lucide-react';
 
-// gauge + headline metric left, stats + issues right
+import type { Report } from '../api';
+import { pct, scoreTierChip } from '../lib/colours';
+import { SectionHeader } from './SectionHeader';
+
+// the two numbers that matter, side by side, then the recurring issues
 export function OverallReport({ report }: { report: Report }) {
-  const { total_pages, healthy, rotten, avg_seo_score, top_issues } = report.overall;
-  const rottenPct = total_pages > 0 ? Math.round((rotten / total_pages) * 100) : 0;
-  const healthyPct = total_pages > 0 ? Math.round((healthy / total_pages) * 100) : 0;
+  const { total_pages, rotten, avg_seo_score, top_issues } = report.overall;
+  const tier = scoreTierChip(avg_seo_score);
+  const rottenPct = pct(rotten, total_pages);
 
   return (
     <section>
-      <SectionHeader
-        number="02"
-        title="The verdict"
-        subtitle="Score, totals, recurring problems."
-      />
-
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
-        {/* featured score + verdict */}
-        <div className="lg:col-span-7">
-          <div className="flex items-center gap-6 sm:gap-10">
-            <ScoreGauge score={avg_seo_score} />
+      <SectionHeader title="Summary" />
+      <div className="panel grid lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+        <div className="p-5 sm:p-8">
+          <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
             <div>
-              <span className="eyebrow">avg SEO score</span>
-              <p className="display mt-4 text-2xl font-light leading-snug">
-                {scoreVerdict(avg_seo_score)}
+              <p className="text-[13px] font-medium text-ink-3">Broken pages</p>
+              <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
+                <span
+                  className={`num text-7xl font-semibold tracking-[-0.05em] ${rotten > 0 ? 'text-bad-fg' : 'text-ok-fg'}`}
+                >
+                  {rotten.toLocaleString()}
+                </span>
+                <span className="num text-xl font-semibold text-ink-3">
+                  of {total_pages.toLocaleString()}
+                </span>
+              </p>
+              <BrokenBar pct={rottenPct} />
+              <p className="mt-1.5 text-[13px] text-ink-3">
+                {rotten === 0 ? (
+                  'No broken pages'
+                ) : (
+                  <>
+                    <span className="num font-mono text-[12px]">
+                      {rottenPct < 1 ? '<1' : rottenPct}%
+                    </span>{' '}
+                    of checked pages
+                  </>
+                )}
               </p>
             </div>
+            <div>
+              <p className="text-[13px] font-medium text-ink-3">Average SEO score</p>
+              <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
+                <span className="num text-7xl font-semibold tracking-[-0.05em]">
+                  {avg_seo_score}
+                </span>
+                <span className="text-xl font-semibold text-ink-3">/100</span>
+                <span className={`chip ml-1 self-center ${tier.chip}`}>{tier.label}</span>
+              </p>
+              <ScoreScale score={avg_seo_score} />
+            </div>
           </div>
-
-          <div className="hairline mt-10 grid grid-cols-3 gap-4 pt-8">
-            <StatTile label="pages" value={total_pages} />
-            <StatTile label="healthy" value={`${healthy}`} hint={`${healthyPct}%`} tone="ok" />
-            <StatTile label="rotten" value={`${rotten}`} hint={`${rottenPct}%`} tone="bad" />
-          </div>
+          <p className="mt-6 border-t border-line pt-5 text-[17px] font-semibold leading-snug tracking-tight">
+            <span>{linkVerdict(rotten, rottenPct)}</span>{' '}
+            <span className="font-normal text-ink-2">{scoreVerdict(avg_seo_score)}</span>
+          </p>
         </div>
 
-        {/* recurring issues column */}
-        <aside className="border-t border-ink-500/60 pt-8 lg:col-span-5 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
-          <span className="eyebrow">recurring issues</span>
+        <div className="border-t border-line bg-sunken/50 p-5 sm:p-8 lg:border-l lg:border-t-0">
+          <h3 className="text-[15px] font-bold tracking-tight">Most common SEO issues</h3>
           {top_issues.length === 0 ? (
-            <p className="mt-6 font-mono text-xs text-ink-300">No recurring issues detected.</p>
+            <p className="mt-3 text-[15px] text-ink-2">No recurring issues found.</p>
           ) : (
-            <ol className="mt-6 space-y-3">
-              {top_issues.map((iss, i) => (
-                <li key={iss} className="flex items-baseline gap-4">
-                  <span className="display text-xl font-light text-accent">
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-                  <span className="text-sm leading-relaxed text-paper/90">{iss}</span>
+            <ul className="mt-3 divide-y divide-line">
+              {top_issues.map((iss) => (
+                <li key={iss} className="flex items-start gap-3 py-2.5 text-[15px] leading-snug">
+                  <TriangleAlert
+                    className="mt-0.5 size-4 shrink-0 text-warn-dot"
+                    strokeWidth={2.25}
+                    aria-hidden="true"
+                  />
+                  <span>{iss}</span>
                 </li>
               ))}
-            </ol>
+            </ul>
           )}
-        </aside>
+        </div>
       </div>
     </section>
   );
 }
 
-function scoreVerdict(s: number) {
-  if (s >= 85) {
-    return 'Strong. The basics are in place across most pages.';
-  }
-  if (s >= 65) {
-    return 'Decent. A handful of recurring fixes would lift this site significantly.';
-  }
-  if (s >= 40) {
-    return 'Mixed. Several pages need real work before they read well to search.';
-  }
-  return 'Rough. Foundational SEO is missing across the site.';
+function BrokenBar({ pct: p }: { pct: number }) {
+  return (
+    <div className="mt-4 h-2 overflow-hidden rounded-full bg-ok-dot/80" aria-hidden="true">
+      <div className="h-full bg-bad-dot" style={{ width: `${p > 0 ? Math.max(p, 1.5) : 0}%` }} />
+    </div>
+  );
 }
 
-function ScoreGauge({ score }: { score: number }) {
-  const size = 180;
-  const stroke = 2;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
+// 0-100 track split at the tier thresholds, with a marker at the score
+export function ScoreScale({ score }: { score: number }) {
   const clamped = Math.max(0, Math.min(100, score));
-  const dash = (clamped / 100) * c;
-
-  const strokeColour = scoreStrokeColour(score);
-  const fill = scoreTextColour(score);
-
   return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          strokeWidth={stroke}
-          className="stroke-ink-500"
+    <div className="mt-4" aria-hidden="true">
+      <div className="relative">
+        <div className="flex h-2 gap-[3px]">
+          <span className="h-full w-1/2 rounded-l-full bg-bad-dot/80" />
+          <span className="h-full w-[30%] bg-warn-dot/80" />
+          <span className="h-full w-[20%] rounded-r-full bg-ok-dot/80" />
+        </div>
+        <span
+          className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-panel shadow-control ring-2 ring-ink"
+          style={{ left: `${clamped}%` }}
         />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          strokeWidth={stroke}
-          strokeDasharray={`${dash} ${c}`}
-          className={`${strokeColour} transition-[stroke-dasharray] duration-700`}
-        />
-        {/* tick marks every 10% */}
-        {Array.from({ length: 20 }).map((_, i) => {
-          const a = (i / 20) * Math.PI * 2;
-          const x1 = size / 2 + Math.cos(a) * (r - 8);
-          const y1 = size / 2 + Math.sin(a) * (r - 8);
-          const x2 = size / 2 + Math.cos(a) * (r - 14);
-          const y2 = size / 2 + Math.sin(a) * (r - 14);
-          return (
-            <line
-              key={i}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              strokeWidth={1}
-              className="stroke-ink-500"
-            />
-          );
-        })}
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className={`display text-6xl font-light tabular-nums ${fill}`}>{score}</span>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-ink-300">/ 100</span>
+      </div>
+      <div className="num relative mt-1.5 h-3 font-mono text-[10px] text-ink-3">
+        <span className="absolute left-0">0</span>
+        <span className="absolute left-1/2 -translate-x-1/2">50</span>
+        <span className="absolute left-[80%] -translate-x-1/2">80</span>
       </div>
     </div>
   );
+}
+
+// the verdict weighs the broken count first; a broken page is the more urgent fix
+function linkVerdict(rotten: number, rottenPct: number) {
+  if (rotten === 0) {
+    return 'No pages are broken.';
+  }
+  const pages = `${rotten.toLocaleString()} ${rotten === 1 ? 'page is' : 'pages are'} broken`;
+  if (rottenPct < 1) {
+    return `${pages} (under 1% of the site).`;
+  }
+  if (rottenPct < 5) {
+    return `${pages} (${rottenPct}% of the site).`;
+  }
+  return `${pages} (${rottenPct}% of the site), so they're worth fixing first.`;
+}
+
+function scoreVerdict(s: number) {
+  if (s >= 85) {
+    return 'Most pages have the SEO basics in place.';
+  }
+  if (s >= 65) {
+    return 'SEO is decent, and fixing a few recurring issues would raise the score noticeably.';
+  }
+  if (s >= 40) {
+    return 'SEO is mixed, with several pages needing work before search engines will read them well.';
+  }
+  return 'SEO is weak, since basic tags are missing from most of the site.';
 }

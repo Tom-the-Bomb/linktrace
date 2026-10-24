@@ -1,41 +1,45 @@
 import { useState } from 'react';
 
+import { ChevronRight, CircleCheck } from 'lucide-react';
+
 import type { CoverageGap } from '../api';
 import { SectionHeader } from './SectionHeader';
 
 // max URLs listed before collapsing into a "...and N more" line
 const CAP = 50;
 
-// sitemap vs crawled diff; always renders all three sections (empty ones show a green 0)
+// sitemap vs crawled diff; always renders all three rows (empty ones read as clear)
 export function CoverageGapPanel({ gap }: { gap: CoverageGap }) {
   const total = gap.orphans.length + gap.not_crawled.length + gap.sitemap_dead.length;
 
   return (
     <section>
       <SectionHeader
-        number="07"
         title="Sitemap coverage"
-        subtitle={total === 0 ? 'no discrepancies' : `${total} discrepancies`}
+        subtitle={
+          total === 0
+            ? 'Your sitemap and the crawl agree.'
+            : `${total.toLocaleString()} ${total === 1 ? 'difference' : 'differences'} between your sitemap and the crawl.`
+        }
       />
-      {total === 0 && (
-        <p className="mb-4 border-l-2 border-emerald-400/50 bg-emerald-500/5 px-3 py-2 font-mono text-[11px] text-emerald-300">
-          Sitemap and crawl agree. Nothing missing on either side.
-        </p>
-      )}
-
-      <div className="space-y-3">
-        <GapList label="orphaned" hint="crawled, not in sitemap" urls={gap.orphans} tone="amber" />
+      <div className="panel divide-y divide-line">
         <GapList
-          label="missed"
-          hint="in sitemap, never reached"
-          urls={gap.not_crawled}
-          tone="amber"
+          label="Not in sitemap"
+          hint="Crawled, but missing from sitemap.xml"
+          urls={gap.orphans}
+          tone="warn"
         />
         <GapList
-          label="dead in sitemap"
-          hint="listed but rotten"
+          label="Never reached"
+          hint="Listed in the sitemap, but the crawl never reached it"
+          urls={gap.not_crawled}
+          tone="warn"
+        />
+        <GapList
+          label="Dead in sitemap"
+          hint="Listed in the sitemap, but broken"
           urls={gap.sitemap_dead}
-          tone="rose"
+          tone="bad"
         />
       </div>
     </section>
@@ -51,47 +55,68 @@ function GapList({
   label: string;
   hint: string;
   urls: string[];
-  tone: 'amber' | 'rose';
+  tone: 'warn' | 'bad';
 }) {
   const [open, setOpen] = useState(false);
   const empty = urls.length === 0;
-  const accent = empty ? 'border-ink-500/60' : tone === 'rose' ? 'border-rose-400/60' : 'border-amber-400/60';
-  const countColour = empty ? 'text-emerald-300' : tone === 'rose' ? 'text-rose-300' : 'text-amber-300';
 
   const header = (
     <>
-      <div>
-        <span className="text-paper/80">{label}</span> <span className="text-ink-400">{hint}</span>
-      </div>
-      <span className={`tabular-nums ${countColour}`}>
-        {empty ? '0' : `${urls.length} ${open ? '▲' : '▼'}`}
+      <span className="min-w-0">
+        <span className="block text-[15px] font-semibold">{label}</span>
+        <span className="block text-[13px] text-ink-3">{hint}</span>
       </span>
+      {empty ? (
+        <span className="chip chip-ok">
+          <CircleCheck className="size-3" strokeWidth={2.5} aria-hidden="true" />
+          none
+        </span>
+      ) : (
+        <span className="flex items-center gap-2">
+          <span className={`chip chip-code num ${tone === 'bad' ? 'chip-bad' : 'chip-warn'}`}>
+            {urls.length.toLocaleString()}
+          </span>
+          <ChevronRight
+            className={`size-4 text-ink-3 transition-transform ${open ? 'rotate-90' : ''}`}
+            strokeWidth={2.25}
+            aria-hidden="true"
+          />
+        </span>
+      )}
     </>
   );
 
   return (
-    <div className={`border-l-2 ${accent} ${empty ? '' : 'bg-ink-700/20'}`}>
+    <div>
       {empty ? (
-        <div className="flex items-baseline justify-between px-4 py-2 font-mono text-xs">{header}</div>
+        <div className="flex items-center justify-between gap-4 px-5 py-3.5 sm:px-8">{header}</div>
       ) : (
         <button
           onClick={() => setOpen((o) => !o)}
-          className="flex w-full items-baseline justify-between px-4 py-2 font-mono text-xs transition hover:bg-ink-600/30"
+          aria-expanded={open}
+          className="flex w-full items-center justify-between gap-4 px-5 py-3.5 text-left transition hover:bg-sunken sm:px-8"
         >
           {header}
         </button>
       )}
       {open && !empty && (
-        <ul className="space-y-1 border-t border-ink-500/40 px-4 py-2">
+        <ul className="max-h-80 space-y-1 overflow-y-auto border-t border-line bg-sunken/60 px-5 py-3 sm:px-8">
           {urls.slice(0, CAP).map((u) => (
-            <li key={u} className="truncate font-mono text-[11px]">
-              <a href={u} target="_blank" rel="noreferrer" className="text-ink-300 hover:text-accent">
+            <li key={u} className="truncate font-mono text-[12px]">
+              <a
+                href={u}
+                target="_blank"
+                rel="noreferrer"
+                className="text-ink-2 hover:text-accent-600 hover:underline"
+              >
                 {u}
               </a>
             </li>
           ))}
           {urls.length > CAP && (
-            <li className="font-mono text-[10px] text-ink-400">...and {urls.length - CAP} more</li>
+            <li className="pt-1 text-[13px] text-ink-3">
+              …and {(urls.length - CAP).toLocaleString()} more
+            </li>
           )}
         </ul>
       )}

@@ -21,3 +21,5 @@ web/.env
 .idea/
 .vscode/
 *.swp
+
+.impeccable/

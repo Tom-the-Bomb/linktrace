@@ -1,11 +1,12 @@
-import { Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+
+import { ExternalLink, Trash2 } from 'lucide-react';
 
 import type { Status } from '../api';
-import { type Tone, toneColour } from '../lib/colours';
-import { isTerminalStatus } from '../lib/status';
-import { SectionHeader } from './SectionHeader';
+import { formatDate } from '../lib/format';
+import { isTerminalStatus, jobStatusChip, jobStatusLabel } from '../lib/status';
 
-// live crawl progress: segmented bar + percentage, stats on the side; onDelete renders a trash button
+// run header: domain + status; the live progress panel only while the crawl runs
 export function ProgressView({
   status,
   onDelete,
@@ -13,112 +14,188 @@ export function ProgressView({
   status: Status | null;
   onDelete?: () => void;
 }) {
+  const delta = useCheckedDelta(status?.checked ?? 0, isTerminalStatus(status?.status));
+
   if (!status) {
-    return null;
+    return <ProgressSkeleton />;
   }
-  const { discovered, checked, healthy, rotten, status: state, url } = status;
-  const pending = Math.max(0, discovered - checked);
+  const { discovered, checked, healthy, rotten, status: state, url, created_at } = status;
   const isDone = isTerminalStatus(state);
-  const pct = discovered > 0 ? (checked / discovered) * 100 : 0;
-  const seg = (n: number) => (discovered > 0 ? (n / discovered) * 100 : 0);
+  // a stopped/failed crawl that never caught up keeps a thin bar so the gap stays visible
+  const shortOfDone = isDone && checked < discovered;
 
   return (
     <section>
-      <SectionHeader
-        number="01"
-        title={state === 'stopped' ? 'Crawl stopped' : isDone ? 'Crawl complete' : 'Crawling'}
-        right={
-          <div className="flex items-center gap-3">
-            {url && <span className="hidden text-xs italic text-ink-300 sm:inline">{url}</span>}
-            {onDelete && (
-              <button
-                onClick={onDelete}
-                aria-label="Delete crawl"
-                title="Delete crawl"
-                className="text-ink-400 transition hover:text-rose-300"
-              >
-                <Trash2 className="h-4 w-4" strokeWidth={2} />
-              </button>
-            )}
-          </div>
-        }
-      />
-
-      <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
-        {/* big featured progress */}
-        <div className="lg:col-span-8">
-          <div className="flex items-baseline justify-between">
-            <div className="flex items-baseline gap-3">
-              <span className="display text-7xl font-light tabular-nums sm:text-8xl">
-                {Math.round(pct)}
-              </span>
-              <span className="display text-3xl font-light text-ink-300">%</span>
-            </div>
-            <StatusBadge status={state} pulse={!isDone} />
-          </div>
-
-          <div className="mt-6 flex h-1 w-full overflow-hidden bg-ink-700">
-            <div
-              className="h-full bg-emerald-400 transition-all"
-              style={{ width: `${seg(healthy)}%` }}
-            />
-            <div
-              className="h-full bg-rose-500 transition-all"
-              style={{ width: `${seg(rotten)}%` }}
-            />
-            <div
-              className="h-full bg-ink-500 transition-all"
-              style={{ width: `${seg(pending)}%` }}
-            />
-          </div>
-          <div className="mt-3 flex justify-between font-mono text-[10px] uppercase tracking-widest text-ink-300">
-            <span>
-              {checked} <span className="text-ink-400">/</span> {discovered} checked
+      <div className="flex flex-wrap items-start justify-between gap-3 px-5 pb-8 pt-8 sm:px-8 sm:pt-10">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="truncate text-[28px] font-semibold leading-tight tracking-[-0.035em] sm:text-4xl">
+              {hostOf(url)}
+            </h1>
+            <span className={`chip ${jobStatusChip(state)}`}>
+              {!isDone && <span className="live-dot size-1.5 rounded-full bg-current" />}
+              {jobStatusLabel(state)}
             </span>
-            <span>{isDone ? 'done' : `${pending} in flight`}</span>
           </div>
+          <p className="num mt-1 text-sm text-ink-3">
+            {isDone && (
+              <>
+                Checked {checked.toLocaleString()} of {discovered.toLocaleString()} pages found
+                ·{' '}
+              </>
+            )}
+            Started {formatDate(created_at, true)}
+          </p>
         </div>
-
-        {/* stat list */}
-        <div className="lg:col-span-4">
-          <dl className="divide-y divide-ink-500/60 border-y border-ink-500/60">
-            <StatRow label="discovered" value={discovered} />
-            <StatRow label="checked" value={checked} />
-            <StatRow label="healthy" value={healthy} tone="ok" />
-            <StatRow label="rotten" value={rotten} tone="bad" />
-          </dl>
+        <div className="flex items-center gap-1">
+          <a href={url} target="_blank" rel="noreferrer" className="btn-quiet">
+            <ExternalLink className="size-4" strokeWidth={2} aria-hidden="true" />
+            Open site
+          </a>
+          {onDelete && (
+            <button onClick={onDelete} className="btn-quiet hover:!bg-bad-bg hover:!text-bad-fg">
+              <Trash2 className="size-4" strokeWidth={2} aria-hidden="true" />
+              Delete
+            </button>
+          )}
         </div>
       </div>
+
+      {shortOfDone && (
+        <div className="-mt-4 px-5 pb-8 sm:px-8">
+          <Bar discovered={discovered} healthy={healthy} rotten={rotten} />
+        </div>
+      )}
+
+      {!isDone && (
+        <div className="panel">
+          <div className="px-5 py-5 sm:px-8">
+            <div className="flex items-baseline justify-between gap-4">
+              <p className="text-[15px] font-medium">
+                Checking <span className="num">{checked.toLocaleString()}</span>
+                <span className="text-ink-3"> of </span>
+                <span className="num">{discovered.toLocaleString()}</span> pages found
+              </p>
+              <span className="num font-mono text-sm text-ink-2">
+                {discovered > 0 ? Math.round((checked / discovered) * 100) : 0}%
+              </span>
+            </div>
+            <div className="mt-3">
+              <Bar discovered={discovered} healthy={healthy} rotten={rotten} />
+            </div>
+          </div>
+          <dl className="grid grid-cols-2 border-t border-line sm:grid-cols-4 sm:[&>div:not(:last-child)]:border-r max-sm:[&>div:nth-child(-n+2)]:border-b [&>div:nth-child(odd)]:border-r [&>div]:border-line [&>div]:px-5 [&>div]:py-4 sm:[&>div]:px-8">
+            <Count label="Found" value={discovered} />
+            <Count
+              label="Checked"
+              value={checked}
+              note={delta > 0 ? `+${delta.toLocaleString()}` : undefined}
+            />
+            <Count label="Healthy" value={healthy} dot="bg-ok-dot" />
+            <Count label="Broken" value={rotten} dot="bg-bad-dot" tone="text-bad-fg" />
+          </dl>
+          <p className="border-t border-line px-5 py-3 text-[13px] text-ink-3 sm:px-8">
+            This page updates by itself as pages are checked, and the full report appears once the
+            crawl finishes.
+          </p>
+        </div>
+      )}
     </section>
   );
 }
 
-function StatRow({ label, value, tone }: { label: string; value: number; tone?: Tone }) {
+function Bar({
+  discovered,
+  healthy,
+  rotten,
+}: {
+  discovered: number;
+  healthy: number;
+  rotten: number;
+}) {
+  const seg = (n: number) => (discovered > 0 ? (n / discovered) * 100 : 0);
+  const pct = discovered > 0 ? Math.round(((healthy + rotten) / discovered) * 100) : 0;
   return (
-    <div className="flex items-baseline justify-between py-4">
-      <dt className="font-mono text-[10px] uppercase tracking-widest text-ink-300">{label}</dt>
-      <dd className={`display text-3xl font-light tabular-nums ${toneColour(tone)}`}>{value}</dd>
+    <div
+      className="flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full bg-sunken ring-1 ring-inset ring-line"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={pct}
+      aria-label="Crawl progress"
+    >
+      <div
+        className="h-full bg-ok-dot transition-[width] duration-700"
+        style={{ width: `${seg(healthy)}%` }}
+      />
+      <div
+        className="h-full bg-bad-dot transition-[width] duration-700"
+        style={{ width: `${seg(rotten)}%` }}
+      />
     </div>
   );
 }
 
-function StatusBadge({ status, pulse }: { status: string; pulse: boolean }) {
-  const tone: Record<string, string> = {
-    pending: 'border-ink-400 text-ink-300',
-    crawling: 'border-accent/60 text-accent',
-    complete: 'border-emerald-400/60 text-emerald-300',
-    failed: 'border-rose-400/60 text-rose-300',
-    stopped: 'border-ink-400 text-ink-200',
-  };
+// growth in checked since the previous poll, for the live "+N" beside the count
+function useCheckedDelta(checked: number, done: boolean): number {
+  const prev = useRef(checked);
+  const [delta, setDelta] = useState(0);
+  useEffect(() => {
+    setDelta(done ? 0 : Math.max(0, checked - prev.current));
+    prev.current = checked;
+  }, [checked, done]);
+  return delta;
+}
+
+function Count({
+  label,
+  value,
+  dot,
+  tone = 'text-ink',
+  note,
+}: {
+  label: string;
+  value: number;
+  dot?: string;
+  tone?: string;
+  note?: string;
+}) {
   return (
-    <span className={`chip ${tone[status] ?? tone.pending}`}>
-      {pulse && (
-        <span className="relative flex h-1.5 w-1.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-60" />
-          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
+    <div>
+      <dt className="flex items-center gap-1.5 text-[13px] font-medium text-ink-3">
+        {dot && <span className={`size-2 rounded-full ${dot}`} />}
+        {label}
+      </dt>
+      <dd className="mt-0.5 flex items-baseline gap-2">
+        {/* key on value so each change replays the tick */}
+        <span
+          key={value}
+          className={`num inline-block animate-tick text-[28px] font-bold tracking-[-0.03em] ${tone}`}
+        >
+          {value.toLocaleString()}
         </span>
-      )}
-      <span className="font-mono uppercase tracking-widest">{status}</span>
-    </span>
+        {note && <span className="num font-mono text-[11px] font-medium text-ok-fg">{note}</span>}
+      </dd>
+    </div>
   );
+}
+
+function ProgressSkeleton() {
+  return (
+    <section aria-busy="true" aria-label="Loading crawl">
+      <div className="px-5 pb-8 pt-10 sm:px-8">
+        <div className="h-10 w-64 animate-pulse rounded-control bg-line" />
+      </div>
+      <div className="panel h-[168px] animate-pulse" />
+    </section>
+  );
+}
+
+// "https://www.example.com/" -> "www.example.com"
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
 }

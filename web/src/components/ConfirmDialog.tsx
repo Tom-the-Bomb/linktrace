@@ -1,9 +1,8 @@
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 
 import { createPortal } from 'react-dom';
 
 interface Props {
-  eyebrow: string; // small rose label, e.g. "delete crawl"
   title: string;
   message: ReactNode;
   children?: ReactNode; // detail block under the message
@@ -15,9 +14,8 @@ interface Props {
   onCancel: () => void;
 }
 
-// Shared centered destructive-confirm modal (Esc + backdrop-click to dismiss)
+// Shared centered destructive-confirm dialog (Esc + backdrop-click to dismiss)
 export function ConfirmDialog({
-  eyebrow,
   title,
   message,
   children,
@@ -28,6 +26,15 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: Props) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    // safe default: focus lands on cancel, not the destructive action
+    const prev = document.activeElement as HTMLElement | null;
+    cancelRef.current?.focus();
+    return () => prev?.focus?.();
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !busy) {
@@ -41,50 +48,40 @@ export function ConfirmDialog({
   // portal to <body> so a transform/filter ancestor can't become the containing block and break centering
   return createPortal(
     <>
-      <div
-        className="fixed inset-0 z-40 bg-ink-900/70 backdrop-blur-sm"
-        onClick={busy ? undefined : onCancel}
-      />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+      <div className="fixed inset-0 z-40 bg-ink/30" onClick={busy ? undefined : onCancel} />
+      <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4">
         <div
           role="alertdialog"
           aria-modal="true"
-          aria-label={title}
-          className="w-full max-w-md border border-ink-500/70 bg-ink-800 shadow-2xl"
+          aria-labelledby="confirm-title"
+          className="pointer-events-auto w-full max-w-md animate-row-in rounded-panel bg-panel shadow-lift"
         >
-          <header className="border-b border-ink-500/70 px-6 py-5">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-rose-300">
-              {eyebrow}
-            </div>
-            <h2 className="display mt-1 text-lg font-normal">{title}</h2>
-          </header>
-
-          <div className="px-6 py-5">
-            <p className="text-sm leading-relaxed text-ink-300">{message}</p>
-
+          <div className="px-6 pb-5 pt-6">
+            <h2 id="confirm-title" className="text-xl font-semibold tracking-[-0.03em]">
+              {title}
+            </h2>
+            <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{message}</p>
             {children}
-
             {error && (
-              <div className="mt-4 border-l-2 border-rose-500 bg-rose-500/5 px-4 py-2.5 font-mono text-xs text-rose-200">
+              <p
+                role="alert"
+                className="mt-4 rounded-control bg-bad-bg px-4 py-2.5 text-sm font-medium text-bad-fg"
+              >
                 {error}
-              </div>
+              </p>
             )}
           </div>
-
-          <footer className="flex justify-end gap-3 border-t border-ink-500/70 px-6 py-4">
+          <footer className="flex justify-end gap-2 rounded-b-panel border-t border-line bg-sunken/60 px-6 py-4">
             <button
+              ref={cancelRef}
               onClick={onCancel}
               disabled={busy}
-              className="border border-ink-500/70 px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-ink-300 transition hover:bg-ink-600/40 hover:text-paper disabled:cursor-not-allowed disabled:opacity-40"
+              className="btn-secondary h-10 px-4 text-sm"
             >
-              cancel
+              Cancel
             </button>
-            <button
-              onClick={onConfirm}
-              disabled={busy}
-              className="border border-rose-400/50 bg-rose-500/10 px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {busy ? (busyLabel ?? 'working…') : confirmLabel}
+            <button onClick={onConfirm} disabled={busy} className="btn-danger h-10 px-4 text-sm">
+              {busy ? (busyLabel ?? 'Working…') : confirmLabel}
             </button>
           </footer>
         </div>

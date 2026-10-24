@@ -1,85 +1,50 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
   }
   body {
-    background: #06080f;
-    color: theme('colors.paper');
+    background: theme('colors.canvas');
+    color: theme('colors.ink.DEFAULT');
     min-height: 100dvh;
-    font-feature-settings: 'ss01', 'cv11';
-  }
-  /* the display serif gets a subtle italic-like axis when used at big sizes */
-  .display {
-    font-family: theme('fontFamily.display');
     font-optical-sizing: auto;
-    font-variation-settings:
-      'opsz' 100,
-      'SOFT' 100,
-      'WONK' 0;
-    letter-spacing: -0.02em;
+    caret-color: theme('colors.ink.DEFAULT');
+  }
+  ::selection {
+    background: theme('colors.accent.100');
+    color: theme('colors.ink.DEFAULT');
+  }
+  :focus-visible {
+    outline: 2px solid theme('colors.accent.500');
+    outline-offset: 2px;
+  }
+  a {
+    text-underline-offset: 3px;
+  }
+  /* thin neutral scrollbars so tables and drawers don't drop OS chrome into the panel */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.line.strong') transparent;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
   }
 
-  /* slow drifting blobs for the hero, staggered durations + offsets so they never align */
-  @keyframes blob-drift-a {
-    0%,
-    100% {
-      transform: translate(0, 0) scale(1);
-    }
-    33% {
-      transform: translate(40px, -30px) scale(1.08);
-    }
-    66% {
-      transform: translate(-30px, 50px) scale(0.95);
+  @keyframes spin-slow {
+    to {
+      transform: rotate(360deg);
     }
   }
-  @keyframes blob-drift-b {
-    0%,
-    100% {
-      transform: translate(0, 0) scale(1);
-    }
-    50% {
-      transform: translate(-60px, 40px) scale(1.1);
-    }
-  }
-  @keyframes blob-drift-c {
-    0%,
-    100% {
-      transform: translate(0, 0) scale(1);
-    }
-    33% {
-      transform: translate(-40px, -50px) scale(1.05);
-    }
-    66% {
-      transform: translate(50px, 30px) scale(0.92);
-    }
-  }
-  .bg-blob-a {
-    animation: blob-drift-a 22s ease-in-out infinite;
-  }
-  .bg-blob-b {
-    animation: blob-drift-b 28s ease-in-out infinite;
-  }
-  .bg-blob-c {
-    animation: blob-drift-c 25s ease-in-out infinite;
+  .spin {
+    animation: spin-slow 0.9s linear infinite;
   }
 
-  /* respect users who don't want motion */
-  @media (prefers-reduced-motion: reduce) {
-    .bg-blob-a,
-    .bg-blob-b,
-    .bg-blob-c {
-      animation: none;
-    }
-  }
-
-  /* blinking cursor for the typing placeholder. steps() gives a true on/off blink
-     (no fade), matching a real terminal cursor. */
   @keyframes cursor-blink {
     0%,
     49% {
@@ -93,50 +58,159 @@
   .cursor-blink {
     animation: cursor-blink 1.06s steps(2, jump-none) infinite;
   }
+
+  @keyframes live-pulse {
+    0% {
+      box-shadow: 0 0 0 0 currentColor;
+    }
+    100% {
+      box-shadow: 0 0 0 6px transparent;
+    }
+  }
+  .live-dot {
+    animation: live-pulse 1.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 @layer components {
-  /* card: a single hairline rule + soft shadow, no heavy borders, no rounded squircles */
-  .card {
-    @apply relative border border-ink-500/70 bg-ink-700/60 shadow-card backdrop-blur-sm;
-  }
+  /* a cell of the frame: white ground under a hairline, crosshairs where it meets the frame edges.
+     depth is reserved for floating layers */
   .panel {
-    @apply border-y border-ink-500/70 bg-ink-700/40;
+    @apply relative border-t border-line bg-panel;
   }
-  .hairline {
-    @apply border-t border-ink-500/70;
+  .panel::before,
+  .panel::after {
+    content: '';
+    @apply pointer-events-none absolute top-0 z-10 size-[11px] -translate-x-1/2 -translate-y-1/2 text-ink-4;
+    background:
+      linear-gradient(currentColor, currentColor) center / 1px 100% no-repeat,
+      linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat;
   }
-  .eyebrow {
-    @apply font-mono text-[10px] uppercase tracking-widest text-accent;
+  .panel::before {
+    left: 0;
   }
-  .section-num {
-    @apply font-mono text-[10px] uppercase tracking-widest text-ink-300;
+  .panel::after {
+    left: 100%;
   }
+  .panel-head {
+    @apply flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5 sm:px-8;
+  }
+  .panel-title {
+    @apply text-base font-semibold tracking-tight;
+  }
+  .section-title {
+    @apply text-2xl font-semibold tracking-[-0.04em] sm:text-[28px];
+  }
+  .muted {
+    @apply text-ink-3;
+  }
+
+  /* the grid frame: hairline columns with crosshairs where the lines meet */
+  .frame {
+    @apply relative mx-auto w-full max-w-[1200px] border-x border-line;
+  }
+  .cell {
+    @apply relative border-line;
+  }
+  .cross {
+    @apply pointer-events-none absolute z-10 size-[11px] -translate-x-1/2 -translate-y-1/2 text-ink-4;
+    background:
+      linear-gradient(currentColor, currentColor) center / 1px 100% no-repeat,
+      linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat;
+  }
+
+  /* status badge: pill with a hairline; the icon/word carries meaning, colour reinforces it */
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[11px] font-medium;
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-[3px] text-[12px] font-medium leading-[1.35];
   }
-  /* standard text input: hairline border, mono text, accent focus ring */
+  /* codes and figures (404, 200 OK, counts) keep the mono voice; words stay in Geist */
+  .chip-code {
+    @apply font-mono text-[11px];
+  }
+  .chip-ok {
+    @apply bg-ok-bg text-ok-fg ring-1 ring-inset ring-ok-dot/25;
+  }
+  .chip-warn {
+    @apply bg-warn-bg text-warn-fg ring-1 ring-inset ring-warn-dot/30;
+  }
+  .chip-bad {
+    @apply bg-bad-bg text-bad-fg ring-1 ring-inset ring-bad-dot/25;
+  }
+  .chip-neutral {
+    @apply bg-panel text-ink-2 ring-1 ring-inset ring-line-strong;
+  }
+
+  /* keycap */
+  .kbd {
+    @apply inline-flex h-5 min-w-5 items-center justify-center rounded bg-panel px-1 font-mono text-[11px] text-ink-3 shadow-key;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-control font-medium transition duration-150 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-ink text-white hover:bg-[#383838];
+  }
+  .btn-secondary {
+    @apply btn bg-panel text-ink shadow-control hover:bg-sunken;
+  }
+  .btn-danger {
+    @apply btn bg-bad-fg text-white hover:bg-[#a00c19];
+  }
+  .btn-quiet {
+    @apply inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-sm text-ink-3 transition hover:bg-black/[0.04] hover:text-ink;
+  }
+  .icon-btn {
+    @apply inline-flex size-8 items-center justify-center rounded-control text-ink-3 transition hover:bg-black/[0.05] hover:text-ink;
+  }
+
   .input {
-    @apply border border-ink-500 bg-ink-800 font-mono text-paper placeholder:text-ink-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40;
+    @apply rounded-control bg-panel text-ink shadow-control outline-none transition placeholder:text-ink-3 hover:shadow-[0_0_0_1px_#d4d4d4] focus:shadow-[0_0_0_1px_#a1a1a1,0_0_0_4px_rgba(0,0,0,0.06)];
   }
-  /* low-emphasis mono action: lights up to accent on hover */
-  .btn-ghost {
-    @apply font-mono text-[10px] uppercase tracking-widest text-ink-300 transition hover:text-accent;
+  /* wrapper version of .input for icon + input combos; the inner input stays unstyled */
+  .field {
+    @apply rounded-control bg-panel text-ink shadow-control transition focus-within:shadow-[0_0_0_1px_#a1a1a1,0_0_0_4px_rgba(0,0,0,0.06)] hover:shadow-[0_0_0_1px_#d4d4d4];
   }
-  /* tables stay flat, hairline rows, lowercase tracked headers */
+  .field input:focus-visible {
+    outline: none;
+  }
+
+  /* segmented control */
+  .seg {
+    @apply inline-flex max-w-full overflow-x-auto rounded-control bg-sunken p-[3px] ring-1 ring-inset ring-line;
+  }
+  .seg-btn {
+    @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[4px] px-3 py-1 text-[13px] font-medium text-ink-3 transition hover:text-ink;
+  }
+  .seg-btn[aria-pressed='true'],
+  .seg-btn[aria-selected='true'] {
+    @apply bg-panel text-ink shadow-[0_0_0_1px_#eaeaea,0_1px_2px_rgba(0,0,0,0.06)];
+  }
+
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+
   .data-table {
     @apply min-w-full text-sm;
   }
-  .data-table thead tr {
-    @apply border-b border-ink-500/70 text-left text-[10px] uppercase tracking-widest text-ink-300;
+  .data-table :where(thead th) {
+    @apply whitespace-nowrap border-b border-line bg-sunken py-2.5 pr-4 text-left text-xs font-medium text-ink-3;
   }
-  .data-table thead th {
-    @apply py-3 pr-3 font-mono font-normal;
+  .data-table :where(tbody tr) {
+    @apply border-b border-line transition-colors last:border-0 hover:bg-sunken;
   }
-  .data-table tbody tr {
-    @apply border-b border-ink-500/40 transition-colors last:border-0 hover:bg-ink-600/40;
-  }
-  .data-table tbody td {
-    @apply py-3 pr-3;
+  .data-table :where(tbody td) {
+    @apply py-3 pr-4 align-middle;
   }
 }

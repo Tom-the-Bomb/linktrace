@@ -1,15 +1,27 @@
 import { useMemo, useState } from 'react';
 
+import { ArrowDown, ArrowUp } from 'lucide-react';
+
 import type { CategoryReport } from '../api';
+import { scoreTextColour } from '../lib/colours';
 import { SectionHeader } from './SectionHeader';
 import { Pager } from './ui/Pager';
-import { TextChip } from './ui/TextChip';
+import { SectionDot } from './ui/SectionDot';
+import { SegButton } from './ui/SegButton';
 
 const PAGE_SIZE = 10;
 
 type Filter = 'all' | 'healthy' | 'mixed' | 'rotten';
 type SortKey = 'pages' | 'rot' | 'seo';
 type SortDir = 'asc' | 'desc';
+
+const FILTER_LABEL: Record<Filter, string> = {
+  all: 'All',
+  healthy: 'Links OK',
+  mixed: 'Some broken',
+  rotten: 'Mostly broken',
+};
+const SORT_LABEL: Record<SortKey, string> = { pages: 'Pages', rot: 'Broken %', seo: 'SEO' };
 
 function inFilter(pattern: string, filter: Filter): boolean {
   if (filter === 'all') {
@@ -35,11 +47,29 @@ const SORT_VALUE: Record<SortKey, (c: CategoryReport) => number> = {
   seo: (c) => c.avg_seo_score,
 };
 
-export function Categories({ categories }: { categories: CategoryReport[] }) {
+export function Categories({
+  categories,
+  colourFor,
+}: {
+  categories: CategoryReport[];
+  colourFor: (section: string) => string;
+}) {
   const [filter, setFilter] = useState<Filter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('pages');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(1);
+
+  const counts = useMemo(() => {
+    const c: Record<Filter, number> = { all: categories.length, healthy: 0, mixed: 0, rotten: 0 };
+    for (const cat of categories) {
+      for (const f of ['healthy', 'mixed', 'rotten'] as Filter[]) {
+        if (inFilter(cat.pattern, f)) {
+          c[f]++;
+        }
+      }
+    }
+    return c;
+  }, [categories]);
 
   const filtered = useMemo(() => {
     let r = categories;
@@ -74,133 +104,146 @@ export function Categories({ categories }: { categories: CategoryReport[] }) {
     setPage(1);
   }
 
-  const controls = (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:ml-auto sm:justify-end">
-      <div className="flex items-center gap-3">
-        {(['all', 'healthy', 'mixed', 'rotten'] as Filter[]).map((f) => (
-          <TextChip key={f} active={filter === f} onClick={() => setFilterReset(f)}>
-            {f}
-          </TextChip>
-        ))}
-      </div>
-
-      <Divider />
-
-      <div className="flex items-center gap-3">
-        <SortChip k="pages" label="pages" current={sortKey} dir={sortDir} onPick={pickSort} />
-        <SortChip k="rot" label="rot%" current={sortKey} dir={sortDir} onPick={pickSort} />
-        <SortChip k="seo" label="seo" current={sortKey} dir={sortDir} onPick={pickSort} />
-      </div>
-
-      <Divider />
-
-      <span className="hidden text-xs italic text-ink-300 sm:inline">Where the rot lives.</span>
-    </div>
-  );
+  const DirIcon = sortDir === 'asc' ? ArrowUp : ArrowDown;
 
   return (
     <section>
-      <SectionHeader number="03" title="By section" right={controls} />
+      <SectionHeader
+        title="By section"
+        subtitle="Pages grouped by the first part of their URL path (like /blog)."
+      />
 
-      <ul className="divide-y divide-ink-500/60 border-y border-ink-500/60">
-        {paged.map((c, i) => (
-          <CategoryRow key={c.category} cat={c} index={start + i} />
-        ))}
-      </ul>
-
-      {pageCount > 1 && (
-        <div className="mt-4 flex items-center justify-center gap-6">
-          <Pager current={current} pageCount={pageCount} onPage={setPage} />
+      <div className="panel">
+        <div className="panel-head">
+          <div className="seg" role="group" aria-label="Filter sections">
+            {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
+              <SegButton
+                key={f}
+                active={filter === f}
+                onClick={() => setFilterReset(f)}
+                count={counts[f]}
+              >
+                {FILTER_LABEL[f]}
+              </SegButton>
+            ))}
+          </div>
+          <div className="seg" role="group" aria-label="Sort sections">
+            {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={sortKey === k}
+                onClick={() => pickSort(k)}
+                className="seg-btn"
+              >
+                {SORT_LABEL[k]}
+                {sortKey === k && (
+                  <DirIcon
+                    className="size-3.5"
+                    strokeWidth={2.5}
+                    aria-label={sortDir === 'asc' ? 'ascending' : 'descending'}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
-      )}
+
+        <div
+          aria-hidden="true"
+          className="hidden grid-cols-[14px_minmax(0,1fr)_170px_64px_118px] gap-x-4 border-b border-line bg-sunken/60 px-6 py-2 text-xs font-semibold text-ink-3 sm:grid"
+        >
+          <span />
+          <span>Section</span>
+          <span>Broken pages</span>
+          <span className="text-right">SEO</span>
+          <span className="text-right">Links</span>
+        </div>
+        {paged.length === 0 ? (
+          <p className="px-6 py-10 text-center text-[15px] text-ink-3">
+            No sections match this filter.
+          </p>
+        ) : (
+          <ul className="divide-y divide-line">
+            {paged.map((c) => (
+              <CategoryRow key={c.category} cat={c} colour={colourFor(c.category)} />
+            ))}
+          </ul>
+        )}
+
+        {pageCount > 1 && (
+          <div className="flex items-center justify-between border-t border-line px-5 py-2.5 sm:px-8">
+            <span className="num text-[13px] text-ink-3">
+              {start + 1}–{Math.min(start + PAGE_SIZE, filtered.length)} of {filtered.length}
+            </span>
+            <Pager current={current} pageCount={pageCount} onPage={setPage} />
+          </div>
+        )}
+      </div>
     </section>
   );
 }
 
-function Divider() {
-  return (
-    <span aria-hidden="true" className="hidden font-mono text-[10px] text-ink-400 sm:inline">
-      ·
-    </span>
-  );
-}
-
-// borderless toggle with a direction arrow when active
-function SortChip({
-  k,
-  label,
-  current,
-  dir,
-  onPick,
-}: {
-  k: SortKey;
-  label: string;
-  current: SortKey;
-  dir: SortDir;
-  onPick: (k: SortKey) => void;
-}) {
-  const active = current === k;
-  return (
-    <TextChip active={active} onClick={() => onPick(k)}>
-      {label}
-      {active && <span className="ml-1">{dir === 'asc' ? '↑' : '↓'}</span>}
-    </TextChip>
-  );
-}
-
-const patternStyle: Record<string, { bar: string; chip: string }> = {
-  healthy: {
-    bar: 'bg-emerald-400',
-    chip: 'border-emerald-400/40 bg-emerald-500/5 text-emerald-300',
-  },
-  mixed: {
-    bar: 'bg-accent',
-    chip: 'border-accent/40 bg-accent/5 text-accent',
-  },
-  mostly_rotten: {
-    bar: 'bg-rose-400',
-    chip: 'border-rose-400/40 bg-rose-500/5 text-rose-300',
-  },
-  all_rotten: {
-    bar: 'bg-rose-500',
-    chip: 'border-rose-500/50 bg-rose-600/10 text-rose-300',
-  },
-  empty: {
-    bar: 'bg-ink-500',
-    chip: 'border-ink-400/40 bg-ink-700 text-ink-300',
-  },
+// chip says link health in plain words; SEO has its own column
+const PATTERN: Record<string, { chip: string; bar: string }> = {
+  healthy: { chip: 'chip-ok', bar: 'bg-ok-dot' },
+  mixed: { chip: 'chip-warn', bar: 'bg-warn-dot' },
+  mostly_rotten: { chip: 'chip-bad', bar: 'bg-bad-dot' },
+  all_rotten: { chip: 'chip-bad', bar: 'bg-bad-dot' },
+  empty: { chip: 'chip-neutral', bar: 'bg-ink-4' },
 };
 
-function CategoryRow({ cat, index }: { cat: CategoryReport; index: number }) {
-  const rotPct = cat.total_pages > 0 ? (cat.rotten_pages / cat.total_pages) * 100 : 0;
-  const style = patternStyle[cat.pattern] ?? patternStyle.mixed;
+function linkLabel(cat: CategoryReport): string {
+  if (cat.pattern === 'empty') {
+    return 'No pages';
+  }
+  if (cat.rotten_pages === 0) {
+    return 'Links OK';
+  }
+  if (cat.pattern === 'all_rotten') {
+    return 'All broken';
+  }
+  return `${cat.rotten_pages.toLocaleString()} broken`;
+}
+
+function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
+  const rotPct = cat.total_pages > 0 ? Math.round((cat.rotten_pages / cat.total_pages) * 100) : 0;
+  const style = PATTERN[cat.pattern] ?? PATTERN.mixed;
 
   return (
-    <li className="flex items-center gap-4 py-5">
-      <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-ink-300">
-        {String(index + 1).padStart(2, '0')}
-      </span>
-
-      <div className="min-w-0 flex-1">
-        <div className="display truncate text-xl font-light">{cat.category}</div>
-        <div className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-ink-300">
-          {cat.total_pages} pages · {cat.rotten_pages} rotten · seo {cat.avg_seo_score}
+    <li className="grid grid-cols-[14px_minmax(0,1fr)_auto] items-center gap-x-4 px-5 py-3.5 sm:grid-cols-[14px_minmax(0,1fr)_170px_64px_118px] sm:px-8">
+      <SectionDot colour={colour} />
+      <div className="min-w-0">
+        <div className="truncate font-mono text-sm font-medium">{cat.category}</div>
+        <div className="num mt-0.5 text-[13px] text-ink-3">
+          {cat.total_pages.toLocaleString()} {cat.total_pages === 1 ? 'page' : 'pages'}
+          {/* the SEO column is hidden on mobile, so the figure rides in the meta line there */}
+          <span className="sm:hidden">
+            {' · '}SEO{' '}
+            <span className={scoreTextColour(cat.avg_seo_score)}>{cat.avg_seo_score}</span>
+          </span>
         </div>
       </div>
 
-      {/* progress bar is supplementary — hidden on mobile so the row never overflows */}
-      <div className="hidden w-32 shrink-0 sm:block lg:w-48">
-        <div className="h-px w-full overflow-hidden bg-ink-500">
-          <div className={`h-full ${style.bar}`} style={{ width: `${rotPct}%` }} />
+      {/* rot bar is supplementary — hidden on mobile so the row never overflows */}
+      <div className="hidden items-center gap-2.5 sm:flex" title={`${rotPct}% broken`}>
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken ring-1 ring-inset ring-line">
+          <div
+            className={`h-full rounded-full ${style.bar}`}
+            style={{ width: `${Math.max(rotPct, rotPct > 0 ? 4 : 0)}%` }}
+          />
         </div>
-        <div className="mt-1 font-mono text-[10px] uppercase tracking-widest text-ink-300">
-          rot {Math.round(rotPct)}%
-        </div>
+        <span className="num w-9 text-right font-mono text-[11px] text-ink-3">{rotPct}%</span>
       </div>
 
-      <span className={`chip shrink-0 whitespace-nowrap ${style.chip}`}>
-        {cat.pattern.replace('_', ' ')}
+      <span
+        className={`num hidden text-right font-mono text-[13px] font-medium sm:block ${scoreTextColour(cat.avg_seo_score)}`}
+      >
+        <span className="sr-only">SEO </span>
+        {cat.avg_seo_score}
       </span>
+
+      <span className={`chip justify-self-end ${style.chip}`}>{linkLabel(cat)}</span>
     </li>
   );
 }

@@ -1,5 +1,7 @@
 import { type FormEvent } from 'react';
 
+import { ArrowLeft, Square } from 'lucide-react';
+
 import { AuthBar } from './AuthBar';
 import { CrawlForm } from './CrawlForm';
 import { Wordmark } from './Wordmark';
@@ -15,7 +17,7 @@ interface CompactHeaderProps {
   onStopOrBack: () => void;
 }
 
-// sticky top bar on /history and /jobs/:id: new-crawl form, stop/back button, AuthBar
+// sticky top bar on /history and /jobs/:id: new-crawl launcher, stop/back button, AuthBar
 export function CompactHeader({
   jobId,
   url,
@@ -26,38 +28,33 @@ export function CompactHeader({
   onStopOrBack,
 }: CompactHeaderProps) {
   return (
-    <header className="sticky top-0 z-30 border-b border-ink-500/70 bg-ink-900/85 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-10 sm:py-4">
+    <header className="sticky top-0 z-30 border-b border-line bg-canvas">
+      <div className="frame flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:gap-5 md:px-6">
         {/* mobile: logo left + auth right on their own line; desktop: dissolve into the row */}
-        <div className="flex items-center justify-between gap-3 sm:contents">
-          <Wordmark size="lg" />
-          {jobId && (
-            <span className="hidden font-mono text-[10px] uppercase tracking-widest text-ink-300 sm:inline">
-              / job · {jobId.slice(0, 8)}
-            </span>
-          )}
-          <div className="sm:order-last sm:ml-2">
+        <div className="flex items-center justify-between gap-3 md:contents">
+          <Wordmark />
+          <div className="md:order-last md:ml-auto">
             <AuthBar />
           </div>
         </div>
-        <CrawlForm
-          variant="compact"
-          url={url}
-          setUrl={setUrl}
-          onSubmit={onSubmit}
-          submitting={submitting}
-        >
+        <CrawlForm url={url} setUrl={setUrl} onSubmit={onSubmit} submitting={submitting}>
           {jobId && (
             <button
               type="button"
               onClick={onStopOrBack}
-              className={`h-[34px] w-[78px] shrink-0 border font-mono text-[11px] uppercase tracking-widest transition ${
-                isDone
-                  ? 'border-ink-500 text-ink-300 hover:border-paper hover:text-paper'
-                  : 'border-rose-400/50 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200'
-              }`}
+              className={`btn-secondary h-9 shrink-0 px-3 text-sm ${isDone ? '' : '!text-bad-fg'}`}
             >
-              {isDone ? '← back' : 'stop'}
+              {isDone ? (
+                <>
+                  <ArrowLeft className="size-4" strokeWidth={2.25} aria-hidden="true" />
+                  <span className="hidden sm:inline">Home</span>
+                </>
+              ) : (
+                <>
+                  <Square className="size-3 fill-current" strokeWidth={2.5} aria-hidden="true" />
+                  Stop
+                </>
+              )}
             </button>
           )}
         </CrawlForm>

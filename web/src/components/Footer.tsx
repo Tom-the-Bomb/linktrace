@@ -1,28 +1,17 @@
 // bottom-of-page footer, in every route via the App layout shell
 export function Footer() {
-  const links = [
-    { href: 'https://github.com/Tom-the-Bomb/linktrace', label: 'github' },
-    { href: 'https://github.com/Tom-the-Bomb', label: '@Tom-the-Bomb' },
-  ];
   return (
-    <footer className="relative z-10 mt-auto border-t border-ink-500/70 bg-ink-900/80 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl flex-col gap-3 px-6 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-10">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-ink-300 sm:tracking-widest">
-          © 2026 Tom the Bomb · all rights reserved
-        </span>
-        <nav className="flex items-center gap-5">
-          {links.map((l) => (
-            <a
-              key={l.href}
-              href={l.href}
-              target="_blank"
-              rel="noreferrer"
-              className="btn-ghost"
-            >
-              {l.label} ↗
-            </a>
-          ))}
-        </nav>
+    <footer className="mt-auto border-t border-line">
+      <div className="frame flex items-center justify-between gap-4 px-4 py-5 text-[13px] text-ink-3 sm:px-6">
+        <span>© 2026 Tom the Bomb</span>
+        <a
+          href="https://github.com/Tom-the-Bomb"
+          target="_blank"
+          rel="noreferrer"
+          className="text-ink-2 underline-offset-4 hover:text-ink hover:underline"
+        >
+          @Tom-the-Bomb
+        </a>
       </div>
     </footer>
   );

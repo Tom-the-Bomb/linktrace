@@ -3,7 +3,8 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { AuthForm } from '../components/AuthForm';
-import { Wordmark } from '../components/Wordmark';
+import { TopNav } from '../components/TopNav';
+import { GridRow } from '../components/ui/GridRow';
 import { useAuth } from '../context/AuthContext';
 import { useSeo } from '../hooks/useSeo';
 
@@ -20,31 +21,26 @@ export default function AuthPage() {
   }, [loading, user, navigate]);
 
   return (
-    <div className="relative flex flex-1 flex-col">
-      <header className="px-6 py-4 sm:px-10">
-        <Wordmark />
-      </header>
-
-      <div className="flex flex-1 items-center justify-center px-6 pb-16">
-        <div className="w-full max-w-md">
-          <div className="mb-8">
-            <span className="eyebrow">welcome back</span>
-            <h1 className="display mt-3 text-3xl font-medium leading-tight sm:text-4xl">
-              Sign in or create an account
+    <div className="flex flex-1 flex-col">
+      <TopNav showAuth={false} />
+      <div className="frame flex-1">
+        <section className="grid grid-cols-1 lg:grid-cols-12">
+          <div className="cell px-5 pb-10 pt-12 sm:px-8 lg:col-span-8 lg:border-r lg:py-20">
+            <h1 className="text-[40px] font-semibold leading-none tracking-display sm:text-[56px]">
+              Save your crawls.
             </h1>
-            <p className="mt-3 font-mono text-xs text-ink-300">
-              Logged in crawls are saved to your history.
+            <p className="mt-4 max-w-md text-[17px] leading-relaxed text-ink-2">
+              You can crawl sites without an account. Logging in saves each crawl to your history so
+              you can find the report again later.
             </p>
           </div>
-
-          <div className="border border-ink-500/70 bg-ink-700/40 p-6 sm:p-8">
+          <div className="cell border-t px-5 pb-12 pt-10 sm:px-8 lg:col-span-4 lg:border-t-0 lg:py-20">
             <AuthForm onDone={() => navigate('/')} />
           </div>
-
-          <button onClick={() => navigate('/')} className="btn-ghost mt-6">
-            ← back
-          </button>
-        </div>
+        </section>
+        <GridRow inner={['lg:left-[66.666%]']}>
+          <div />
+        </GridRow>
       </div>
     </div>
   );
