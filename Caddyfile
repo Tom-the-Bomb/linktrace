@@ -8,6 +8,14 @@
 {$DOMAIN} {
 	encode gzip zstd
 
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
 	# API: strip the /api prefix, then forward to the Go service.
 	# /api/check  ->  api:8080/check
 	handle_path /api/* {

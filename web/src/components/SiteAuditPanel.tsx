@@ -17,7 +17,7 @@ export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO 
       <div className="panel grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <div className="p-5 sm:p-8">
           <h3 className="text-[15px] font-bold tracking-tight">Domain</h3>
-          <ul className="mt-2 divide-y divide-line">
+          <ul className="divide-line mt-2 divide-y">
             <Check2 ok={audit.robots_found} label="robots.txt found" />
             <Check2 ok={!audit.robots_disallow_all} label="robots.txt allows crawling" />
             <Check2
@@ -37,18 +37,18 @@ export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO 
             />
             {audit.crawl_delay > 0 && (
               <DataRow label="Crawl-delay">
-                <span className="num font-mono text-[13px] text-ink-2">{audit.crawl_delay}s</span>
+                <span className="num text-ink-2 font-mono text-[13px]">{audit.crawl_delay}s</span>
               </DataRow>
             )}
           </ul>
         </div>
 
         {seo && seo.pages_audited > 0 && (
-          <div className="border-t border-line bg-sunken/50 p-5 sm:p-8 lg:border-l lg:border-t-0">
+          <div className="border-line bg-sunken/50 border-t p-5 sm:p-8 lg:border-t-0 lg:border-l">
             <h3 className="text-[15px] font-bold tracking-tight">
               Across <span className="num">{seo.pages_audited.toLocaleString()}</span> audited pages
             </h3>
-            <ul className="mt-2 grid grid-cols-1 gap-x-8 divide-y divide-line sm:grid-cols-2 sm:divide-y-0 [&>li]:border-line sm:[&>li]:border-b">
+            <ul className="divide-line [&>li]:border-line mt-2 grid grid-cols-1 gap-x-8 divide-y sm:grid-cols-2 sm:divide-y-0 sm:[&>li]:border-b">
               <Stat
                 label="Duplicate title groups"
                 value={seo.duplicate_title_sets}

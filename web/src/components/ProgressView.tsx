@@ -1,20 +1,42 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { ExternalLink, Trash2 } from 'lucide-react';
+import { Check, ExternalLink, Link, RotateCw, Trash2 } from 'lucide-react';
 
 import type { Status } from '../api';
+import { pct } from '../lib/colours';
 import { formatDate } from '../lib/format';
-import { isTerminalStatus, jobStatusChip, jobStatusLabel } from '../lib/status';
+import { isTerminalStatus } from '../lib/status';
+import { hostOf } from '../lib/url';
+import { JobStatusChip } from './ui/StatusChip';
+import { Button } from './ui/button';
+import { Spinner } from './ui/spinner';
 
 // run header: domain + status; the live progress panel only while the crawl runs
 export function ProgressView({
   status,
   onDelete,
+  onRecrawl,
+  recrawling,
 }: {
   status: Status | null;
   onDelete?: () => void;
+  // start a fresh crawl of the same site
+  onRecrawl?: () => void;
+  recrawling?: boolean;
 }) {
-  const delta = useCheckedDelta(status?.checked ?? 0, isTerminalStatus(status?.status));
+  const delta = useCheckedDelta(status);
+  const [copied, setCopied] = useState(false);
+
+  // reports are public by id, so the page url is the share link
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard blocked (insecure origin or denied); the address bar still has the link
+    }
+  }
 
   if (!status) {
     return <ProgressSkeleton />;
@@ -26,37 +48,65 @@ export function ProgressView({
 
   return (
     <section>
-      <div className="flex flex-wrap items-start justify-between gap-3 px-5 pb-8 pt-8 sm:px-8 sm:pt-10">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-8 pb-8 sm:px-8 sm:pt-10">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="truncate text-[28px] font-semibold leading-tight tracking-[-0.035em] sm:text-4xl">
+            <h1 className="truncate text-[28px] leading-tight font-semibold tracking-[-0.035em] sm:text-4xl sm:leading-10">
               {hostOf(url)}
             </h1>
-            <span className={`chip ${jobStatusChip(state)}`}>
-              {!isDone && <span className="live-dot size-1.5 rounded-full bg-current" />}
-              {jobStatusLabel(state)}
-            </span>
+            <JobStatusChip status={state} />
           </div>
-          <p className="num mt-1 text-sm text-ink-3">
+          <p className="num text-ink-3 mt-1 text-sm">
             {isDone && (
               <>
-                Checked {checked.toLocaleString()} of {discovered.toLocaleString()} pages found
-                ·{' '}
+                Checked {checked.toLocaleString()} of the {discovered.toLocaleString()} pages
+                found.{' '}
               </>
             )}
-            Started {formatDate(created_at, true)}
+            Started {formatDate(created_at, true)}.
           </p>
         </div>
-        <div className="flex items-center gap-1">
-          <a href={url} target="_blank" rel="noreferrer" className="btn-quiet">
-            <ExternalLink className="size-4" strokeWidth={2} aria-hidden="true" />
-            Open site
-          </a>
+        <div className="flex flex-wrap items-center gap-1">
+          {isDone && onRecrawl && (
+            <Button variant="ghost" size="quiet" onClick={onRecrawl} disabled={recrawling}>
+              {recrawling ? (
+                <Spinner aria-hidden="true" />
+              ) : (
+                <RotateCw strokeWidth={2} aria-hidden="true" />
+              )}
+              Crawl again
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="quiet"
+            onClick={copyLink}
+            aria-live="polite"
+            title="Anyone with the link can view this report"
+          >
+            {copied ? (
+              <Check className="text-ok-fg" strokeWidth={2.25} aria-hidden="true" />
+            ) : (
+              <Link strokeWidth={2} aria-hidden="true" />
+            )}
+            {copied ? 'Link copied' : 'Copy link'}
+          </Button>
+          <Button variant="ghost" size="quiet" asChild>
+            <a href={url} target="_blank" rel="noreferrer">
+              <ExternalLink strokeWidth={2} aria-hidden="true" />
+              Open site
+            </a>
+          </Button>
           {onDelete && (
-            <button onClick={onDelete} className="btn-quiet hover:!bg-bad-bg hover:!text-bad-fg">
-              <Trash2 className="size-4" strokeWidth={2} aria-hidden="true" />
+            <Button
+              variant="ghost"
+              size="quiet"
+              onClick={onDelete}
+              className="hover:bg-bad-bg hover:text-bad-fg"
+            >
+              <Trash2 strokeWidth={2} aria-hidden="true" />
               Delete
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -76,15 +126,13 @@ export function ProgressView({
                 <span className="text-ink-3"> of </span>
                 <span className="num">{discovered.toLocaleString()}</span> pages found
               </p>
-              <span className="num font-mono text-sm text-ink-2">
-                {discovered > 0 ? Math.round((checked / discovered) * 100) : 0}%
-              </span>
+              <span className="num text-ink-2 font-mono text-sm">{pct(checked, discovered)}%</span>
             </div>
             <div className="mt-3">
               <Bar discovered={discovered} healthy={healthy} rotten={rotten} />
             </div>
           </div>
-          <dl className="grid grid-cols-2 border-t border-line sm:grid-cols-4 sm:[&>div:not(:last-child)]:border-r max-sm:[&>div:nth-child(-n+2)]:border-b [&>div:nth-child(odd)]:border-r [&>div]:border-line [&>div]:px-5 [&>div]:py-4 sm:[&>div]:px-8">
+          <dl className="border-line [&>div]:border-line grid grid-cols-2 border-t sm:grid-cols-4 [&>div]:px-5 [&>div]:py-4 sm:[&>div]:px-8 sm:[&>div:not(:last-child)]:border-r max-sm:[&>div:nth-child(-n+2)]:border-b [&>div:nth-child(odd)]:border-r">
             <Count label="Found" value={discovered} />
             <Count
               label="Checked"
@@ -94,7 +142,7 @@ export function ProgressView({
             <Count label="Healthy" value={healthy} dot="bg-ok-dot" />
             <Count label="Broken" value={rotten} dot="bg-bad-dot" tone="text-bad-fg" />
           </dl>
-          <p className="border-t border-line px-5 py-3 text-[13px] text-ink-3 sm:px-8">
+          <p className="border-line text-ink-3 border-t px-5 py-3 text-[13px] sm:px-8">
             This page updates by itself as pages are checked, and the full report appears once the
             crawl finishes.
           </p>
@@ -114,36 +162,39 @@ function Bar({
   rotten: number;
 }) {
   const seg = (n: number) => (discovered > 0 ? (n / discovered) * 100 : 0);
-  const pct = discovered > 0 ? Math.round(((healthy + rotten) / discovered) * 100) : 0;
   return (
     <div
-      className="flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full bg-sunken ring-1 ring-inset ring-line"
+      className="bg-sunken ring-line flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full ring-1 ring-inset"
       role="progressbar"
       aria-valuemin={0}
       aria-valuemax={100}
-      aria-valuenow={pct}
+      aria-valuenow={pct(healthy + rotten, discovered)}
       aria-label="Crawl progress"
     >
       <div
-        className="h-full bg-ok-dot transition-[width] duration-700"
+        className="bg-ok-dot h-full transition-[width] duration-700"
         style={{ width: `${seg(healthy)}%` }}
       />
       <div
-        className="h-full bg-bad-dot transition-[width] duration-700"
+        className="bg-bad-dot h-full transition-[width] duration-700"
         style={{ width: `${seg(rotten)}%` }}
       />
     </div>
   );
 }
 
-// growth in checked since the previous poll, for the live "+N" beside the count
-function useCheckedDelta(checked: number, done: boolean): number {
-  const prev = useRef(checked);
+// growth in checked since the previous poll, for the live "+N" beside the count. Keyed on the
+// status object, which every poll replaces, so a stalled crawl drops back to no delta.
+function useCheckedDelta(status: Status | null): number {
+  const prev = useRef(0);
   const [delta, setDelta] = useState(0);
   useEffect(() => {
-    setDelta(done ? 0 : Math.max(0, checked - prev.current));
-    prev.current = checked;
-  }, [checked, done]);
+    if (!status) {
+      return;
+    }
+    setDelta(isTerminalStatus(status.status) ? 0 : Math.max(0, status.checked - prev.current));
+    prev.current = status.checked;
+  }, [status]);
   return delta;
 }
 
@@ -162,7 +213,7 @@ function Count({
 }) {
   return (
     <div>
-      <dt className="flex items-center gap-1.5 text-[13px] font-medium text-ink-3">
+      <dt className="text-ink-3 flex items-center gap-1.5 text-[13px] font-medium">
         {dot && <span className={`size-2 rounded-full ${dot}`} />}
         {label}
       </dt>
@@ -170,11 +221,11 @@ function Count({
         {/* key on value so each change replays the tick */}
         <span
           key={value}
-          className={`num inline-block animate-tick text-[28px] font-bold tracking-[-0.03em] ${tone}`}
+          className={`num animate-tick inline-block text-[28px] font-bold tracking-[-0.03em] ${tone}`}
         >
           {value.toLocaleString()}
         </span>
-        {note && <span className="num font-mono text-[11px] font-medium text-ok-fg">{note}</span>}
+        {note && <span className="num text-ok-fg font-mono text-[11px] font-medium">{note}</span>}
       </dd>
     </div>
   );
@@ -183,19 +234,10 @@ function Count({
 function ProgressSkeleton() {
   return (
     <section aria-busy="true" aria-label="Loading crawl">
-      <div className="px-5 pb-8 pt-10 sm:px-8">
-        <div className="h-10 w-64 animate-pulse rounded-control bg-line" />
+      <div className="px-5 pt-10 pb-8 sm:px-8">
+        <div className="rounded-control bg-line h-10 w-64 animate-pulse" />
       </div>
-      <div className="panel h-[168px] animate-pulse" />
+      <div className="panel h-42 animate-pulse" />
     </section>
   );
-}
-
-// "https://www.example.com/" -> "www.example.com"
-function hostOf(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return url;
-  }
 }

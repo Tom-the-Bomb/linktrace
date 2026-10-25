@@ -1,20 +1,10 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type SubmitEvent, useMemo, useState } from 'react';
 
-import { useNavigate, useParams } from 'react-router-dom';
+import { ChartNetwork, Table2 } from 'lucide-react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
-import {
-  ApiError,
-  type GraphData,
-  type PageRow,
-  type Report,
-  type Status,
-  cancelCheck,
-  deleteJob,
-  getGraph,
-  getReport,
-  getResults,
-  getStatus,
-} from '../api';
+import { cancelCheck, deleteJob } from '../api';
+import { BrokenLinks } from '../components/BrokenLinks';
 import { Categories } from '../components/Categories';
 import { CompactHeader } from '../components/CompactHeader';
 import { ConfirmDeleteDialog } from '../components/ConfirmDeleteDialog';
@@ -28,31 +18,25 @@ import { ResultsTable } from '../components/ResultsTable';
 import { SectionHeader } from '../components/SectionHeader';
 import { SeoDrawer } from '../components/SeoDrawer';
 import { SiteAuditPanel } from '../components/SiteAuditPanel';
-import { type Tab, Tabs } from '../components/Tabs';
 import { ErrorBanner } from '../components/ui/ErrorBanner';
 import { GridRow } from '../components/ui/GridRow';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useCreateCrawl } from '../hooks/useCreateCrawl';
+import { useJobReport } from '../hooks/useJobReport';
 import { useSeo } from '../hooks/useSeo';
 import { sectionColourMap } from '../lib/colours';
 import { errMessage } from '../lib/format';
+import { buildTree } from '../lib/graph';
 import { isTerminalStatus } from '../lib/status';
-
-const POLL_MS = 1000;
-const HEAVY_EVERY_TICKS = 5; // ~5s between full results/report/graph refreshes
-const MAX_POLL_FAILURES = 3; // consecutive errors before giving up on live updates
 
 // Route /jobs/:jobId: live polling plus all report sections.
 export default function JobReportPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
+  // set by useCreateCrawl when the site was already being crawled and we joined that crawl
+  const joined = (useLocation().state as { joined?: boolean } | null)?.joined ?? false;
 
-  const [status, setStatus] = useState<Status | null>(null);
-  const [rows, setRows] = useState<PageRow[]>([]);
-  const [report, setReport] = useState<Report | null>(null);
-  const [graph, setGraph] = useState<GraphData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notFound, setNotFound] = useState(false);
-  const [tab, setTab] = useState<Tab>('graph');
+  const { status, setStatus, rows, report, graph, error, setError, notFound } = useJobReport(jobId);
   const [drilldownUrl, setDrilldownUrl] = useState<string | null>(null);
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -64,102 +48,36 @@ export default function JobReportPage() {
 
   // transient per-job page: title tracks the domain, kept out of the index
   useSeo({
-    title: status?.url ? `Report · ${status.url}` : 'Crawl report',
+    title: status?.url ? `Report for ${status.url}` : 'Crawl report',
     path: `/jobs/${jobId}`,
     noindex: true,
   });
-
-  // setTimeout recursion (not setInterval) so requests can't overlap
-  useEffect(() => {
-    if (!jobId) {
-      return;
-    }
-    // reset when switching jobs
-    setStatus(null);
-    setRows([]);
-    setReport(null);
-    setGraph(null);
-    setError(null);
-    setNotFound(false);
-
-    let stop = false;
-    let timer: number | undefined;
-    let tick = 0;
-    let failures = 0;
-
-    const poll = async () => {
-      try {
-        const s = await getStatus(jobId);
-        if (stop) {
-          return;
-        }
-        setStatus(s);
-        const done = isTerminalStatus(s.status);
-
-        // results/report/graph are unbounded — a 10k-page crawl ships every row, node and edge.
-        // Only /status is cheap enough for every tick; the rest refresh slowly, then once at the end.
-        if (done || tick % HEAVY_EVERY_TICKS === 0) {
-          const [r, rep, g] = await Promise.all([
-            getResults(jobId),
-            getReport(jobId),
-            getGraph(jobId),
-          ]);
-          if (stop) {
-            return;
-          }
-          setRows(r);
-          setReport(rep);
-          setGraph(g);
-        }
-        failures = 0;
-        setError(null);
-        if (done) {
-          return;
-        }
-      } catch (err) {
-        if (stop) {
-          return;
-        }
-        if (err instanceof ApiError && err.status === 404) {
-          setNotFound(true);
-          return;
-        }
-        // one blip shouldn't end live updates for good; only surface a persistent failure
-        if (++failures >= MAX_POLL_FAILURES) {
-          setError(errMessage(err));
-          return;
-        }
-      }
-      tick++;
-      if (!stop) {
-        timer = window.setTimeout(poll, POLL_MS);
-      }
-    };
-
-    void poll();
-    return () => {
-      stop = true;
-      window.clearTimeout(timer);
-    };
-  }, [jobId]);
 
   const isDone = isTerminalStatus(status?.status);
 
   // one colour per section, shared by the section list, graph and table
   const categories = report?.categories;
-  const colourFor = useMemo(() => sectionColourMap(categories ?? []), [categories]);
   const sections = useMemo(
     () =>
       [...(categories ?? [])].sort((a, b) => b.total_pages - a.total_pages).map((c) => c.category),
     [categories],
   );
+  const colourFor = useMemo(() => sectionColourMap(sections), [sections]);
 
-  // running: cancel + flip status to Back; done: go to hero
+  // where each page was first found, and the click path to it; shared by graph, list and drawer
+  const tree = useMemo(() => buildTree(graph), [graph]);
+  const rowsByUrl = useMemo(() => new Map(rows.map((r) => [r.url, r])), [rows]);
+
+  // only whoever started the crawl can stop or delete it; everyone else gets Home
+  const canManage = status?.can_manage ?? false;
+  const canStop = canManage && !isDone;
+
+  // own running crawl: cancel + flip status to Back; otherwise go to hero
   const onStopOrBack = async () => {
     if (!jobId) {
       return;
     }
-    if (isDone) {
+    if (!canStop) {
       navigate('/');
       return;
     }
@@ -171,7 +89,7 @@ export default function JobReportPage() {
     }
   };
 
-  function onNewCrawl(e: FormEvent) {
+  function onNewCrawl(e: SubmitEvent) {
     e.preventDefault();
     void submit(newUrl);
   }
@@ -186,8 +104,8 @@ export default function JobReportPage() {
       await deleteJob(jobId);
       navigate('/');
     } catch (err) {
-      // server message without the ApiError: prefix
       setDeleteError(errMessage(err));
+    } finally {
       setDeleting(false);
     }
   }
@@ -208,30 +126,39 @@ export default function JobReportPage() {
   return (
     <>
       <CompactHeader
-        jobId={jobId}
         url={newUrl}
         setUrl={setNewUrl}
         onSubmit={onNewCrawl}
         submitting={submitting}
-        isDone={isDone}
+        canStop={canStop}
         onStopOrBack={onStopOrBack}
       />
 
       <main className="frame flex-1 pb-16">
-        <div>
-          {(error ?? createError) && (
-            <ErrorBanner className="mx-5 mt-6 sm:mx-8">{error ?? createError}</ErrorBanner>
-          )}
+        {(error ?? createError) && (
+          <ErrorBanner className="mx-5 mt-6 sm:mx-8">{error ?? createError}</ErrorBanner>
+        )}
 
-          {/* the API refuses these jobs up front; without this the page is just a bare Failed badge */}
-          {status?.status === 'failed' && report?.site_audit?.robots_disallow_all && (
-            <ErrorBanner className="mx-5 mt-6 sm:mx-8">
-              This site&rsquo;s robots.txt disallows crawling, so no pages were checked.
-            </ErrorBanner>
-          )}
+        {/* the API refuses these jobs up front; without this the page is just a bare Failed badge */}
+        {status?.status === 'failed' && report?.site_audit?.robots_disallow_all && (
+          <ErrorBanner className="mx-5 mt-6 sm:mx-8">
+            This site&rsquo;s robots.txt disallows crawling, so no pages were checked.
+          </ErrorBanner>
+        )}
 
-          <ProgressView status={status} onDelete={() => setConfirmingDelete(true)} />
-        </div>
+        {joined && (
+          <p className="rounded-control bg-sunken text-ink-2 ring-line mx-5 mt-6 px-4 py-3 text-sm ring-1 ring-inset sm:mx-8">
+            This site was already being crawled, so you&rsquo;ve been taken to that crawl&rsquo;s
+            live report instead of starting a second one.
+          </p>
+        )}
+
+        <ProgressView
+          status={status}
+          onDelete={canManage ? () => setConfirmingDelete(true) : undefined}
+          onRecrawl={() => status && void submit(status.url)}
+          recrawling={submitting}
+        />
 
         {report && (
           <GridRow>
@@ -241,29 +168,56 @@ export default function JobReportPage() {
 
         {rows.length > 0 && (
           <GridRow>
-            <SectionHeader
-              title="All pages"
-              subtitle="Click a page to see its full SEO audit."
-              right={
-                <Tabs
-                  tab={tab}
-                  onChange={setTab}
-                  graphCount={graph?.nodes.length ?? 0}
-                  tableCount={rows.length}
-                />
-              }
-            />
-            {tab === 'graph' && graph && (
-              <GraphView
-                data={graph}
-                onSelect={setDrilldownUrl}
-                colourFor={colourFor}
-                sections={sections}
+            <Tabs defaultValue="graph">
+              <SectionHeader
+                title="All pages"
+                subtitle="Click a page to see its full SEO audit."
+                right={
+                  <TabsList aria-label="Explore view">
+                    <TabsTrigger value="graph" count={graph?.nodes.length ?? 0} className="px-3.5">
+                      <ChartNetwork className="size-4" strokeWidth={2} aria-hidden="true" />
+                      Graph
+                    </TabsTrigger>
+                    <TabsTrigger value="table" count={rows.length} className="px-3.5">
+                      <Table2 className="size-4" strokeWidth={2} aria-hidden="true" />
+                      Table
+                    </TabsTrigger>
+                  </TabsList>
+                }
               />
-            )}
-            {tab === 'table' && (
-              <ResultsTable rows={rows} onSelect={setDrilldownUrl} colourFor={colourFor} />
-            )}
+              <TabsContent value="graph">
+                {graph && (
+                  <GraphView
+                    data={graph}
+                    tree={tree}
+                    selectedUrl={drilldownUrl}
+                    onSelect={setDrilldownUrl}
+                    colourFor={colourFor}
+                    sections={sections}
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="table">
+                <ResultsTable
+                  rows={rows}
+                  onSelect={setDrilldownUrl}
+                  colourFor={colourFor}
+                  siteUrl={status?.url ?? ''}
+                  foundOn={tree.parent}
+                />
+              </TabsContent>
+            </Tabs>
+          </GridRow>
+        )}
+
+        {rows.length > 0 && isDone && (
+          <GridRow>
+            <BrokenLinks
+              rows={rows}
+              foundOn={tree.parent}
+              siteUrl={status?.url ?? ''}
+              onSelect={setDrilldownUrl}
+            />
           </GridRow>
         )}
 
@@ -292,14 +246,17 @@ export default function JobReportPage() {
         )}
 
         {/* close the last cell so it doesn't float on the canvas */}
-        {report && (
-          <GridRow>
-            <div />
-          </GridRow>
-        )}
+        {report && <GridRow />}
       </main>
 
-      <SeoDrawer jobId={jobId} url={drilldownUrl} onClose={() => setDrilldownUrl(null)} />
+      <SeoDrawer
+        jobId={jobId}
+        url={drilldownUrl}
+        row={drilldownUrl ? rowsByUrl.get(drilldownUrl) : undefined}
+        tree={tree}
+        onNavigate={setDrilldownUrl}
+        onClose={() => setDrilldownUrl(null)}
+      />
 
       {confirmingDelete && status && (
         <ConfirmDeleteDialog

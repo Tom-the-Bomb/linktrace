@@ -9,4 +9,4 @@ export const SITE_NAME = 'LinkTrace';
 export const DEFAULT_DESCRIPTION =
   "Give LinkTrace a domain and it finds the broken links on your site, tells you why each one broke, scores each page's SEO and maps the whole site.";
 
-export const DEFAULT_TITLE = 'LinkTrace · Broken link and SEO checker';
+export const DEFAULT_TITLE = 'LinkTrace | Broken link and SEO checker';

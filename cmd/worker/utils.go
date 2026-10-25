@@ -72,7 +72,16 @@ func classifyPattern(total, rotten int) string {
 	}
 }
 
-// copies seo.Audit -> store.SEOAudit (separate types to avoid an import cycle).
+// clip cuts s to n characters, so an oversized field can't fail the insert and wedge the crawl.
+func clip(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n])
+	}
+	return s
+}
+
+// copies seo.Audit -> store.SEOAudit (separate types to avoid an import cycle), clipped to the
+// column widths in schema.sql.
 func mapAudit(jobID, url string, a seo.Audit) store.SEOAudit {
 	issues := make([]store.Issue, len(a.Issues))
 	for i, iss := range a.Issues {
@@ -85,9 +94,9 @@ func mapAudit(jobID, url string, a seo.Audit) store.SEOAudit {
 	return store.SEOAudit{
 		JobID:                 jobID,
 		URL:                   url,
-		Title:                 a.Title,
+		Title:                 clip(a.Title, 10000),
 		TitleLength:           a.TitleLength,
-		MetaDescription:       a.MetaDescription,
+		MetaDescription:       clip(a.MetaDescription, 10000),
 		MetaDescriptionLength: a.MetaDescLength,
 		H1Count:               a.H1Count,
 		H2Count:               a.H2Count,
@@ -103,8 +112,8 @@ func mapAudit(jobID, url string, a seo.Audit) store.SEOAudit {
 		LinksInternal:         a.LinksInternal,
 		LinksExternal:         a.LinksExternal,
 		LinksNofollow:         a.LinksNofollow,
-		HTMLLang:              a.HTMLLang,
-		Canonical:             a.Canonical,
+		HTMLLang:              clip(a.HTMLLang, 20),
+		Canonical:             clip(a.Canonical, 10000),
 		OGTags:                a.OGTags,
 		TwitterTags:           a.TwitterTags,
 		JSONLDCount:           a.JSONLDCount,
@@ -112,11 +121,20 @@ func mapAudit(jobID, url string, a seo.Audit) store.SEOAudit {
 		HasViewport:           a.HasViewport,
 		Noindex:               a.Noindex,
 		TopKeywords:           keywords,
-		PrimaryKeyword:        a.PrimaryKeyword,
+		PrimaryKeyword:        clip(a.PrimaryKeyword, 100),
 		KeywordInTitle:        a.KeywordInTitle,
 		KeywordInH1:           a.KeywordInH1,
 		KeywordInURL:          a.KeywordInURL,
 		Issues:                issues,
 		Score:                 a.Score,
 	}
+}
+
+// the part of a URL robots.txt rules match against: escaped path plus query string.
+func robotsPath(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "/"
+	}
+	return u.RequestURI()
 }

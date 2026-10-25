@@ -1,25 +1,37 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { Check, ExternalLink, X } from 'lucide-react';
+import { ArrowUpRight, Check, ChevronRight, ExternalLink, X } from 'lucide-react';
 
-import { type SEODetail, getSEODetail } from '../api';
-import { pct, scoreTierChip, toneColour } from '../lib/colours';
+import { type PageRow, type SEODetail, getSEODetail } from '../api';
+import { type Tone, pct, scoreTierBadge, toneColour } from '../lib/colours';
 import { errMessage } from '../lib/format';
+import { type SiteTree, depthLabel, pathFromRoot } from '../lib/graph';
+import { FAILURE_EXPLANATION } from '../lib/status';
+import { pathOf } from '../lib/url';
 import { DataRow } from './ui/DataRow';
 import { ErrorBanner } from './ui/ErrorBanner';
+import { StatusChip } from './ui/StatusChip';
+import { Badge } from './ui/badge';
+import { Button } from './ui/button';
+import { Kbd } from './ui/kbd';
+import { Sheet, SheetClose, SheetContent, SheetTitle } from './ui/sheet';
 
 interface Props {
   jobId: string;
   url: string | null;
+  // the crawled row for this url, when the results have loaded
+  row?: PageRow;
+  tree: SiteTree;
+  // open another page's audit in place (found-on page, a step of the path)
+  onNavigate: (url: string) => void;
   onClose: () => void;
 }
 
-// slide-in audit sheet; fetches on URL change, closes on backdrop click or Esc
-export function SeoDrawer({ jobId, url, onClose }: Props) {
+// slide-in audit sheet; fetches on URL change
+export function SeoDrawer({ jobId, url, row, tree, onNavigate, onClose }: Props) {
   const [detail, setDetail] = useState<SEODetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!url) {
@@ -38,70 +50,160 @@ export function SeoDrawer({ jobId, url, onClose }: Props) {
     };
   }, [jobId, url]);
 
-  useEffect(() => {
-    if (!url) {
-      return;
-    }
-    // move focus into the sheet, give it back on close
-    const prev = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      prev?.focus?.();
-    };
-  }, [url, onClose]);
-
   if (!url) {
     return null;
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-ink/30" onClick={onClose} aria-hidden="true" />
-      <aside
-        role="dialog"
-        aria-modal="true"
-        aria-label="Page audit"
-        className="fixed inset-y-2 right-2 z-50 flex w-[calc(100%-1rem)] max-w-xl animate-row-in flex-col overflow-hidden rounded-panel bg-panel shadow-lift"
-      >
-        <header className="flex items-start justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent aria-describedby={undefined}>
+        <header className="border-line flex items-start justify-between gap-3 border-b px-5 py-4 sm:px-6">
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-semibold tracking-[-0.02em]">
+            <SheetTitle className="truncate text-lg font-semibold tracking-[-0.02em]">
               Audit of <span className="font-mono text-[16px] font-medium">{pathOf(url)}</span>
-            </h2>
+            </SheetTitle>
             <a
               href={url}
               target="_blank"
               rel="noreferrer"
-              className="mt-0.5 flex items-center gap-1.5 font-mono text-[12px] text-ink-3 hover:text-accent-600"
+              className="text-ink-3 hover:text-link-600 mt-0.5 flex items-center gap-1.5 font-mono text-[12px]"
             >
               <span className="truncate">{url}</span>
               <ExternalLink className="size-3 shrink-0" strokeWidth={2.25} aria-hidden="true" />
             </a>
           </div>
-          <button
-            ref={closeRef}
-            onClick={onClose}
-            aria-label="Close audit"
-            className="btn-quiet shrink-0 !px-1.5 text-[13px]"
-          >
-            <span className="kbd !h-5 !text-[10px]" aria-hidden="true">
-              esc
-            </span>
-            <X className="size-4" strokeWidth={2.25} />
-          </button>
+          <SheetClose asChild>
+            <Button variant="ghost" size="quiet" aria-label="Close audit" className="px-1.5">
+              <Kbd className="text-[10px]">esc</Kbd>
+              <X strokeWidth={2.25} />
+            </Button>
+          </SheetClose>
         </header>
 
         <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+          <PageContext url={url} row={row} tree={tree} onNavigate={onNavigate} />
           {loading && <Skeleton />}
           {error && <ErrorBanner>{error}</ErrorBanner>}
           {!loading && !error && !detail && <NoAuditState />}
           {detail && <SeoBody detail={detail} />}
         </div>
-      </aside>
-    </>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// what happened to the page and where it sits in the site, before the SEO detail
+function PageContext({
+  url,
+  row,
+  tree,
+  onNavigate,
+}: {
+  url: string;
+  row?: PageRow;
+  tree: SiteTree;
+  onNavigate: (url: string) => void;
+}) {
+  const chain = pathFromRoot(tree, url);
+  const foundOn = tree.parent.get(url);
+  const foundHere = tree.children.get(url)?.length ?? 0;
+
+  return (
+    <section className="border-line mb-7 border-b pb-6">
+      {row && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <StatusChip alive={row.is_alive} code={row.status_code} error={row.error_type} />
+          <span className="num text-ink-3 font-mono text-[12px]">
+            {row.response_time > 0 ? `${row.response_time.toLocaleString()} ms` : 'No response'}
+          </span>
+          <span className="text-ink-3 text-[13px]">{depthLabel(row.depth)}</span>
+        </div>
+      )}
+      {row && !row.is_alive && (
+        <p className="text-ink-2 mt-3 text-[15px] leading-relaxed">
+          {FAILURE_EXPLANATION[row.error_type] ?? 'The page could not be loaded.'}
+          {row.archive_url ? (
+            <>
+              {' '}
+              <a
+                href={row.archive_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-link-600 inline-flex items-center gap-0.5 underline-offset-4 hover:underline"
+              >
+                See the saved copy on the Wayback Machine
+                <ArrowUpRight className="size-3.5" strokeWidth={2.25} aria-hidden="true" />
+              </a>
+            </>
+          ) : (
+            <span className="text-ink-3"> No saved copy on the Wayback Machine.</span>
+          )}
+        </p>
+      )}
+
+      <dl className="mt-5 space-y-4 text-sm">
+        <div>
+          <dt className="text-ink-3 text-[13px] font-medium">First found on</dt>
+          <dd className="mt-1">
+            {foundOn ? (
+              <button
+                onClick={() => onNavigate(foundOn)}
+                className="text-link-600 font-mono text-[13px] underline-offset-4 hover:underline"
+              >
+                {pathOf(foundOn)}
+              </button>
+            ) : (
+              <span className="text-ink-2">This is where the crawl started.</span>
+            )}
+            {foundOn && row && !row.is_alive && (
+              <span className="text-ink-3 mt-1 block text-[13px]">
+                Fix or remove the link on that page (other pages may link to it too).
+              </span>
+            )}
+          </dd>
+        </div>
+        {chain.length > 2 && (
+          <div>
+            <dt className="text-ink-3 text-[13px] font-medium">Path from the homepage</dt>
+            <dd className="mt-1">
+              <ol className="flex flex-wrap items-center gap-x-1 gap-y-1 font-mono text-[12px]">
+                {chain.map((u, i) => (
+                  <li key={u} className="flex items-center gap-1">
+                    {i > 0 && (
+                      <ChevronRight
+                        className="text-ink-4 size-3"
+                        strokeWidth={2.5}
+                        aria-hidden="true"
+                      />
+                    )}
+                    {u === url ? (
+                      <span className="text-ink" aria-current="page">
+                        {pathOf(u)}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => onNavigate(u)}
+                        className="text-ink-2 hover:text-ink underline-offset-4 hover:underline"
+                      >
+                        {pathOf(u)}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </dd>
+          </div>
+        )}
+        {foundHere > 0 && (
+          <div>
+            <dt className="text-ink-3 text-[13px] font-medium">Pages first found here</dt>
+            <dd className="num text-ink-2 mt-1">
+              {foundHere.toLocaleString()} {foundHere === 1 ? 'page' : 'pages'}
+            </dd>
+          </div>
+        )}
+      </dl>
+    </section>
   );
 }
 
@@ -109,9 +211,8 @@ function NoAuditState() {
   return (
     <div>
       <p className="font-semibold">No SEO audit for this page</p>
-      <p className="mt-1.5 text-[15px] leading-relaxed text-ink-2">
-        This page didn&rsquo;t load as a normal HTML page, so there was nothing to audit. Its status
-        in the table or graph shows why it failed.
+      <p className="text-ink-2 mt-1.5 text-[15px] leading-relaxed">
+        It didn&rsquo;t load as a normal HTML page, so there was nothing to audit.
       </p>
     </div>
   );
@@ -120,35 +221,38 @@ function NoAuditState() {
 function Skeleton() {
   return (
     <div className="space-y-4" aria-busy="true" aria-label="Loading audit">
-      <div className="h-20 animate-pulse rounded-xl bg-sunken" />
-      <div className="h-32 animate-pulse rounded-xl bg-sunken" />
-      <div className="h-24 animate-pulse rounded-xl bg-sunken" />
+      <div className="bg-sunken h-20 animate-pulse rounded-xl" />
+      <div className="bg-sunken h-32 animate-pulse rounded-xl" />
+      <div className="bg-sunken h-24 animate-pulse rounded-xl" />
     </div>
   );
 }
 
 function SeoBody({ detail }: { detail: SEODetail }) {
+  const tier = scoreTierBadge(detail.score);
   return (
     <div className="space-y-7">
-      <div className="flex items-end justify-between border-b border-line pb-6">
+      <div className="border-line flex items-end justify-between border-b pb-6">
         <span>
-          <span className="block text-[13px] font-medium text-ink-3">SEO score</span>
-          <span className={`chip mt-1.5 ${scoreTierChip(detail.score).chip}`}>
-            {scoreTierChip(detail.score).label}
-          </span>
+          <span className="text-ink-3 block text-[13px] font-medium">SEO score</span>
+          <Badge variant={tier.tone} className="mt-1.5">
+            {tier.label}
+          </Badge>
         </span>
         <span className="flex items-baseline gap-1">
           <span className="num text-5xl font-semibold tracking-[-0.05em]">{detail.score}</span>
-          <span className="text-base font-semibold text-ink-3">/100</span>
+          <span className="text-ink-3 text-base font-semibold">/100</span>
         </span>
       </div>
 
       {detail.issues && detail.issues.length > 0 && (
         <Section label="Issues" count={detail.issues.length}>
-          <ul className="divide-y divide-line">
+          <ul className="divide-line divide-y">
             {detail.issues.map((iss) => (
               <li key={iss.code} className="flex items-start gap-3 py-2.5 text-[15px] leading-snug">
-                <span className={`chip mt-px ${severityChip(iss.severity)}`}>{iss.severity}</span>
+                <Badge variant={SEVERITY_TONE[iss.severity] ?? 'neutral'} className="mt-px">
+                  {iss.severity}
+                </Badge>
                 <span>{iss.message}</span>
               </li>
             ))}
@@ -157,21 +261,21 @@ function SeoBody({ detail }: { detail: SEODetail }) {
       )}
 
       <Section label="Title">
-        <p className="text-[17px] font-semibold leading-snug">
-          {detail.title || <em className="font-normal not-italic text-bad-fg">Missing</em>}
+        <p className="text-[17px] leading-snug font-semibold">
+          {detail.title || <em className="text-bad-fg font-normal not-italic">Missing</em>}
         </p>
         <Meta value={`${detail.title_length} characters`} />
       </Section>
 
       <Section label="Meta description">
-        <p className="text-[15px] leading-relaxed text-ink-2">
-          {detail.meta_description || <em className="not-italic text-bad-fg">Missing</em>}
+        <p className="text-ink-2 text-[15px] leading-relaxed">
+          {detail.meta_description || <em className="text-bad-fg not-italic">Missing</em>}
         </p>
         <Meta value={`${detail.meta_description_length} characters`} />
       </Section>
 
       <Section label="Headings">
-        <div className="grid grid-cols-6 divide-x divide-line rounded-control ring-1 ring-inset ring-line">
+        <div className="divide-line rounded-control ring-line grid grid-cols-6 divide-x ring-1 ring-inset">
           <HeadingTile label="h1" count={detail.h1_count} flagWhen={(n) => n !== 1} />
           <HeadingTile label="h2" count={detail.h2_count} />
           <HeadingTile label="h3" count={detail.h3_count} />
@@ -204,7 +308,7 @@ function SeoBody({ detail }: { detail: SEODetail }) {
 
       {detail.images_total > 0 && (
         <Section label="Images" count={detail.images_total}>
-          <ul className="divide-y divide-line">
+          <ul className="divide-line divide-y">
             <CountSignal
               label="Alt text"
               count={detail.images_with_alt}
@@ -231,7 +335,7 @@ function SeoBody({ detail }: { detail: SEODetail }) {
 
       {detail.links_internal + detail.links_external > 0 && (
         <Section label="Links">
-          <ul className="divide-y divide-line">
+          <ul className="divide-line divide-y">
             <RawStat label="Internal" value={detail.links_internal} />
             <RawStat label="External" value={detail.links_external} />
             <RawStat label="nofollow" value={detail.links_nofollow} />
@@ -245,7 +349,7 @@ function SeoBody({ detail }: { detail: SEODetail }) {
             <span className="text-2xl font-semibold tracking-[-0.03em]">
               {detail.primary_keyword}
             </span>
-            <span className="text-[13px] text-ink-3">primary</span>
+            <span className="text-ink-3 text-[13px]">primary</span>
           </p>
           <div className="mt-3 flex flex-wrap gap-1.5">
             <Placement label="in title" ok={detail.keyword_in_title} />
@@ -255,10 +359,10 @@ function SeoBody({ detail }: { detail: SEODetail }) {
           {detail.top_keywords && detail.top_keywords.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-1.5">
               {detail.top_keywords.slice(0, 12).map((k) => (
-                <span key={k.term} className="chip chip-neutral">
+                <Badge key={k.term}>
                   {k.term}
                   <span className="num text-ink-3">{k.count}</span>
-                </span>
+                </Badge>
               ))}
             </div>
           )}
@@ -282,7 +386,7 @@ function Section({
       <h3 className="mb-2 flex items-baseline gap-2 text-[15px] font-bold tracking-tight">
         {label}
         {count !== undefined && (
-          <span className="num font-mono text-[12px] font-medium text-ink-3">{count}</span>
+          <span className="num text-ink-3 font-mono text-[12px] font-medium">{count}</span>
         )}
       </h3>
       {children}
@@ -291,7 +395,7 @@ function Section({
 }
 
 function Meta({ value }: { value: string }) {
-  return <p className="mt-1.5 font-mono text-[11px] text-ink-3">{value}</p>;
+  return <p className="text-ink-3 mt-1.5 font-mono text-[11px]">{value}</p>;
 }
 
 function HeadingTile({
@@ -306,7 +410,7 @@ function HeadingTile({
   const flagged = flagWhen?.(count);
   return (
     <div className={`px-2 py-2 text-center ${flagged ? 'bg-bad-bg' : ''}`}>
-      <div className="font-mono text-[11px] text-ink-3">{label}</div>
+      <div className="text-ink-3 font-mono text-[11px]">{label}</div>
       <div className={`num text-lg font-bold ${flagged ? 'text-bad-fg' : ''}`}>{count}</div>
     </div>
   );
@@ -314,9 +418,9 @@ function HeadingTile({
 
 function Signal({ label, ok }: { label: string; ok: boolean }) {
   return (
-    <li className="flex items-center gap-2.5 border-b border-line py-2 text-sm">
+    <li className="border-line flex items-center gap-2.5 border-b py-2 text-sm">
       <span
-        className={`flex size-[18px] items-center justify-center rounded-md ${ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}
+        className={`flex size-4.5 items-center justify-center rounded-md ${ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}
       >
         {ok ? (
           <Check className="size-3" strokeWidth={3} />
@@ -350,14 +454,14 @@ function CountSignal({ label, count, total }: { label: string; count: number; to
 function RawStat({ label, value }: { label: string; value: number }) {
   return (
     <DataRow label={label}>
-      <span className="num font-mono text-[13px] text-ink-2">{value.toLocaleString()}</span>
+      <span className="num text-ink-2 font-mono text-[13px]">{value.toLocaleString()}</span>
     </DataRow>
   );
 }
 
 function Placement({ label, ok }: { label: string; ok: boolean }) {
   return (
-    <span className={`chip ${ok ? 'chip-ok' : 'chip-bad'}`}>
+    <Badge variant={ok ? 'ok' : 'bad'}>
       {ok ? (
         <Check className="size-3" strokeWidth={3} aria-hidden="true" />
       ) : (
@@ -365,27 +469,8 @@ function Placement({ label, ok }: { label: string; ok: boolean }) {
       )}
       {label}
       <span className="sr-only">{ok ? 'yes' : 'no'}</span>
-    </span>
+    </Badge>
   );
 }
 
-function severityChip(sev: string): string {
-  switch (sev) {
-    case 'error':
-      return 'chip-bad';
-    case 'warning':
-      return 'chip-warn';
-    default:
-      return 'chip-neutral';
-  }
-}
-
-// path + query for the title; the full URL sits beneath it
-function pathOf(url: string): string {
-  try {
-    const u = new URL(url);
-    return u.pathname + u.search || '/';
-  } catch {
-    return url;
-  }
-}
+const SEVERITY_TONE: Record<string, Tone> = { error: 'bad', warning: 'warn' };

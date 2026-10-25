@@ -20,7 +20,9 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/checker"
 	"github.com/Tom-the-Bomb/linktrace/internal/config"
 	"github.com/Tom-the-Bomb/linktrace/internal/crawler"
+	"github.com/Tom-the-Bomb/linktrace/internal/httpx"
 	"github.com/Tom-the-Bomb/linktrace/internal/queue"
+	"github.com/Tom-the-Bomb/linktrace/internal/robots"
 	"github.com/Tom-the-Bomb/linktrace/internal/seo"
 	"github.com/Tom-the-Bomb/linktrace/internal/store"
 )
@@ -47,6 +49,7 @@ const (
 // starts the page-fetch workers and the result consumers, then waits for shutdown.
 func main() {
 	cfg := config.Load()
+	httpx.AllowPrivateTargets = cfg.AllowPrivateTargets
 
 	st, err := store.New(cfg.MySQLDSN)
 	if err != nil {
@@ -287,10 +290,12 @@ func (w *worker) publishChild(child queue.PageJob) {
 
 // expands the frontier and returns only the children this page first discovered,
 // so recorded edges form a strict BFS tree (one parent per page) rather than the full link soup.
-// Three caps bound a sprawling crawl: depth (MaxDepth), global (MaxPages), per-category (MaxPerCategory).
+// Three caps bound a sprawling crawl: depth (MaxDepth), pages (MAX_PAGES, or the job's lower cap),
+// per-category (MaxPerCategory). Links the site's robots.txt disallows are never queued, and a
+// page that redirected to another site isn't expanded.
 func (w *worker) enqueueLinks(job queue.PageJob, res checker.CheckResult) []string {
 	base, err := url.Parse(res.FinalURL)
-	if err != nil {
+	if err != nil || (job.Site != "" && crawler.SiteKey(base.Hostname()) != job.Site) {
 		return nil
 	}
 	childDepth := job.Depth + 1
@@ -298,23 +303,37 @@ func (w *worker) enqueueLinks(job queue.PageJob, res checker.CheckResult) []stri
 		log.Printf("[worker] depth cap hit (%d), skipping children of %s", w.cfg.MaxDepth, job.URL)
 		return nil
 	}
+	links := crawler.ExtractLinks(res.Body, base)
+	if len(links) == 0 {
+		return nil
+	}
+	rules, err := w.cache.RobotsRules(job.JobID)
+	if err != nil {
+		log.Printf("[worker] robots rules for %s: %v", job.JobID, err)
+		return nil // without the rules there's no telling what's disallowed
+	}
 
+	maxPages := w.cfg.MaxPages
+	if job.MaxPages > 0 {
+		maxPages = min(maxPages, job.MaxPages)
+	}
+	seen, _ := w.cache.SeenCount(job.JobID)
 	var discovered []string
-	capLogged := false
-	for _, link := range crawler.ExtractLinks(res.Body, base) {
-		n, _ := w.cache.SeenCount(job.JobID)
-		if n >= w.cfg.MaxPages {
-			if !capLogged {
-				log.Printf("[worker] page cap hit (%d), no more URLs accepted", w.cfg.MaxPages)
-				capLogged = true
-			}
+	for _, link := range links {
+		if seen >= maxPages {
+			log.Printf("[worker] page cap hit (%d), no more URLs accepted", maxPages)
 			break
+		}
+		// before MarkSeen, so a disallowed URL never counts toward the cap
+		if len(rules) > 0 && !robots.Allowed(rules, robotsPath(link)) {
+			continue
 		}
 		// dedupe on the value-agnostic key so /post?id=1 and /post?id=2 collapse to one page
 		isNew, err := w.cache.MarkSeen(job.JobID, crawler.CanonicalKey(link))
 		if err != nil || !isNew {
 			continue
 		}
+		seen++
 
 		// per-category soft cap: increment first, then drop if it would overflow
 		if w.cfg.MaxPerCategory > 0 {
@@ -329,8 +348,8 @@ func (w *worker) enqueueLinks(job queue.PageJob, res checker.CheckResult) []stri
 		}
 
 		w.publishChild(queue.PageJob{
-			JobID: job.JobID, URL: link, Depth: childDepth,
-			Shard: job.Shard, CrawlDelay: job.CrawlDelay,
+			JobID: job.JobID, URL: link, Depth: childDepth, Shard: job.Shard,
+			CrawlDelay: job.CrawlDelay, MaxPages: job.MaxPages, Site: job.Site,
 		})
 		discovered = append(discovered, link)
 	}
@@ -453,7 +472,7 @@ func (rb *reportBuilder) maybeComplete(jobID string) error {
 		}
 		log.Printf("[report] job %s COMPLETE: %d pages (%d healthy, %d rotten)",
 			jobID[:8], prog["checked"], prog["healthy"], prog["rotten"])
-		_ = rb.cache.ReleaseShard(jobID) // free the lane for new crawls
+		_ = rb.cache.EndJob(jobID) // free the lane and let the host be crawled again
 	}
 	return nil
 }

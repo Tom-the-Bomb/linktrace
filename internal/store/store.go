@@ -17,6 +17,7 @@ import (
 type Job struct {
 	ID         string
 	UserID     string // owner; "" for anonymous jobs
+	AnonOwner  string // sha256 of the anonymous creator's owner token; "" for account jobs
 	URL        string
 	Status     string
 	TotalPages int
@@ -121,16 +122,28 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// inserts a job owned by userID, or anonymous (SQL NULL) when userID == "".
-func (s *Store) CreateJob(id, url, userID string) error {
-	var uid any
-	if userID != "" {
-		uid = userID
-	}
+// inserts a job owned by userID, or by the anonymous token hash anonOwner when userID == "".
+func (s *Store) CreateJob(id, url, userID, anonOwner string) error {
 	_, err := s.db.Exec(
-		"INSERT INTO jobs (id, url, user_id, status) VALUES (UUID_TO_BIN(?), ?, UUID_TO_BIN(?), 'pending')",
-		id, url, uid,
+		"INSERT INTO jobs (id, url, user_id, anon_owner, status) VALUES (UUID_TO_BIN(?), ?, UUID_TO_BIN(?), ?, 'pending')",
+		id, url, nullIfEmpty(userID), nullIfEmpty(anonOwner),
 	)
+	return err
+}
+
+// Migrate adds columns introduced after a deployment's first boot, since schema.sql only runs on
+// a fresh volume. Safe to call on every API start.
+func (s *Store) Migrate() error {
+	var n int
+	if err := s.db.QueryRow(
+		"SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'jobs' AND COLUMN_NAME = 'anon_owner'",
+	).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := s.db.Exec("ALTER TABLE jobs ADD COLUMN anon_owner CHAR(64) NULL AFTER user_id")
 	return err
 }
 
@@ -185,17 +198,17 @@ func (s *Store) GetJob(id string) (*Job, error) {
 	}
 
 	var j Job
-	var userID sql.NullString // user_id is nullable for anonymous jobs
+	var userID, anonOwner sql.NullString // both nullable: one or neither is set
 	out, err := getOne(&j, func() error {
 		return s.db.QueryRow(
-			"SELECT BIN_TO_UUID(id), BIN_TO_UUID(user_id), url, status, total_pages, created_at, updated_at FROM jobs WHERE id = UUID_TO_BIN(?)",
+			"SELECT BIN_TO_UUID(id), BIN_TO_UUID(user_id), anon_owner, url, status, total_pages, created_at, updated_at FROM jobs WHERE id = UUID_TO_BIN(?)",
 			id,
-		).Scan(&j.ID, &userID, &j.URL, &j.Status, &j.TotalPages, &j.CreatedAt, &j.UpdatedAt)
+		).Scan(&j.ID, &userID, &anonOwner, &j.URL, &j.Status, &j.TotalPages, &j.CreatedAt, &j.UpdatedAt)
 	})
 	if out == nil || err != nil {
 		return out, err
 	}
-	j.UserID = userID.String
+	j.UserID, j.AnonOwner = userID.String, anonOwner.String
 	return out, nil
 }
 

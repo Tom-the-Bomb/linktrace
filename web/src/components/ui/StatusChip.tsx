@@ -1,19 +1,26 @@
 import { CircleAlert, CircleCheck, CircleX } from 'lucide-react';
 
 import type { Tone } from '../../lib/colours';
-import { pageStatusLabel, pageStatusTone } from '../../lib/status';
+import {
+  isTerminalStatus,
+  jobStatusLabel,
+  jobStatusTone,
+  pageStatusLabel,
+  pageStatusTone,
+} from '../../lib/status';
+import { Badge } from './badge';
+import { Spinner } from './spinner';
 
-const TONE_CHIP: Record<Tone, string> = { ok: 'chip-ok', warn: 'chip-warn', bad: 'chip-bad' };
 const TONE_ICON = { ok: CircleCheck, warn: CircleAlert, bad: CircleX };
 
-// tinted pill: icon + word carry the meaning, colour only reinforces it
+// icon + word carry the meaning, colour only reinforces it
 export function ToneChip({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   const Icon = TONE_ICON[tone];
   return (
-    <span className={`chip chip-code ${TONE_CHIP[tone]}`}>
-      <Icon className="size-3 shrink-0" strokeWidth={2.5} aria-hidden="true" />
+    <Badge variant={tone} mono>
+      <Icon className="size-3" strokeWidth={2.5} aria-hidden="true" />
       {children}
-    </span>
+    </Badge>
   );
 }
 
@@ -29,5 +36,15 @@ export function StatusChip({
 }) {
   return (
     <ToneChip tone={pageStatusTone(alive, error)}>{pageStatusLabel(alive, code, error)}</ToneChip>
+  );
+}
+
+// a crawl's state, led by a spinner while it's still running
+export function JobStatusChip({ status }: { status: string }) {
+  return (
+    <Badge variant={jobStatusTone(status)}>
+      {!isTerminalStatus(status) && <Spinner className="size-3" aria-hidden="true" />}
+      {jobStatusLabel(status)}
+    </Badge>
   );
 }

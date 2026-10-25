@@ -32,3 +32,6 @@ func shardSetKey(i int) string          { return "shard:" + strconv.Itoa(i) + ":
 func cancelKey(jobID string) string     { return "cancel:" + jobID }
 func completeKey(jobID string) string   { return "complete:" + jobID }
 func sessionKey(sid string) string      { return "session:" + sid }
+func jobHostKey(jobID string) string    { return "jobhost:" + jobID }
+func robotsKey(jobID string) string     { return "robots:" + jobID }
+func activeCrawlKey(host string) string { return "activecrawl:" + host }

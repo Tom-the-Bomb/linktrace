@@ -65,22 +65,20 @@ func (c *Checker) Check(rawURL string) CheckResult {
 		res.ErrorType = ErrUnknown // malformed URL / bad scheme, not a DNS failure
 		return res
 	}
-	httpx.SetBrowserHeaders(req)
+	httpx.SetCheckerHeaders(req)
 
 	// looped is set when the hop limit is hit. ErrUseLastResponse is deliberate: returning a real
 	// error here would discard the response (and the chain) that the report wants to show.
 	var chain []string
 	var looped bool
-	client := &http.Client{
-		Timeout: c.timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			chain = append(chain, req.URL.String())
-			if len(via) >= maxRedirects {
-				looped = true
-				return http.ErrUseLastResponse
-			}
-			return nil
-		},
+	client := httpx.NewClient(c.timeout, true)
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		chain = append(chain, req.URL.String())
+		if len(via) >= maxRedirects {
+			looped = true
+			return http.ErrUseLastResponse
+		}
+		return nil
 	}
 
 	resp, err := client.Do(req)

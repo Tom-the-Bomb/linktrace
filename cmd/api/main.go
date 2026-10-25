@@ -3,7 +3,9 @@
 package main
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"net/url"
@@ -21,6 +23,7 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/cache"
 	"github.com/Tom-the-Bomb/linktrace/internal/config"
 	"github.com/Tom-the-Bomb/linktrace/internal/crawler"
+	"github.com/Tom-the-Bomb/linktrace/internal/httpx"
 	"github.com/Tom-the-Bomb/linktrace/internal/queue"
 	"github.com/Tom-the-Bomb/linktrace/internal/site"
 	"github.com/Tom-the-Bomb/linktrace/internal/store"
@@ -40,6 +43,12 @@ const (
 	// anonymous callers are keyed by IP, so an office NAT or mobile CGNAT can put many real
 	// users in one bucket. Accidental 429s are likelier here than an attacker.
 	standardPerMin = 1200
+	// Report data (results, report, graph, SEO detail): each response can carry every row of a
+	// 10,000-page crawl. A live tab asks for ~36/min, so this leaves room for several tabs.
+	heavyPerMin = 240
+	// Login attempts per username per minute, on top of the per-IP budget, so one account can't
+	// be guessed at from many addresses.
+	loginPerMinPerAccount = 5
 )
 
 // bundles shared dependencies so handlers can reach them without globals.
@@ -54,10 +63,14 @@ type Server struct {
 func main() {
 	cfg := config.Load()
 	auth.SetCookieSecure(cfg.CookieSecure)
+	httpx.AllowPrivateTargets = cfg.AllowPrivateTargets
 
 	st, err := store.New(cfg.MySQLDSN)
 	if err != nil {
 		log.Fatalf("mysql: %v", err)
+	}
+	if err := st.Migrate(); err != nil {
+		log.Fatalf("mysql migrate: %v", err)
 	}
 	defer st.Close()
 
@@ -79,6 +92,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware(cfg.FrontendOrigin))
+	r.Use(jsonOnly)
 	r.Use(auth.Optional(s.cache)) // tags the request with a user id if logged in; never blocks
 
 	// Every route is rate limited. OPTIONS preflights never reach these — corsMiddleware
@@ -100,16 +114,20 @@ func main() {
 		r.Post("/check/{id}/cancel", s.handleCancel)
 		r.Delete("/check/{id}", s.handleDelete)
 		r.Get("/check/{id}", s.handleStatus)
-		r.Get("/check/{id}/results", s.handleResults)
-		r.Get("/check/{id}/report", s.handleReport)
-		r.Get("/check/{id}/graph", s.handleGraph)
-		r.Get("/check/{id}/seo", s.handleSEODetail)
 
 		r.With(auth.Require(s.cache)).Get("/history", s.handleHistory)
 		r.With(auth.Require(s.cache)).Delete("/auth/account", s.handleDeleteAccount)
 	})
 
-	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r}
+	r.Group(func(r chi.Router) {
+		r.Use(s.limitPerMin("heavy", heavyPerMin, heavyPerMin))
+		r.Get("/check/{id}/results", s.handleResults)
+		r.Get("/check/{id}/report", s.handleReport)
+		r.Get("/check/{id}/graph", s.handleGraph)
+		r.Get("/check/{id}/seo", s.handleSEODetail)
+	})
+
+	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r, ReadHeaderTimeout: 10 * time.Second}
 
 	go func() {
 		log.Printf("API listening on %s", cfg.HTTPAddr)
@@ -144,7 +162,20 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	u, err := url.Parse(req.URL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		httpError(w, http.StatusBadRequest, "url must be an absolute http(s) URL")
+		httpError(w, http.StatusBadRequest, "That doesn't look like a web address. Check it and try again.")
+		return
+	}
+	if p := u.Port(); p != "" && p != "80" && p != "443" {
+		httpError(w, http.StatusBadRequest, "LinkTrace only crawls sites on the standard web ports (80 and 443).")
+		return
+	}
+	// a clear refusal up front; the guarded transport enforces the same rule on every request
+	if err := httpx.CheckHost(r.Context(), u.Hostname()); err != nil {
+		if errors.Is(err, httpx.ErrBlockedTarget) {
+			httpError(w, http.StatusBadRequest, "That address points to a private or internal network, which LinkTrace can't crawl.")
+		} else {
+			httpError(w, http.StatusBadRequest, "That domain doesn't resolve. Check the spelling and try again.")
+		}
 		return
 	}
 	// normalise through the same canonical form used on extracted links, else the homepage crawls twice
@@ -152,19 +183,41 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	id := uuid.NewString()
 	owner := auth.UserID(r)
-	ownerLabel := "anonymous"
-	if owner != "" {
-		ownerLabel = "user " + short(owner)
+	seedJob := queue.PageJob{JobID: id, URL: seed, Site: crawler.SiteKey(u.Hostname())}
+	var anonOwner string
+	if owner == "" {
+		hash, err := auth.OwnerHash(w, r)
+		if err != nil {
+			httpError(w, http.StatusInternalServerError, "Couldn't start the crawl. Try again in a moment.")
+			return
+		}
+		anonOwner, seedJob.MaxPages = hash, s.cfg.AnonMaxPages
+		// one anonymous crawl per site; a repeat request joins it. Account crawls skip this, and
+		// every crawl of a host shares the worker's per-host rate limit anyway.
+		if holder, claimed := s.claimHost(seedJob.Site, id); !claimed {
+			log.Printf("[api] %s already being crawled by job %s, joining it", seed, short(holder))
+			writeJSON(w, http.StatusOK, map[string]any{"job_id": holder, "status": "crawling", "joined": true})
+			return
+		}
 	}
-	log.Printf("[api] new job %s for %s (%s)", short(id), seed, ownerLabel)
+	log.Printf("[api] new job %s for %s (%s)", short(id), seed, cmp.Or(short(owner), "anonymous"))
 
-	if err := s.store.CreateJob(id, seed, owner); err != nil {
-		httpError(w, http.StatusInternalServerError, "could not create job")
+	// every exit before the seed is queued hands the host claim and lane back
+	queued := false
+	defer func() {
+		if !queued {
+			_ = s.cache.EndJob(id)
+		}
+	}()
+
+	if err := s.store.CreateJob(id, seed, owner, anonOwner); err != nil {
+		httpError(w, http.StatusInternalServerError, "Couldn't start the crawl. Try again in a moment.")
 		return
 	}
 
-	// runs before the crawl so we can honour robots.txt (costs ~1-2s of HTTP up front)
-	siteAudit := toStoreSiteAudit(site.Run(seed))
+	// before the crawl, so robots.txt applies from the first page
+	audit := site.Run(seed)
+	siteAudit := toStoreSiteAudit(audit)
 	if err := s.store.SaveSiteAudit(id, siteAudit); err != nil {
 		log.Printf("[api] save site audit: %v", err)
 	}
@@ -173,6 +226,9 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		_ = s.store.UpdateJobStatus(id, "failed")
 		writeJSON(w, http.StatusOK, map[string]string{"job_id": id, "status": "blocked_by_robots"})
 		return
+	}
+	if err := s.cache.SetRobotsRules(id, audit.RobotsRules); err != nil {
+		log.Printf("[api] save robots rules: %v", err)
 	}
 
 	_ = s.store.UpdateJobStatus(id, "crawling")
@@ -189,14 +245,13 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[api] MarkSeen seed: %v", err)
 	}
 	_ = s.cache.IncDiscovered(id)
-	seedJob := queue.PageJob{
-		JobID: id, URL: seed, Depth: 0, Shard: shard,
-		CrawlDelay: siteAudit.CrawlDelay, // inherited by every child, throttling the whole crawl
-	}
+	seedJob.Shard, seedJob.CrawlDelay = shard, siteAudit.CrawlDelay
 	if err := s.queue.PublishPageJob(seedJob); err != nil {
-		httpError(w, http.StatusInternalServerError, "could not enqueue")
+		_ = s.store.UpdateJobStatus(id, "failed")
+		httpError(w, http.StatusInternalServerError, "Couldn't start the crawl. Try again in a moment.")
 		return
 	}
+	queued = true
 
 	// sitemap URLs are deliberately not enqueued: the crawl stays a pure BFS from the
 	// homepage, and unreached sitemap pages become the coverage_gap report's "missed" entries.
@@ -215,8 +270,8 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[api] job %s STOPPED by user", short(job.ID))
-	// cancelled jobs never complete, so free the lane and set status here (maybeComplete won't)
-	_ = s.cache.ReleaseShard(job.ID)
+	// cancelled jobs never complete, so end the job and set status here (maybeComplete won't)
+	_ = s.cache.EndJob(job.ID)
 	_ = s.store.UpdateJobStatus(job.ID, "stopped")
 	writeJSON(w, http.StatusOK, map[string]string{"job_id": job.ID, "status": "stopped"})
 }
@@ -233,7 +288,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[api] job %s purge cache: %v", short(job.ID), err)
 	}
 	if err := s.store.DeleteJob(job.ID); err != nil {
-		httpError(w, http.StatusInternalServerError, "delete failed")
+		httpError(w, http.StatusInternalServerError, "Couldn't delete the crawl. Try again in a moment.")
 		return
 	}
 	log.Printf("[api] job %s DELETED by user", short(job.ID))
@@ -273,6 +328,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"checked":    prog["checked"],
 		"healthy":    prog["healthy"],
 		"rotten":     prog["rotten"],
+		"can_manage": canManage(job, r),
 	})
 }
 
@@ -487,11 +543,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	username := strings.TrimSpace(req.Username)
 	if len(username) < 2 || len(username) > 64 {
-		httpError(w, http.StatusBadRequest, "username must be 2 to 64 characters")
+		httpError(w, http.StatusBadRequest, "Usernames are 2 to 64 characters long.")
 		return
 	}
 	if len(req.Password) < 8 {
-		httpError(w, http.StatusBadRequest, "password must be at least 8 characters")
+		httpError(w, http.StatusBadRequest, "Passwords need at least 8 characters.")
 		return
 	}
 	hash, err := auth.HashPassword(req.Password)
@@ -522,6 +578,15 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, err := s.store.GetUserByUsername(strings.TrimSpace(req.Username))
+	// keyed on the account, not the typed name, which MySQL matches case- and accent-insensitively
+	if user != nil {
+		if allowed, err := s.cache.AllowRequest("login:"+user.ID, loginPerMinPerAccount); err != nil {
+			log.Printf("[api] login ratelimit: %v", err)
+		} else if !allowed {
+			httpError(w, http.StatusTooManyRequests, "Too many login attempts for this account. Try again in a minute.")
+			return
+		}
+	}
 	// Identical error whether the username is unknown or the password is wrong, so an attacker
 	// can't probe which usernames are registered.
 	if err != nil || user == nil || !auth.CheckPassword(user.PasswordHash, req.Password) {
@@ -574,12 +639,12 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[api] account delete: purge job %s: %v", short(id), err)
 		}
 		if err := s.store.DeleteJob(id); err != nil {
-			httpError(w, http.StatusInternalServerError, "delete failed")
+			httpError(w, http.StatusInternalServerError, "Couldn't delete the account. Try again in a moment.")
 			return
 		}
 	}
 	if err := s.store.DeleteUser(userID); err != nil {
-		httpError(w, http.StatusInternalServerError, "delete failed")
+		httpError(w, http.StatusInternalServerError, "Couldn't delete the account. Try again in a moment.")
 		return
 	}
 
@@ -596,7 +661,7 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	entries, err := s.store.ListUserHistory(auth.UserID(r))
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "history lookup failed")
+		httpError(w, http.StatusInternalServerError, "Couldn't load your history. Try again in a moment.")
 		return
 	}
 	if entries == nil {

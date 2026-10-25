@@ -1,26 +1,36 @@
-import { forwardRef } from 'react';
+import type { Ref } from 'react';
 
 interface Props {
+  ref?: Ref<HTMLDivElement>;
   visible: boolean;
   path: string;
   detail: string;
   detailClass?: string;
+  // optional extra lines (depth, where it was found, pages found on it), one fact per line
+  note?: string[];
 }
 
 // pointer-following tooltip (path left, value right); caller writes position via the ref to avoid re-renders
-export const NodeTooltip = forwardRef<HTMLDivElement, Props>(function NodeTooltip(
-  { visible, path, detail, detailClass = '' },
-  ref,
-) {
+export function NodeTooltip({ ref, visible, path, detail, detailClass = '', note }: Props) {
   return (
     <div
       ref={ref}
-      className={`pointer-events-none absolute left-0 top-0 z-30 flex max-w-xs items-center gap-3 rounded-lg bg-ink px-2.5 py-1.5 font-mono text-[11px] text-white shadow-lift transition-opacity duration-150 ${
+      aria-hidden="true"
+      className={`bg-ink shadow-lift pointer-events-none absolute top-0 left-0 z-30 max-w-65 rounded-lg px-2.5 py-1.5 font-mono text-[11px] text-white transition-opacity duration-150 ${
         visible ? 'opacity-100' : 'opacity-0'
       }`}
     >
-      <span className="truncate">{path}</span>
-      <span className={`num shrink-0 font-medium ${detailClass}`}>{detail}</span>
+      <div className="flex items-center gap-3">
+        <span className="truncate">{path}</span>
+        <span className={`num shrink-0 font-medium ${detailClass}`}>{detail}</span>
+      </div>
+      {note && note.length > 0 && (
+        <div className="mt-0.5 font-sans text-[11px] leading-snug text-white/60">
+          {note.map((seg) => (
+            <div key={seg}>{seg}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
-});
+}

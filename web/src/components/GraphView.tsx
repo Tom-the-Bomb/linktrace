@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Search } from 'lucide-react';
+import { Maximize, Search, ZoomIn, ZoomOut } from 'lucide-react';
 import ForceGraph2D, { type ForceGraphMethods } from 'react-force-graph-2d';
 
 import type { GraphData, GraphNode } from '../api';
@@ -9,38 +9,62 @@ import {
   NO_SCORE_HEX,
   OTHER_SECTION_HEX,
   TIER_HEX,
+  TOOLTIP_TEXT,
   scoreTier,
-  sectionOf,
 } from '../lib/colours';
+import { type SiteTree, nodeNote, pathFromRoot } from '../lib/graph';
 import { pageStatusLabel } from '../lib/status';
+import { pathOf, sectionOf } from '../lib/url';
 import { NodeTooltip } from './ui/NodeTooltip';
-import { SegButton } from './ui/SegButton';
+import { Button } from './ui/button';
+import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
+import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
-// mutable shape the force-graph lib owns (x/y per node)
+// mutable shape the force-graph lib owns (x/y per node, fx/fy once pinned by a drag)
 interface FgNode extends GraphNode {
   x?: number;
   y?: number;
+  fx?: number;
+  fy?: number;
 }
+// the lib swaps source/target ids for node objects after the first render
 interface FgLink {
-  source: string;
-  target: string;
+  source: string | FgNode;
+  target: string | FgNode;
 }
 
 type ColourMode = 'health' | 'section';
 
-// node fill by liveness + SEO score
-function healthColour(n: GraphNode): string {
+const idOf = (v: string | FgNode) => (typeof v === 'object' ? v.id : v);
+const linkKey = (source: string, target: string) => `${source}\n${target}`;
+
+type HealthKey = keyof typeof HEALTH_HEX;
+const HEALTH_HEX = { ...TIER_HEX, none: NO_SCORE_HEX, broken: BROKEN_HEX };
+// value colours on the dark tooltip
+const TOOLTIP_CLASS: Record<HealthKey, string> = {
+  ...TOOLTIP_TEXT,
+  none: 'text-white/60',
+  broken: TOOLTIP_TEXT.poor,
+};
+const HEALTH_LEGEND: { key: HealthKey; label: string }[] = [
+  { key: 'good', label: 'SEO 80+' },
+  { key: 'ok', label: 'SEO 50 to 79' },
+  { key: 'poor', label: 'SEO under 50' },
+  { key: 'none', label: 'No score' },
+  { key: 'broken', label: 'broken' },
+];
+
+// health-mode legend key (and so fill) by liveness + SEO score
+function healthKey(n: GraphNode): HealthKey {
   if (!n.is_alive) {
-    return BROKEN_HEX;
+    return 'broken';
   }
-  if (n.seo_score === null) {
-    return NO_SCORE_HEX;
-  }
-  return TIER_HEX[scoreTier(n.seo_score)];
+  return n.seo_score === null ? 'none' : scoreTier(n.seo_score);
 }
 
 // cap zoom-to-fit so a sparse graph doesn't fill the viewport with one dot
 const MAX_ZOOM = 2.5;
+const LEGEND_SECTIONS = 8;
 
 // node size shrinks with depth; homepage biggest, leaves smallest
 function nodeRadius(depth: number): number {
@@ -58,91 +82,58 @@ function drawRadius(depth: number, scale: number): number {
 
 interface Props {
   data: GraphData;
+  tree: SiteTree;
+  // the page whose audit is open; it stays traced while the drawer is up
+  selectedUrl: string | null;
   onSelect: (url: string) => void;
   colourFor: (section: string) => string;
   // largest sections first, for the section legend
   sections: string[];
 }
 
-// Force graph: page = node, internal link = edge; click a node for its audit
-export function GraphView({ data, onSelect, colourFor, sections }: Props) {
+// Force graph: page = node, edge = where the crawler first found it. Hovering traces a page's
+// path from the homepage; clicking opens its audit.
+export const GraphView = memo(function GraphView({
+  data,
+  tree,
+  selectedUrl,
+  onSelect,
+  colourFor,
+  sections,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const fgRef = useRef<ForceGraphMethods<GraphNode> | undefined>(undefined);
+  const fgRef = useRef<ForceGraphMethods<FgNode> | undefined>(undefined);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 800, height: 520 });
-  const [hovered, setHovered] = useState<GraphNode | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  // the search match Enter flew to; traced like a hover but without a tooltip
+  const [jumpId, setJumpId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<ColourMode>('section');
-  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [brokenOnly, setBrokenOnly] = useState(false);
 
-  // case-insensitive URL substring match; empty query = no highlight
-  const normalizedQuery = query.trim().toLowerCase();
-  const hasQuery = normalizedQuery.length > 0;
-  function matchesQuery(n: FgNode): boolean {
-    return n.url.toLowerCase().includes(normalizedQuery);
-  }
+  const legendList = useMemo(() => sections.slice(0, LEGEND_SECTIONS), [sections]);
+  const legendSections = useMemo(() => new Set(legendList), [legendList]);
 
-  // manual hit-testing; lib's onNodeClick/Hover are unreliable with a custom painter
+  // the tooltip follows the pointer; written straight to the DOM to avoid re-renders
   useEffect(() => {
     const el = containerRef.current;
     if (!el) {
       return;
     }
-
-    const pickNode = (clientX: number, clientY: number): FgNode | null => {
-      const fg = fgRef.current;
-      if (!fg) {
-        return null;
-      }
-      const rect = el.getBoundingClientRect();
-      const { x: gx, y: gy } = fg.screen2GraphCoords(clientX - rect.left, clientY - rect.top);
-      let best: FgNode | null = null;
-      let bestDist = Infinity;
-      for (const n of graphRef.current.nodes) {
-        if (n.x === undefined || n.y === undefined) {
-          continue;
-        }
-        const dx = n.x - gx;
-        const dy = n.y - gy;
-        const d2 = dx * dx + dy * dy;
-        const hit = drawRadius(n.depth, fg.zoom()) + 6 / fg.zoom(); // generous hit radius
-        if (d2 <= hit * hit && d2 < bestDist) {
-          bestDist = d2;
-          best = n;
-        }
-      }
-      return best;
-    };
-
     const onMove = (e: PointerEvent) => {
       const tip = tooltipRef.current;
+      if (!tip) {
+        return;
+      }
       const rect = el.getBoundingClientRect();
-      if (tip) {
-        tip.style.transform = `translate3d(${e.clientX - rect.left + 14}px, ${e.clientY - rect.top + 14}px, 0)`;
-      }
-      const node = pickNode(e.clientX, e.clientY);
-      setHovered((prev) => (prev === node ? prev : node));
-      el.style.cursor = node ? 'pointer' : 'grab';
+      const x = Math.min(e.clientX - rect.left + 14, rect.width - 260);
+      tip.style.transform = `translate3d(${x}px, ${e.clientY - rect.top + 14}px, 0)`;
     };
-    const onLeave = () => {
-      setHovered(null);
-      el.style.cursor = 'grab';
-    };
-    const onClick = (e: MouseEvent) => {
-      const node = pickNode(e.clientX, e.clientY);
-      if (node) {
-        onSelect(node.url);
-      }
-    };
-
     el.addEventListener('pointermove', onMove);
-    el.addEventListener('pointerleave', onLeave);
-    el.addEventListener('click', onClick);
-    return () => {
-      el.removeEventListener('pointermove', onMove);
-      el.removeEventListener('pointerleave', onLeave);
-      el.removeEventListener('click', onClick);
-    };
-  }, [onSelect]);
+    return () => el.removeEventListener('pointermove', onMove);
+  }, []);
 
   // resize the canvas to the container (lib doesn't auto-fit)
   useEffect(() => {
@@ -162,7 +153,6 @@ export function GraphView({ data, onSelect, colourFor, sections }: Props) {
     nodes: [],
     links: [],
   });
-  const graphRef = useRef(graph); // sync mirror for the hit-test handler
 
   useEffect(() => {
     setGraph((prev) => {
@@ -184,11 +174,12 @@ export function GraphView({ data, onSelect, colourFor, sections }: Props) {
         }
       }
 
-      const edgeKeys = new Set(prev.links.map((l) => `${l.source}->${l.target}`));
+      // keyed by id: after the first render the lib has replaced endpoints with node objects
+      const edgeKeys = new Set(prev.links.map((l) => linkKey(idOf(l.source), idOf(l.target))));
       let linksChanged = false;
       const links = prev.links.slice();
       for (const e of data.edges ?? []) {
-        const k = `${e.source}->${e.target}`;
+        const k = linkKey(e.source, e.target);
         if (!edgeKeys.has(k)) {
           links.push({ source: e.source, target: e.target });
           edgeKeys.add(k);
@@ -201,62 +192,195 @@ export function GraphView({ data, onSelect, colourFor, sections }: Props) {
     });
   }, [data]);
 
-  // mirrored outside the updater: updaters must stay pure (StrictMode runs them twice in dev)
-  useEffect(() => {
-    graphRef.current = graph;
-  }, [graph]);
+  const nodeById = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph]);
+  // parsed once per update, not per node per frame
+  const sectionById = useMemo(
+    () => new Map(graph.nodes.map((n) => [n.id, sectionOf(n.url)])),
+    [graph],
+  );
 
-  // fit once, when the first layout settles; never again (would yank the view mid-crawl)
-  const fittedRef = useRef(false);
-  const fitOnce = () => {
+  // what to light up: the focused page's path from the homepage plus the pages found on it,
+  // or (in broken-only mode) every broken page and its path
+  const focusId =
+    hoveredId ?? jumpId ?? (selectedUrl && nodeById.has(selectedUrl) ? selectedUrl : null);
+  const lit = useMemo(() => {
+    const nodes = new Set<string>();
+    const links = new Set<string>();
+    const addPath = (id: string) => {
+      const chain = pathFromRoot(tree, id);
+      chain.forEach((u, i) => {
+        nodes.add(u);
+        if (i > 0) {
+          links.add(linkKey(chain[i - 1], u));
+        }
+      });
+    };
+    if (focusId) {
+      addPath(focusId);
+      for (const child of tree.children.get(focusId) ?? []) {
+        nodes.add(child);
+        links.add(linkKey(focusId, child));
+      }
+    } else if (brokenOnly) {
+      for (const n of graph.nodes) {
+        if (!n.is_alive) {
+          addPath(n.id);
+        }
+      }
+    }
+    return { nodes, links, active: !!focusId || brokenOnly };
+  }, [focusId, brokenOnly, tree, graph]);
+
+  // case-insensitive URL substring match; empty query = no highlight
+  const normalizedQuery = query.trim().toLowerCase();
+  const hasQuery = normalizedQuery.length > 0;
+  const matches = useMemo(
+    () =>
+      hasQuery ? graph.nodes.filter((n) => n.url.toLowerCase().includes(normalizedQuery)) : [],
+    [graph, hasQuery, normalizedQuery],
+  );
+  const matchIds = useMemo(() => new Set(matches.map((n) => n.id)), [matches]);
+  const brokenCount = useMemo(() => graph.nodes.filter((n) => !n.is_alive).length, [graph]);
+
+  // zooms to fit every page (or only `only`); zoomToFit has no max zoom, so a sparse fit is
+  // clamped once it lands
+  const fitTo = (ms: number, padding: number, only?: Set<string>) => {
     const fg = fgRef.current;
-    if (fittedRef.current || !fg || graphRef.current.nodes.length === 0) {
+    if (!fg || graph.nodes.length === 0) {
       return;
     }
-    fittedRef.current = true;
-    fg.zoomToFit(400, 20);
-    // zoomToFit has no max-zoom; clamp a tiny graph after the fit lands
+    fg.zoomToFit(ms, padding, only && ((node) => only.has((node as FgNode).id)));
     setTimeout(() => {
       if (fgRef.current && fgRef.current.zoom() > MAX_ZOOM) {
         fgRef.current.zoom(MAX_ZOOM, 200);
       }
-    }, 450);
+    }, ms + 50);
+  };
+  const fitView = () => fitTo(400, 20);
+  // fit once, when the first layout settles; never again (would yank the view mid-crawl)
+  const fittedRef = useRef(false);
+  const fitOnce = () => {
+    if (!fittedRef.current) {
+      fittedRef.current = true;
+      fitView();
+    }
+  };
+  const zoomBy = (factor: number) => {
+    const fg = fgRef.current;
+    if (fg) {
+      fg.zoom(fg.zoom() * factor, 250);
+    }
   };
 
+  const jumpToMatch = () => {
+    const n = matches[0];
+    if (!n || n.x === undefined || n.y === undefined) {
+      return;
+    }
+    fitTo(600, 60, new Set([...pathFromRoot(tree, n.id), ...(tree.children.get(n.id) ?? [])]));
+    setJumpId(n.id);
+  };
+
+  function switchMode(m: ColourMode) {
+    setMode(m);
+    setHidden(new Set());
+  }
+  function toggleKey(key: string) {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  const sectionFor = (n: GraphNode) => sectionById.get(n.id) ?? '/';
   const fillFor = (n: GraphNode) =>
-    mode === 'health' ? healthColour(n) : colourFor(sectionOf(n.url));
+    mode === 'health' ? HEALTH_HEX[healthKey(n)] : colourFor(sectionFor(n));
+  const keyFor = (n: GraphNode) => {
+    if (mode === 'health') {
+      return healthKey(n);
+    }
+    const s = sectionFor(n);
+    return legendSections.has(s) ? s : 'other';
+  };
+  const isHidden = (n: GraphNode) => hidden.size > 0 && hidden.has(keyFor(n));
+  const isLitLink = (link: object) => {
+    if (lit.links.size === 0) {
+      return false;
+    }
+    const l = link as FgLink;
+    return lit.links.has(linkKey(idOf(l.source), idOf(l.target)));
+  };
+  const hovered = hoveredId ? nodeById.get(hoveredId) : undefined;
 
   return (
     <section className="panel">
       <header className="panel-head">
-        <div className="seg" role="group" aria-label="Colour nodes by">
-          <SegButton active={mode === 'section'} onClick={() => setMode('section')}>
-            Section
-          </SegButton>
-          <SegButton active={mode === 'health'} onClick={() => setMode('health')}>
-            Health
-          </SegButton>
+        <div className="flex flex-wrap items-center gap-2">
+          <ToggleGroup
+            type="single"
+            value={mode}
+            onValueChange={(v) => v && switchMode(v as ColourMode)}
+            aria-label="Colour pages by"
+          >
+            <ToggleGroupItem value="section">Section</ToggleGroupItem>
+            <ToggleGroupItem value="health">Health</ToggleGroupItem>
+          </ToggleGroup>
+          <Button
+            variant={brokenOnly ? 'default' : 'secondary'}
+            aria-pressed={brokenOnly}
+            onClick={() => setBrokenOnly((b) => !b)}
+            disabled={brokenCount === 0}
+            className="h-8.5 text-[13px]"
+          >
+            <span className="ring-bad-dot size-2.5 rounded-full ring-[1.5px] ring-offset-1 ring-offset-transparent" />
+            Trace broken pages
+            <span
+              className={`num font-mono text-[11px] ${brokenOnly ? 'text-white/70' : 'text-ink-3'}`}
+            >
+              {brokenCount}
+            </span>
+          </Button>
         </div>
-        <label className="field flex h-9 w-full items-center gap-2 px-2.5 sm:w-64">
-          <span className="sr-only">Find a page in the graph</span>
-          <Search className="size-4 shrink-0 text-ink-3" aria-hidden="true" />
-          <input
+        <InputGroup className="sm:w-72">
+          <InputGroupAddon>
+            <Search aria-hidden="true" />
+          </InputGroupAddon>
+          <InputGroupInput
             type="search"
+            aria-label="Find a page in the graph"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Find a page"
-            className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink-3"
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setJumpId(null);
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && jumpToMatch()}
+            placeholder="Find a page, then press Enter"
           />
-        </label>
+          {hasQuery && (
+            <InputGroupAddon
+              align="inline-end"
+              className="num font-mono text-[11px]"
+              aria-live="polite"
+            >
+              {matches.length} found
+            </InputGroupAddon>
+          )}
+        </InputGroup>
       </header>
 
       <div
         ref={containerRef}
-        className="relative h-[68vh] min-h-[440px] w-full cursor-grab bg-sunken/60"
+        className="bg-sunken/60 relative h-[68vh] min-h-110 w-full"
         style={{
-          backgroundImage: 'radial-gradient(#d3d6de 1px, transparent 1px)',
+          backgroundImage: 'radial-gradient(#d4d4d4 1px, transparent 1px)',
           backgroundSize: '22px 22px',
         }}
+        onPointerLeave={() => setHoveredId(null)}
       >
         <ForceGraph2D
           ref={fgRef}
@@ -265,21 +389,56 @@ export function GraphView({ data, onSelect, colourFor, sections }: Props) {
           height={size.height}
           backgroundColor="rgba(0,0,0,0)"
           nodeRelSize={1}
-          // fade links during search so matches pop
-          linkColor={() => (hasQuery ? 'rgba(22,22,29,0.04)' : 'rgba(22,22,29,0.13)')}
-          linkDirectionalParticles={0}
-          linkWidth={0.6}
           cooldownTicks={120}
           onEngineStop={fitOnce}
-          // paint nodes ourselves so radius matches nodeRadius(depth) and the hit-testing
+          linkDirectionalParticles={0}
+          linkColor={(link) => {
+            if (isLitLink(link)) {
+              return 'rgba(23,23,23,0.7)';
+            }
+            return lit.active || hasQuery ? 'rgba(23,23,23,0.05)' : 'rgba(23,23,23,0.14)';
+          }}
+          linkWidth={(link) => (isLitLink(link) ? 1.6 : 0.6)}
+          onNodeHover={(node) => {
+            setHoveredId(node ? (node as FgNode).id : null);
+            if (node) {
+              setJumpId(null);
+            }
+          }}
+          onNodeClick={(node) => onSelect((node as FgNode).url)}
+          // a dragged page stays where it was dropped
+          onNodeDragEnd={(node) => {
+            const n = node as FgNode;
+            n.fx = n.x;
+            n.fy = n.y;
+          }}
+          // hit area matches the drawn dot plus a few pixels, and hidden pages can't be grabbed
+          nodePointerAreaPaint={(node, colour, ctx, scale) => {
+            const n = node as FgNode;
+            if (n.x === undefined || n.y === undefined || isHidden(n)) {
+              return;
+            }
+            ctx.fillStyle = colour;
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, drawRadius(n.depth, scale) + 4 / scale, 0, Math.PI * 2);
+            ctx.fill();
+          }}
           nodeCanvasObject={(node, ctx, scale) => {
             const n = node as FgNode;
             if (n.x === undefined || n.y === undefined) {
               return;
             }
             const r = drawRadius(n.depth, scale);
-            const dimmed = hasQuery && !matchesQuery(n);
-            ctx.globalAlpha = dimmed ? 0.12 : 1;
+            // a trace wins over the search filter, so a traced path is never half-dimmed
+            let alpha = 1;
+            if (isHidden(n)) {
+              alpha = 0.06;
+            } else if (lit.active) {
+              alpha = lit.nodes.has(n.id) ? 1 : 0.15;
+            } else if (hasQuery && !matchIds.has(n.id)) {
+              alpha = 0.12;
+            }
+            ctx.globalAlpha = alpha;
 
             ctx.beginPath();
             ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
@@ -298,100 +457,172 @@ export function GraphView({ data, onSelect, colourFor, sections }: Props) {
               ctx.stroke();
             }
 
+            // the focused or selected page gets an ink ring
+            if (n.id === focusId || n.id === selectedUrl) {
+              ctx.lineWidth = 2 / scale;
+              ctx.strokeStyle = '#171717';
+              ctx.beginPath();
+              ctx.arc(n.x, n.y, r + (n.is_alive ? 3.5 : 6.5) / scale, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+
             ctx.globalAlpha = 1;
           }}
         />
         <NodeTooltip
           ref={tooltipRef}
           visible={!!hovered}
-          path={hovered ? pathOnly(hovered.url) : ''}
+          path={hovered ? pathOf(hovered.url) : ''}
           detail={hovered ? tooltipDetail(hovered) : ''}
-          detailClass={hovered ? tooltipColour(hovered) : ''}
+          detailClass={hovered ? TOOLTIP_CLASS[healthKey(hovered)] : ''}
+          note={
+            hovered
+              ? nodeNote(
+                  hovered.depth,
+                  tree.parent.has(hovered.id) ? pathOf(tree.parent.get(hovered.id)!) : undefined,
+                  tree.children.get(hovered.id)?.length ?? 0,
+                )
+              : undefined
+          }
         />
+
+        <div className="rounded-control bg-panel shadow-control absolute right-3 bottom-3 flex flex-col overflow-hidden">
+          <ZoomButton label="Zoom in" onClick={() => zoomBy(1.6)}>
+            <ZoomIn className="size-4" strokeWidth={2} />
+          </ZoomButton>
+          <ZoomButton label="Zoom out" onClick={() => zoomBy(1 / 1.6)}>
+            <ZoomOut className="size-4" strokeWidth={2} />
+          </ZoomButton>
+          <ZoomButton label="Fit the whole site" onClick={fitView}>
+            <Maximize className="size-4" strokeWidth={2} />
+          </ZoomButton>
+        </div>
       </div>
 
-      <footer className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-line px-5 py-3 sm:px-8">
-        <Legend mode={mode} colourFor={colourFor} sections={sections} />
-        <span className="hidden text-[13px] text-ink-3 lg:inline">
-          Drag to pan · scroll to zoom · click a page for its audit
+      <footer className="border-line flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t px-5 py-3 sm:px-8">
+        <Legend
+          mode={mode}
+          colourFor={colourFor}
+          shown={legendList}
+          hasOther={sections.length > legendList.length}
+          hidden={hidden}
+          onToggle={toggleKey}
+          onShowAll={() => setHidden(new Set())}
+        />
+        <span className="text-ink-3 text-[13px] sm:hidden">
+          Tap a page to see how it was found and open its audit.
+        </span>
+        <span className="text-ink-3 hidden text-[13px] sm:inline">
+          Hover a page to trace how the crawl found it. You can drag pages around, and clicking one
+          opens its audit.
         </span>
       </footer>
     </section>
   );
+});
+
+function ZoomButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="border-line text-ink-2 hover:bg-sunken hover:text-ink flex size-8 items-center justify-center border-b transition last:border-0"
+    >
+      {children}
+    </button>
+  );
 }
 
+// clickable legend: each entry hides or shows its pages
 function Legend({
   mode,
   colourFor,
-  sections,
+  shown,
+  hasOther,
+  hidden,
+  onToggle,
+  onShowAll,
 }: {
   mode: ColourMode;
   colourFor: (s: string) => string;
-  sections: string[];
+  shown: string[];
+  hasOther: boolean;
+  hidden: Set<string>;
+  onToggle: (key: string) => void;
+  onShowAll: () => void;
 }) {
-  const shown = sections.slice(0, 8);
   const items =
     mode === 'health'
-      ? [
-          { c: TIER_HEX.good, label: 'SEO 80+' },
-          { c: TIER_HEX.ok, label: 'SEO 50–79' },
-          { c: TIER_HEX.poor, label: 'SEO under 50' },
-          { c: NO_SCORE_HEX, label: 'No score' },
-        ]
+      ? HEALTH_LEGEND.map(({ key, label }) => ({ key, c: HEALTH_HEX[key], label }))
       : [
-          ...shown.map((s) => ({ c: colourFor(s), label: s })),
-          ...(sections.length > shown.length ? [{ c: OTHER_SECTION_HEX, label: 'other' }] : []),
+          ...shown.map((s) => ({ key: s, c: colourFor(s), label: s })),
+          ...(hasOther ? [{ key: 'other', c: OTHER_SECTION_HEX, label: 'other' }] : []),
         ];
   return (
-    <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-[11px] text-ink-2">
-      {items.map((it) => (
-        <li key={it.label} className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-full" style={{ background: it.c }} />
-          {it.label}
+    <ul
+      className="text-ink-2 flex flex-wrap items-center gap-x-1 gap-y-1 font-mono text-[11px]"
+      aria-label="Show or hide pages"
+    >
+      {items.map((it) => {
+        const off = hidden.has(it.key);
+        return (
+          <li key={it.key}>
+            <button
+              type="button"
+              aria-pressed={!off}
+              onClick={() => onToggle(it.key)}
+              title={off ? `Show ${it.label}` : `Hide ${it.label}`}
+              className={`hover:bg-sunken flex items-center gap-1.5 rounded-full px-2 py-1 transition ${
+                off ? 'text-ink-3 line-through' : ''
+              }`}
+            >
+              <span
+                className="size-2.5 rounded-full"
+                style={{
+                  background: off ? 'transparent' : it.c,
+                  boxShadow: `inset 0 0 0 1.5px ${it.c}`,
+                }}
+              />
+              {it.label}
+            </button>
+          </li>
+        );
+      })}
+      {mode === 'section' && (
+        <li className="flex items-center gap-1.5 px-2 py-1">
+          <span className="ring-bad-dot size-2.5 rounded-full ring-[1.5px] ring-offset-1" />
+          broken
         </li>
-      ))}
-      <li className="flex items-center gap-1.5">
-        <span className="size-2.5 rounded-full ring-[1.5px] ring-bad-dot ring-offset-1" />
-        broken
-      </li>
+      )}
+      {hidden.size > 0 && (
+        <li>
+          <button
+            type="button"
+            onClick={onShowAll}
+            className="text-link-600 px-2 py-1 font-sans text-[12px] underline-offset-4 hover:underline"
+          >
+            Show all
+          </button>
+        </li>
+      )}
     </ul>
   );
 }
 
-// tooltip sits on dark ink, so its value colours are the light variants
-const TOOLTIP_COLOUR: Record<'good' | 'ok' | 'poor', string> = {
-  good: 'text-[#6be3a8]',
-  ok: 'text-[#ffcf5c]',
-  poor: 'text-[#ff8da3]',
-};
-
-function tooltipColour(n: GraphNode): string {
-  if (!n.is_alive) {
-    return TOOLTIP_COLOUR.poor;
-  }
-  if (n.seo_score === null) {
-    return 'text-white/60';
-  }
-  return TOOLTIP_COLOUR[scoreTier(n.seo_score)];
-}
-
-// strip protocol + host so the tooltip shows just the path
-function pathOnly(url: string): string {
-  try {
-    const u = new URL(url);
-    return u.pathname + u.search + u.hash || '/';
-  } catch {
-    return url;
-  }
-}
-
 // right value: SEO score, else the failure reason
 function tooltipDetail(n: GraphNode): string {
-  if (n.seo_score !== null) {
-    return `SEO ${n.seo_score}`;
-  }
   if (!n.is_alive) {
     return pageStatusLabel(false, n.status_code, n.error_type);
   }
-  return '—';
+  return n.seo_score !== null ? `SEO ${n.seo_score}` : 'No score';
 }

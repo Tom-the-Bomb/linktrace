@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react';
+import { type SubmitEvent, useState } from 'react';
 
 import { Hero } from '../components/Hero';
 import { useCreateCrawl } from '../hooks/useCreateCrawl';
@@ -10,7 +10,7 @@ export default function HomePage() {
   const [url, setUrl] = useState('');
   const { submit, submitting, error } = useCreateCrawl();
 
-  function onSubmit(e: FormEvent) {
+  function onSubmit(e: SubmitEvent) {
     e.preventDefault();
     void submit(url);
   }

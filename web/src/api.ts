@@ -13,6 +13,8 @@ export interface Status {
   checked: number;
   healthy: number;
   rotten: number;
+  // true for the account or browser that started the crawl; only they can stop or delete it
+  can_manage: boolean;
 }
 
 export interface PageRow {
@@ -152,7 +154,8 @@ async function jsonRequest<T>(
 }
 
 // POST /check: start a crawl (prepends https:// if no scheme)
-export function createCheck(url: string): Promise<{ job_id: string }> {
+// joined is set when the site was already being crawled and this request joined that crawl
+export function createCheck(url: string): Promise<{ job_id: string; joined?: boolean }> {
   if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`;
   }

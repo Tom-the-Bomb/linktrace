@@ -10,16 +10,13 @@ export function useTypingPlaceholder(active: boolean): string {
     if (!active) {
       return;
     }
-    let cancelled = false;
     let domainIdx = 0;
     let charIdx = DEMO_DOMAINS[0].length;
     let phase: 'typing' | 'holding' | 'deleting' = 'holding';
     setText(DEMO_DOMAINS[0]);
 
+    let id: number;
     const tick = () => {
-      if (cancelled) {
-        return;
-      }
       const word = DEMO_DOMAINS[domainIdx];
       let delay = 130; // typing speed
       if (phase === 'typing') {
@@ -40,14 +37,11 @@ export function useTypingPlaceholder(active: boolean): string {
         }
       }
       setText(word.slice(0, charIdx));
-      setTimeout(tick, delay);
+      id = window.setTimeout(tick, delay);
     };
 
-    const id = setTimeout(tick, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(id);
-    };
+    id = window.setTimeout(tick, 0);
+    return () => clearTimeout(id);
   }, [active]);
 
   return text;

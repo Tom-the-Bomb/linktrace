@@ -1,5 +1,4 @@
-// shared colour mappings so SEO score thresholds (>=80 good, >=50 ok, else poor), status tones and
-// the per-section palette live in one place.
+// SEO score thresholds (>=80 good, >=50 ok, else poor), status tones and the section palette
 
 export type Tone = 'ok' | 'warn' | 'bad';
 
@@ -17,7 +16,7 @@ export function toneColour(tone?: Tone): string {
   return 'text-ink';
 }
 
-export type ScoreTier = 'good' | 'ok' | 'poor';
+type ScoreTier = 'good' | 'ok' | 'poor';
 
 // SEO score thresholds; the colour maps key off this.
 export function scoreTier(score: number | null): ScoreTier {
@@ -33,7 +32,7 @@ export function scoreTier(score: number | null): ScoreTier {
   return 'poor';
 }
 
-export const TIER_TONE: Record<ScoreTier, Tone> = { good: 'ok', ok: 'warn', poor: 'bad' };
+const TIER_TONE: Record<ScoreTier, Tone> = { good: 'ok', ok: 'warn', poor: 'bad' };
 
 // canvas hex per tier, for the graph painter and inline SVG
 export const TIER_HEX: Record<ScoreTier, string> = {
@@ -42,16 +41,21 @@ export const TIER_HEX: Record<ScoreTier, string> = {
   poor: '#e5294f',
 };
 
-export const BROKEN_HEX = '#e5294f';
+export const BROKEN_HEX = '#e5484d';
+
+// value colours on the dark ink tooltip, where the tier colours above read too dark
+export const TOOLTIP_TEXT: Record<ScoreTier, string> = {
+  good: 'text-[#6be3a8]',
+  ok: 'text-[#ffcf5c]',
+  poor: 'text-[#ff8da3]',
+};
 export const NO_SCORE_HEX = '#b7b9c2';
 
 const TIER_LABEL: Record<ScoreTier, string> = { good: 'Good', ok: 'Needs work', poor: 'Poor' };
-const TIER_CHIP: Record<ScoreTier, string> = { good: 'chip-ok', ok: 'chip-warn', poor: 'chip-bad' };
-
-// tier chip class + word for a score, shown beside big score numbers
-export function scoreTierChip(score: number): { label: string; chip: string } {
+// tier word + tone for a score, shown as a badge beside big score numbers
+export function scoreTierBadge(score: number): { label: string; tone: Tone } {
   const t = scoreTier(score);
-  return { label: TIER_LABEL[t], chip: TIER_CHIP[t] };
+  return { label: TIER_LABEL[t], tone: TIER_TONE[t] };
 }
 
 // maps an SEO score to its text colour class (null = no score).
@@ -62,8 +66,7 @@ export function scoreTextColour(score: number | null): string {
   return toneColour(TIER_TONE[scoreTier(score)]);
 }
 
-// categorical palette for site sections; order matches the by-section list (largest first).
-// eight hues kept apart in both hue and lightness so 10px dots stay tellable
+// section hues, largest section first, kept apart in hue and lightness so 10px dots stay tellable
 export const SECTION_HEX = [
   '#7c5cff', // violet
   '#14b8a6', // teal
@@ -76,28 +79,10 @@ export const SECTION_HEX = [
 ];
 export const OTHER_SECTION_HEX = '#9a9ca6';
 
-// section colour by rank; sections past the palette share a neutral
-export function sectionHex(rank: number): string {
-  return rank >= 0 && rank < SECTION_HEX.length ? SECTION_HEX[rank] : OTHER_SECTION_HEX;
-}
-
-// section -> colour, ranked by page count so the largest section always gets the first hue
-export function sectionColourMap(
-  categories: { category: string; total_pages: number }[],
-): (section: string) => string {
-  const ranked = [...categories].sort((a, b) => b.total_pages - a.total_pages);
-  const byName = new Map(ranked.map((c, i) => [c.category, sectionHex(i)]));
+// section -> colour by rank (sections largest first); those past the palette share a neutral
+export function sectionColourMap(ranked: string[]): (section: string) => string {
+  const byName = new Map(ranked.map((name, i) => [name, SECTION_HEX[i] ?? OTHER_SECTION_HEX]));
   return (section) => byName.get(section) ?? OTHER_SECTION_HEX;
-}
-
-// first path segment of a URL as "/segment", "/" for the homepage; mirrors the API's categories
-export function sectionOf(url: string): string {
-  try {
-    const seg = new URL(url).pathname.split('/').filter(Boolean)[0];
-    return seg ? `/${seg}` : '/';
-  } catch {
-    return '/';
-  }
 }
 
 // returns count/total as a rounded percentage, guarding divide-by-zero.

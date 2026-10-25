@@ -3,10 +3,12 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -96,6 +98,21 @@ func corsMiddleware(origins string) func(http.Handler) http.Handler {
 	}
 }
 
+// rejects state-changing requests not sent as JSON. A browser can't send that content type
+// cross-origin without a CORS preflight, which only our own frontend passes, so other sites
+// can't make their visitors' browsers start, stop or delete crawls.
+func jsonOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			if mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mt != "application/json" {
+				httpError(w, http.StatusUnsupportedMediaType, "content type must be application/json")
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // limitPerMin caps requests for the routes it wraps. Logged-in callers are counted per account
 // at perUser; everyone else per client IP at perAnon. bucket namespaces the counter so route
 // groups don't share a budget. Must be mounted below auth.Optional, which resolves the identity.
@@ -110,7 +127,7 @@ func (s *Server) limitPerMin(bucket string, perAnon, perUser int) func(http.Hand
 			if allowed, err := s.cache.AllowRequest(key, limit); err != nil {
 				log.Printf("[api] ratelimit %s: %v", key, err)
 			} else if !allowed {
-				httpError(w, http.StatusTooManyRequests, "too many requests, slow down")
+				httpError(w, http.StatusTooManyRequests, "Too many requests. Wait a minute and try again.")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -132,18 +149,61 @@ func (s *Server) requireJob(w http.ResponseWriter, id string) *store.Job {
 	return job
 }
 
-// is requireJob plus an owner check for mutations. Anonymous jobs stay
-// UUID-gated; owned jobs require the owner. Writes 404/403 and returns nil if disallowed.
+// is requireJob plus an owner check for mutations (see canManage). Writes 404/403 and returns
+// nil if disallowed.
 func (s *Server) requireOwnedJob(w http.ResponseWriter, r *http.Request) *store.Job {
 	job := s.requireJob(w, chi.URLParam(r, "id"))
 	if job == nil {
 		return nil
 	}
-	if job.UserID != "" && job.UserID != auth.UserID(r) {
-		httpError(w, http.StatusForbidden, "unable to perform action on a job you didn't create")
+	if !canManage(job, r) {
+		httpError(w, http.StatusForbidden, "Only the person who started this crawl can stop or delete it.")
 		return nil
 	}
 	return job
+}
+
+// reports whether the caller may stop or delete job: its account owner, or the browser holding
+// the owner cookie it was started with.
+func canManage(job *store.Job, r *http.Request) bool {
+	if job.UserID != "" {
+		return job.UserID == auth.UserID(r)
+	}
+	return auth.OwnsAnonymous(r, job.AnonOwner)
+}
+
+// claims site for jobID. When another crawl of the site is still live it returns that crawl's
+// id and false; a stale claim is cleared and retried once. Anything uncertain fails open, since
+// it shouldn't stop anyone crawling.
+func (s *Server) claimHost(site, jobID string) (string, bool) {
+	for range 2 {
+		holder, claimed, err := s.cache.ClaimHost(site, jobID)
+		if err != nil {
+			log.Printf("[api] claim host %s: %v", site, err)
+			return "", true
+		}
+		if claimed {
+			return "", true
+		}
+		job, err := s.store.GetJob(holder)
+		if err != nil || job == nil {
+			return "", true
+		}
+		if isLive(job) {
+			return holder, false
+		}
+		_ = s.cache.ReleaseHost(holder)
+	}
+	return "", true
+}
+
+// pendingGrace outlasts site.Run, which a new crawl runs before it starts. A job still pending
+// after this died before starting, so its claim is stale.
+const pendingGrace = 2 * time.Minute
+
+// reports whether job is a crawl that is running or about to start.
+func isLive(job *store.Job) bool {
+	return job.Status == "crawling" || (job.Status == "pending" && time.Since(job.CreatedAt) < pendingGrace)
 }
 
 // fetches a job's page rows + SEO audits, writing 500 and ok=false on failure.
@@ -246,7 +306,7 @@ func computeOverall(pages []store.PageResult, audits []store.SEOAudit) map[strin
 
 // mints a session id, stores it in Redis, and sets the HttpOnly cookie.
 func (s *Server) startSession(w http.ResponseWriter, userID string) error {
-	sid, err := auth.NewSessionID()
+	sid, err := auth.NewToken()
 	if err != nil {
 		return err
 	}

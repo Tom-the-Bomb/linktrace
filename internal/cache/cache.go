@@ -1,17 +1,20 @@
 // Package cache wraps Redis for the crawler's transient state: live progress counters, the
 // per-job seen-set, per-domain rate limits, category caps, shard placement, cancellation
-// flags, and sessions.
+// flags, the one-active-crawl-per-host claim, robots rules, and sessions.
 // Key builders and small helpers live in utils.go.
 package cache
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 
 	"github.com/Tom-the-Bomb/linktrace/internal/auth"
+	"github.com/Tom-the-Bomb/linktrace/internal/robots"
 )
 
 type Cache struct {
@@ -204,7 +207,24 @@ func (c *Cache) PurgeJob(jobID string) error {
 	if err := c.rdb.Del(ctx, progressKey(jobID), seenKey(jobID), catCountKey(jobID), completeKey(jobID)).Err(); err != nil {
 		return err
 	}
-	return c.ReleaseShard(jobID) // freeing the lane is part of tearing the job down
+	return c.EndJob(jobID)
+}
+
+// EndJob frees what a running crawl holds: its lane, its host claim and its robots rules.
+// Every way a crawl ends (complete, stopped, deleted, failed to start) goes through here.
+func (c *Cache) EndJob(jobID string) error {
+	if err := c.ReleaseHost(jobID); err != nil {
+		return err
+	}
+	ctx, cancel := c.ctx()
+	defer cancel()
+	pipe := c.rdb.Pipeline()
+	pipe.Del(ctx, robotsKey(jobID))
+	for i := 0; i < c.shards; i++ {
+		pipe.ZRem(ctx, shardSetKey(i), jobID)
+	}
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
 // ClaimComplete returns true only for the first caller, so the job is finalised exactly once.
@@ -268,7 +288,7 @@ return best - 1
 `)
 
 // PlaceJob pins jobID to the least-occupied shard lane and returns its index. The lane membership
-// expires after shardJobTTL so a crash that skips ReleaseShard can't wedge a lane forever.
+// expires after shardJobTTL so a crash that skips EndJob can't wedge a lane forever.
 func (c *Cache) PlaceJob(jobID string) (int, error) {
 	ctx, cancel := c.ctx()
 	defer cancel()
@@ -281,15 +301,76 @@ func (c *Cache) PlaceJob(jobID string) (int, error) {
 	return placeScript.Run(ctx, c.rdb, keys, now, expiry, jobID).Int()
 }
 
-// ReleaseShard frees jobID's lane slot once the crawl ends. It removes from every lane (the id
-// lives in only one) so the caller needn't know which shard the job landed on.
-func (c *Cache) ReleaseShard(jobID string) error {
+// releaseHostScript frees the host claim only if jobID still holds it, so a finishing job can't
+// clear a newer crawl's claim on the same host. KEYS=[jobhost:<id>], which holds the claim's key.
+var releaseHostScript = redis.NewScript(`
+local claim = redis.call('GET', KEYS[1])
+if claim then
+  if redis.call('GET', claim) == ARGV[1] then
+    redis.call('DEL', claim)
+  end
+  redis.call('DEL', KEYS[1])
+end
+return 0
+`)
+
+// claimHostScript takes the claim and records it under jobhost:<id> in one step, so a claim never
+// exists without the pointer releaseHostScript needs. KEYS=[claim, jobhost:<id>].
+var claimHostScript = redis.NewScript(`
+local holder = redis.call('SET', KEYS[1], ARGV[1], 'NX', 'GET', 'EX', ARGV[2])
+if holder then
+  return holder
+end
+redis.call('SET', KEYS[2], KEYS[1], 'EX', ARGV[2])
+return false
+`)
+
+// ClaimHost makes jobID the one active crawl of host. When another crawl already holds the host
+// it returns claimed=false and that crawl's id. The claim expires with shardJobTTL as a safety net.
+func (c *Cache) ClaimHost(host, jobID string) (holder string, claimed bool, err error) {
 	ctx, cancel := c.ctx()
 	defer cancel()
-	pipe := c.rdb.Pipeline()
-	for i := 0; i < c.shards; i++ {
-		pipe.ZRem(ctx, shardSetKey(i), jobID)
+	keys := []string{activeCrawlKey(host), jobHostKey(jobID)}
+	holder, err = claimHostScript.Run(ctx, c.rdb, keys, jobID, int(shardJobTTL.Seconds())).Text()
+	if errors.Is(err, redis.Nil) {
+		return "", true, nil
 	}
-	_, err := pipe.Exec(ctx)
-	return err
+	return holder, false, err
+}
+
+// ReleaseHost frees a host claim held by jobID, for clearing a claim whose crawl is already over.
+func (c *Cache) ReleaseHost(jobID string) error {
+	ctx, cancel := c.ctx()
+	defer cancel()
+	return releaseHostScript.Run(ctx, c.rdb, []string{jobHostKey(jobID)}, jobID).Err()
+}
+
+// SetRobotsRules stores the robots.txt path rules a crawl must respect.
+func (c *Cache) SetRobotsRules(jobID string, rules []robots.Rule) error {
+	if len(rules) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(rules)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := c.ctx()
+	defer cancel()
+	return c.rdb.Set(ctx, robotsKey(jobID), b, shardJobTTL).Err()
+}
+
+// RobotsRules returns the crawl's robots.txt path rules (nil when the site has none). Each read
+// slides the expiry, so a crawl that outlives shardJobTTL keeps honouring them.
+func (c *Cache) RobotsRules(jobID string) ([]robots.Rule, error) {
+	ctx, cancel := c.ctx()
+	defer cancel()
+	b, err := c.rdb.GetEx(ctx, robotsKey(jobID), shardJobTTL).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var rules []robots.Rule
+	return rules, json.Unmarshal(b, &rules)
 }

@@ -5,64 +5,33 @@ import (
 	"encoding/xml"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Tom-the-Bomb/linktrace/internal/httpx"
+	"github.com/Tom-the-Bomb/linktrace/internal/robots"
 )
 
 const (
+	// robots.txt and sitemap fetches share one deadline, so a huge sitemap index can't hold a
+	// crawl's creation open
+	fetchDeadline   = 20 * time.Second
 	fetchTimeout    = 10 * time.Second // robots/sitemap GETs
 	probeTimeout    = 8 * time.Second  // HTTPS/www redirect probes
 	maxSitemapBytes = 5 << 20          // sitemaps can be big
 )
 
-// reads /robots.txt, honouring only groups that target * or our UA.
-func fetchRobots(root *url.URL) (found, disallowAll bool, crawlDelay int, sitemaps []string) {
-	body, status := get(root.Scheme + "://" + root.Host + "/robots.txt")
+// fetches /robots.txt and keeps what applies to LinkTrace; found is false when there's none.
+func fetchRobots(ctx context.Context, root *url.URL) (f robots.File, found bool) {
+	body, status := get(ctx, root.Scheme+"://"+root.Host+"/robots.txt")
+	if status >= 500 {
+		// RFC 9309: a robots.txt that errors means the whole site is off limits
+		return robots.File{Rules: []robots.Rule{{Path: "/"}}}, false
+	}
 	if status != http.StatusOK || body == "" {
-		return false, false, 0, nil
+		return robots.File{}, false
 	}
-	found = true
-	// applies tracks whether the current group targets us. Consecutive User-agent lines form one
-	// group, so within a run we OR rather than overwrite; the first rule line ends the run.
-	applies, inUARun := false, false
-	for _, raw := range strings.Split(body, "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, val, ok := cut(line)
-		if !ok {
-			continue
-		}
-		if key != "user-agent" && key != "sitemap" {
-			inUARun = false
-		}
-		switch key {
-		case "user-agent":
-			targetsUs := val == "*" || strings.Contains(strings.ToLower(val), "linktrace")
-			if inUARun {
-				applies = applies || targetsUs
-			} else {
-				applies, inUARun = targetsUs, true
-			}
-		case "disallow":
-			if applies && val == "/" {
-				disallowAll = true
-			}
-		case "crawl-delay":
-			if applies {
-				if n, err := strconv.Atoi(val); err == nil {
-					crawlDelay = n
-				}
-			}
-		case "sitemap":
-			sitemaps = append(sitemaps, val) // global directive, applies regardless of UA group
-		}
-	}
-	return found, disallowAll, crawlDelay, sitemaps
+	return robots.Parse(body, "linktrace"), true
 }
 
 // sitemap.xml comes in two shapes: a <urlset> of <url><loc>, or a <sitemapindex>
@@ -78,8 +47,8 @@ type sitemapXML struct {
 
 // downloads and parses a sitemap, recursing one level into a sitemap index,
 // returning whether it was found and the (capped) list of page URLs.
-func fetchSitemap(sitemapURL string, depth int) (bool, []string) {
-	body, status := get(sitemapURL)
+func fetchSitemap(ctx context.Context, sitemapURL string, depth int) (bool, []string) {
+	body, status := get(ctx, sitemapURL)
 	if status != http.StatusOK || body == "" {
 		return false, nil
 	}
@@ -90,7 +59,7 @@ func fetchSitemap(sitemapURL string, depth int) (bool, []string) {
 
 	var urls []string
 	for _, u := range doc.URLs {
-		if loc := strings.TrimSpace(u.Loc); loc != "" {
+		if loc := strings.TrimSpace(u.Loc); isWebURL(loc) {
 			urls = append(urls, loc)
 			if len(urls) >= maxSitemapURLs {
 				return true, urls
@@ -100,8 +69,11 @@ func fetchSitemap(sitemapURL string, depth int) (bool, []string) {
 	// sitemap INDEX: recurse one level
 	if depth == 0 && len(doc.Sitemaps) > 0 {
 		for _, child := range doc.Sitemaps {
+			if ctx.Err() != nil {
+				break
+			}
 			if loc := strings.TrimSpace(child.Loc); loc != "" {
-				_, more := fetchSitemap(loc, depth+1)
+				_, more := fetchSitemap(ctx, loc, depth+1)
 				for _, u := range more {
 					urls = append(urls, u)
 					if len(urls) >= maxSitemapURLs {
@@ -192,22 +164,20 @@ func checkWWW(host string) string {
 	}
 }
 
+// fetchClient follows redirects through the guarded transport (the ctx below bounds each fetch)
+var fetchClient = httpx.NewClient(0, true)
+
+func isWebURL(s string) bool {
+	return strings.HasPrefix(s, "https://") || strings.HasPrefix(s, "http://")
+}
+
 // fetches a URL (robots/sitemap) and returns its body and status, or ("", 0) on error.
-func get(rawURL string) (string, int) {
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+func get(ctx context.Context, rawURL string) (string, int) {
+	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
-	body, status, err := httpx.Fetch(ctx, http.DefaultClient, rawURL, maxSitemapBytes)
+	body, status, err := httpx.Fetch(ctx, fetchClient, rawURL, maxSitemapBytes)
 	if err != nil {
 		return "", 0
 	}
 	return string(body), status
-}
-
-// splits "Key: value" on the first ':'. Lowercases the key, trims both sides.
-func cut(line string) (key, val string, ok bool) {
-	i := strings.Index(line, ":")
-	if i < 0 {
-		return "", "", false
-	}
-	return strings.ToLower(strings.TrimSpace(line[:i])), strings.TrimSpace(line[i+1:]), true
 }

@@ -79,6 +79,7 @@ services:
       FRONTEND_ORIGIN: "https://${DOMAIN}"
       COOKIE_SECURE: "true"
       SHARD_COUNT: "${SHARD_COUNT:-5}" # must match the worker so placed lanes are consumed
+      ANON_MAX_PAGES: "${ANON_MAX_PAGES:-500}"
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -98,7 +99,7 @@ services:
       MAX_PAGES: "${MAX_PAGES:-10000}"
       MAX_DEPTH: "${MAX_DEPTH:-20}"
       MAX_PER_CATEGORY: "${MAX_PER_CATEGORY:-1000}"
-      RATE_PER_MIN: "${RATE_PER_MIN:-1000}"
+      RATE_PER_MIN: "${RATE_PER_MIN:-300}"
       SHARD_COUNT: "${SHARD_COUNT:-5}"
     depends_on:
       mysql: { condition: service_healthy }

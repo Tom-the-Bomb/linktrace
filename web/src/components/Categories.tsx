@@ -3,11 +3,13 @@ import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 
 import type { CategoryReport } from '../api';
-import { scoreTextColour } from '../lib/colours';
+import { usePagination } from '../hooks/usePagination';
+import { pct, scoreTextColour } from '../lib/colours';
 import { SectionHeader } from './SectionHeader';
 import { Pager } from './ui/Pager';
 import { SectionDot } from './ui/SectionDot';
-import { SegButton } from './ui/SegButton';
+import { Badge, type BadgeVariant } from './ui/badge';
+import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
 const PAGE_SIZE = 10;
 
@@ -40,7 +42,6 @@ function rotRatio(c: CategoryReport): number {
   return c.total_pages > 0 ? c.rotten_pages / c.total_pages : 0;
 }
 
-// per-key value extractor; comparator reads the active one
 const SORT_VALUE: Record<SortKey, (c: CategoryReport) => number> = {
   pages: (c) => c.total_pages,
   rot: rotRatio,
@@ -57,7 +58,6 @@ export function Categories({
   const [filter, setFilter] = useState<Filter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('pages');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [page, setPage] = useState(1);
 
   const counts = useMemo(() => {
     const c: Record<Filter, number> = { all: categories.length, healthy: 0, mixed: 0, rotten: 0 };
@@ -83,10 +83,7 @@ export function Categories({
     });
   }, [categories, filter, sortKey, sortDir]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const current = Math.min(page, pageCount);
-  const start = (current - 1) * PAGE_SIZE;
-  const paged = filtered.slice(start, start + PAGE_SIZE);
+  const { page, setPage, paged } = usePagination(filtered, PAGE_SIZE);
 
   // controls that mutate the result set reset paging
   function setFilterReset(f: Filter) {
@@ -115,27 +112,27 @@ export function Categories({
 
       <div className="panel">
         <div className="panel-head">
-          <div className="seg" role="group" aria-label="Filter sections">
+          <ToggleGroup
+            type="single"
+            value={filter}
+            onValueChange={(v) => v && setFilterReset(v as Filter)}
+            aria-label="Filter sections"
+          >
             {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
-              <SegButton
-                key={f}
-                active={filter === f}
-                onClick={() => setFilterReset(f)}
-                count={counts[f]}
-              >
+              <ToggleGroupItem key={f} value={f} count={counts[f]}>
                 {FILTER_LABEL[f]}
-              </SegButton>
+              </ToggleGroupItem>
             ))}
-          </div>
-          <div className="seg" role="group" aria-label="Sort sections">
+          </ToggleGroup>
+          {/* clicking the active key again flips the direction */}
+          <ToggleGroup
+            type="single"
+            value={sortKey}
+            onValueChange={(v) => pickSort((v || sortKey) as SortKey)}
+            aria-label="Sort sections"
+          >
             {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
-              <button
-                key={k}
-                type="button"
-                aria-pressed={sortKey === k}
-                onClick={() => pickSort(k)}
-                className="seg-btn"
-              >
+              <ToggleGroupItem key={k} value={k}>
                 {SORT_LABEL[k]}
                 {sortKey === k && (
                   <DirIcon
@@ -144,14 +141,14 @@ export function Categories({
                     aria-label={sortDir === 'asc' ? 'ascending' : 'descending'}
                   />
                 )}
-              </button>
+              </ToggleGroupItem>
             ))}
-          </div>
+          </ToggleGroup>
         </div>
 
         <div
           aria-hidden="true"
-          className="hidden grid-cols-[14px_minmax(0,1fr)_170px_64px_118px] gap-x-4 border-b border-line bg-sunken/60 px-6 py-2 text-xs font-semibold text-ink-3 sm:grid"
+          className="border-line bg-sunken/60 text-ink-3 hidden grid-cols-[14px_minmax(0,1fr)_170px_64px_118px] gap-x-4 border-b px-8 py-2 text-xs font-semibold sm:grid"
         >
           <span />
           <span>Section</span>
@@ -160,37 +157,30 @@ export function Categories({
           <span className="text-right">Links</span>
         </div>
         {paged.length === 0 ? (
-          <p className="px-6 py-10 text-center text-[15px] text-ink-3">
+          <p className="text-ink-3 px-6 py-10 text-center text-[15px]">
             No sections match this filter.
           </p>
         ) : (
-          <ul className="divide-y divide-line">
+          <ul className="divide-line divide-y">
             {paged.map((c) => (
               <CategoryRow key={c.category} cat={c} colour={colourFor(c.category)} />
             ))}
           </ul>
         )}
 
-        {pageCount > 1 && (
-          <div className="flex items-center justify-between border-t border-line px-5 py-2.5 sm:px-8">
-            <span className="num text-[13px] text-ink-3">
-              {start + 1}–{Math.min(start + PAGE_SIZE, filtered.length)} of {filtered.length}
-            </span>
-            <Pager current={current} pageCount={pageCount} onPage={setPage} />
-          </div>
-        )}
+        <Pager page={page} total={filtered.length} size={PAGE_SIZE} onPage={setPage} />
       </div>
     </section>
   );
 }
 
-// chip says link health in plain words; SEO has its own column
-const PATTERN: Record<string, { chip: string; bar: string }> = {
-  healthy: { chip: 'chip-ok', bar: 'bg-ok-dot' },
-  mixed: { chip: 'chip-warn', bar: 'bg-warn-dot' },
-  mostly_rotten: { chip: 'chip-bad', bar: 'bg-bad-dot' },
-  all_rotten: { chip: 'chip-bad', bar: 'bg-bad-dot' },
-  empty: { chip: 'chip-neutral', bar: 'bg-ink-4' },
+// the badge says link health in plain words; SEO has its own column
+const PATTERN: Record<string, { tone: BadgeVariant; bar: string }> = {
+  healthy: { tone: 'ok', bar: 'bg-ok-dot' },
+  mixed: { tone: 'warn', bar: 'bg-warn-dot' },
+  mostly_rotten: { tone: 'bad', bar: 'bg-bad-dot' },
+  all_rotten: { tone: 'bad', bar: 'bg-bad-dot' },
+  empty: { tone: 'neutral', bar: 'bg-ink-4' },
 };
 
 function linkLabel(cat: CategoryReport): string {
@@ -207,7 +197,7 @@ function linkLabel(cat: CategoryReport): string {
 }
 
 function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
-  const rotPct = cat.total_pages > 0 ? Math.round((cat.rotten_pages / cat.total_pages) * 100) : 0;
+  const rotPct = pct(cat.rotten_pages, cat.total_pages);
   const style = PATTERN[cat.pattern] ?? PATTERN.mixed;
 
   return (
@@ -215,11 +205,11 @@ function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
       <SectionDot colour={colour} />
       <div className="min-w-0">
         <div className="truncate font-mono text-sm font-medium">{cat.category}</div>
-        <div className="num mt-0.5 text-[13px] text-ink-3">
+        <div className="num text-ink-3 mt-0.5 text-[13px]">
           {cat.total_pages.toLocaleString()} {cat.total_pages === 1 ? 'page' : 'pages'}
           {/* the SEO column is hidden on mobile, so the figure rides in the meta line there */}
           <span className="sm:hidden">
-            {' · '}SEO{' '}
+            {', '}SEO{' '}
             <span className={scoreTextColour(cat.avg_seo_score)}>{cat.avg_seo_score}</span>
           </span>
         </div>
@@ -227,13 +217,13 @@ function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
 
       {/* rot bar is supplementary — hidden on mobile so the row never overflows */}
       <div className="hidden items-center gap-2.5 sm:flex" title={`${rotPct}% broken`}>
-        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken ring-1 ring-inset ring-line">
+        <div className="bg-sunken ring-line h-1.5 flex-1 overflow-hidden rounded-full ring-1 ring-inset">
           <div
             className={`h-full rounded-full ${style.bar}`}
             style={{ width: `${Math.max(rotPct, rotPct > 0 ? 4 : 0)}%` }}
           />
         </div>
-        <span className="num w-9 text-right font-mono text-[11px] text-ink-3">{rotPct}%</span>
+        <span className="num text-ink-3 w-9 text-right font-mono text-[11px]">{rotPct}%</span>
       </div>
 
       <span
@@ -243,7 +233,9 @@ function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
         {cat.avg_seo_score}
       </span>
 
-      <span className={`chip justify-self-end ${style.chip}`}>{linkLabel(cat)}</span>
+      <Badge variant={style.tone} className="justify-self-end">
+        {linkLabel(cat)}
+      </Badge>
     </li>
   );
 }

@@ -35,7 +35,7 @@ function upsertCanonical(href: string) {
 // syncs document title + SEO meta on client route changes (static defaults live in index.html)
 export function useSeo({ title, description, path, noindex }: SeoOptions = {}) {
   useEffect(() => {
-    const fullTitle = title ? `${title} · ${SITE_NAME}` : DEFAULT_TITLE;
+    const fullTitle = title ? `${title} | ${SITE_NAME}` : DEFAULT_TITLE;
     const desc = description ?? DEFAULT_DESCRIPTION;
     const url = `${SITE_URL}${path ?? '/'}`;
 

@@ -4,6 +4,7 @@ import { ChevronRight, CircleCheck } from 'lucide-react';
 
 import type { CoverageGap } from '../api';
 import { SectionHeader } from './SectionHeader';
+import { Badge } from './ui/badge';
 
 // max URLs listed before collapsing into a "...and N more" line
 const CAP = 50;
@@ -22,7 +23,7 @@ export function CoverageGapPanel({ gap }: { gap: CoverageGap }) {
             : `${total.toLocaleString()} ${total === 1 ? 'difference' : 'differences'} between your sitemap and the crawl.`
         }
       />
-      <div className="panel divide-y divide-line">
+      <div className="panel divide-line divide-y">
         <GapList
           label="Not in sitemap"
           hint="Crawled, but missing from sitemap.xml"
@@ -64,20 +65,20 @@ function GapList({
     <>
       <span className="min-w-0">
         <span className="block text-[15px] font-semibold">{label}</span>
-        <span className="block text-[13px] text-ink-3">{hint}</span>
+        <span className="text-ink-3 block text-[13px]">{hint}</span>
       </span>
       {empty ? (
-        <span className="chip chip-ok">
+        <Badge variant="ok">
           <CircleCheck className="size-3" strokeWidth={2.5} aria-hidden="true" />
           none
-        </span>
+        </Badge>
       ) : (
         <span className="flex items-center gap-2">
-          <span className={`chip chip-code num ${tone === 'bad' ? 'chip-bad' : 'chip-warn'}`}>
+          <Badge variant={tone === 'bad' ? 'bad' : 'warn'} mono className="num">
             {urls.length.toLocaleString()}
-          </span>
+          </Badge>
           <ChevronRight
-            className={`size-4 text-ink-3 transition-transform ${open ? 'rotate-90' : ''}`}
+            className={`text-ink-3 size-4 transition-transform ${open ? 'rotate-90' : ''}`}
             strokeWidth={2.25}
             aria-hidden="true"
           />
@@ -94,27 +95,27 @@ function GapList({
         <button
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          className="flex w-full items-center justify-between gap-4 px-5 py-3.5 text-left transition hover:bg-sunken sm:px-8"
+          className="hover:bg-sunken flex w-full items-center justify-between gap-4 px-5 py-3.5 text-left transition sm:px-8"
         >
           {header}
         </button>
       )}
       {open && !empty && (
-        <ul className="max-h-80 space-y-1 overflow-y-auto border-t border-line bg-sunken/60 px-5 py-3 sm:px-8">
+        <ul className="border-line bg-sunken/60 max-h-80 space-y-1 overflow-y-auto border-t px-5 py-3 sm:px-8">
           {urls.slice(0, CAP).map((u) => (
             <li key={u} className="truncate font-mono text-[12px]">
               <a
                 href={u}
                 target="_blank"
                 rel="noreferrer"
-                className="text-ink-2 hover:text-accent-600 hover:underline"
+                className="text-ink-2 hover:text-link-600 hover:underline"
               >
                 {u}
               </a>
             </li>
           ))}
           {urls.length > CAP && (
-            <li className="pt-1 text-[13px] text-ink-3">
+            <li className="text-ink-3 pt-1 text-[13px]">
               …and {(urls.length - CAP).toLocaleString()} more
             </li>
           )}

@@ -1,38 +1,40 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import { LoaderCircle } from 'lucide-react';
-
-import { SECTION_HEX } from '../lib/colours';
-import { ScoreScale } from './OverallReport';
+import { BROKEN_HEX, SECTION_HEX, TOOLTIP_TEXT } from '../lib/colours';
+import { nodeNote } from '../lib/graph';
+import { NodeTooltip } from './ui/NodeTooltip';
+import { ScoreScale } from './ui/ScoreScale';
 import { StatusChip } from './ui/StatusChip';
+import { Badge } from './ui/badge';
+import { Spinner } from './ui/spinner';
 
 // illustrative crawl of example.com; every cell is labelled as sample in the UI
 const ROWS = [
   { path: '/blog/launch-day', alive: false, code: 200, error: 'soft_404', at: 0.3 },
   { path: '/docs/v1/install', alive: false, code: 404, error: 'http_4xx', at: 0.45 },
-  { path: '/pricing', alive: false, code: 301, error: 'redirect_loop', at: 0.6 },
+  { path: '/pricing/teams', alive: false, code: 301, error: 'redirect_loop', at: 0.6 },
   { path: '/about', alive: true, code: 200, error: '', at: 0.75 },
   { path: '/blog', alive: true, code: 200, error: '', at: 0.9 },
 ];
 
-// s = section index (-1 = homepage), d = link depth from the homepage
-const NODES: { x: number; y: number; s: number; d: number; broken?: boolean }[] = [
-  { x: 200, y: 150, s: -1, d: 0 },
-  { x: 110, y: 85, s: 0, d: 1 },
-  { x: 58, y: 42, s: 0, d: 2 },
-  { x: 42, y: 112, s: 0, d: 2 },
-  { x: 104, y: 24, s: 0, d: 2, broken: true },
-  { x: 295, y: 80, s: 1, d: 1 },
-  { x: 345, y: 38, s: 1, d: 2, broken: true },
-  { x: 360, y: 108, s: 1, d: 2 },
-  { x: 302, y: 22, s: 1, d: 2 },
-  { x: 300, y: 228, s: 2, d: 1 },
-  { x: 360, y: 262, s: 2, d: 2, broken: true },
-  { x: 258, y: 276, s: 2, d: 2 },
-  { x: 102, y: 222, s: 3, d: 1 },
-  { x: 46, y: 250, s: 3, d: 2 },
-  { x: 120, y: 280, s: 3, d: 2 },
-  { x: 176, y: 262, s: 3, d: 2 },
+// s = section index (-1 = homepage), d = link depth from the homepage; `fail` matches a ROWS entry
+const NODES: { x: number; y: number; s: number; d: number; path: string; fail?: string }[] = [
+  { x: 200, y: 150, s: -1, d: 0, path: '/' },
+  { x: 110, y: 85, s: 0, d: 1, path: '/blog' },
+  { x: 58, y: 42, s: 0, d: 2, path: '/blog/notes' },
+  { x: 42, y: 112, s: 0, d: 2, path: '/blog/release-2' },
+  { x: 104, y: 24, s: 0, d: 2, path: '/blog/launch-day', fail: 'Soft 404' },
+  { x: 295, y: 80, s: 1, d: 1, path: '/docs' },
+  { x: 345, y: 38, s: 1, d: 2, path: '/docs/v1/install', fail: '404' },
+  { x: 360, y: 108, s: 1, d: 2, path: '/docs/api' },
+  { x: 302, y: 22, s: 1, d: 2, path: '/docs/guides' },
+  { x: 300, y: 228, s: 2, d: 1, path: '/pricing' },
+  { x: 360, y: 262, s: 2, d: 2, path: '/pricing/teams', fail: 'Redirect loop' },
+  { x: 258, y: 276, s: 2, d: 2, path: '/pricing/faq' },
+  { x: 102, y: 222, s: 3, d: 1, path: '/about' },
+  { x: 46, y: 250, s: 3, d: 2, path: '/about/team' },
+  { x: 120, y: 280, s: 3, d: 2, path: '/about/contact' },
+  { x: 176, y: 262, s: 3, d: 2, path: '/about/press' },
 ];
 const LINKS: [number, number][] = [
   [0, 1],
@@ -52,6 +54,22 @@ const LINKS: [number, number][] = [
   [12, 15],
 ];
 const SECTIONS = ['/blog', '/docs', '/pricing', '/about'];
+// child index -> the page it was found on
+const PARENT = new Map(LINKS.map(([from, to]) => [to, from]));
+
+// node index -> how many pages were first found on it
+const FOUND_HERE = new Map<number, number>();
+for (const [from] of LINKS) {
+  FOUND_HERE.set(from, (FOUND_HERE.get(from) ?? 0) + 1);
+}
+
+function chainTo(i: number): number[] {
+  const chain = [i];
+  for (let cur = PARENT.get(i); cur !== undefined; cur = PARENT.get(cur)) {
+    chain.unshift(cur);
+  }
+  return chain;
+}
 
 // when each depth appears, as a fraction of the replay
 const DEPTH_AT = [0, 0.18, 0.42];
@@ -64,11 +82,10 @@ const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
 // 0 -> 1 over one replay; reduced motion starts at the end state
 function useReplay(): number {
-  const [p, setP] = useState(() =>
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0,
-  );
+  const [reduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const [p, setP] = useState(reduced ? 1 : 0);
   useEffect(() => {
-    if (p >= 1) {
+    if (reduced) {
       return;
     }
     let raf = 0;
@@ -82,9 +99,7 @@ function useReplay(): number {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-    // runs once; p only gates the reduced-motion case
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [reduced]);
   return p;
 }
 
@@ -93,12 +108,13 @@ export function SampleCrawl() {
   const p = useReplay();
   const checked = Math.round(easeOut(p) * 240);
   const broken = ROWS.filter((r) => !r.alive && p >= r.at).length;
+  const score = Math.round(easeOut(p) * SCORE);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3">
       <section className="cell lg:border-r" aria-label="Sample checked links">
         <CellHead title="Links checked" />
-        <ul className="mt-3 divide-y divide-line border-y border-line">
+        <ul className="divide-line border-line mt-3 divide-y border-y">
           {ROWS.map((r) => (
             <li
               key={r.path}
@@ -106,27 +122,27 @@ export function SampleCrawl() {
             >
               <span className="truncate font-mono text-[13px]">{r.path}</span>
               {p >= r.at ? (
-                <span className="inline-flex animate-tick">
+                <span className="animate-tick inline-flex">
                   <StatusChip alive={r.alive} code={r.code} error={r.error} />
                 </span>
               ) : (
-                <span className="chip chip-neutral">
-                  <LoaderCircle className="spin size-3" strokeWidth={2.5} aria-hidden="true" />
+                <Badge>
+                  <Spinner className="size-3" aria-hidden="true" />
                   checking
-                </span>
+                </Badge>
               )}
             </li>
           ))}
         </ul>
-        <p className="num px-5 py-4 text-[13px] text-ink-3 sm:px-6">
+        <p className="num text-ink-3 px-5 py-4 text-[13px] sm:px-6">
           {broken} broken of {checked} checked
         </p>
       </section>
 
-      <section className="cell border-t lg:border-r lg:border-t-0" aria-label="Sample site graph">
+      <section className="cell border-t lg:border-t-0 lg:border-r" aria-label="Sample site graph">
         <CellHead title="Site graph" />
         <SampleGraph p={p} />
-        <ul className="flex flex-wrap items-center gap-x-3.5 gap-y-1 px-5 pb-4 font-mono text-[11px] text-ink-3 sm:px-6">
+        <ul className="text-ink-3 flex flex-wrap items-center gap-x-3.5 gap-y-1 px-5 pt-2 pb-4 font-mono text-[11px] sm:px-6">
           {SECTIONS.map((s, i) => (
             <li key={s} className="flex items-center gap-1.5">
               <span className="size-2 rounded-full" style={{ background: SECTION_HEX[i] }} />
@@ -134,7 +150,7 @@ export function SampleCrawl() {
             </li>
           ))}
           <li className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full ring-[1.5px] ring-bad-dot ring-offset-1" />
+            <span className="ring-bad-dot size-2 rounded-full ring-[1.5px] ring-offset-1" />
             broken
           </li>
         </ul>
@@ -142,22 +158,22 @@ export function SampleCrawl() {
 
       <section className="cell border-t lg:border-t-0" aria-label="Sample average SEO score">
         <CellHead title="Average SEO score" />
-        <div className="px-5 pb-5 pt-4 sm:px-6">
+        <div className="px-5 pt-4 pb-5 sm:px-6">
           <p className="flex items-baseline gap-1.5">
-            <span className="num text-[72px] font-semibold leading-none tracking-display">
-              {Math.round(easeOut(p) * SCORE)}
+            <span className="num tracking-display text-[72px] leading-none font-semibold">
+              {score}
             </span>
-            <span className="text-lg text-ink-3">/100</span>
+            <span className="text-ink-3 text-lg">/100</span>
           </p>
-          <ScoreScale score={Math.round(easeOut(p) * SCORE)} />
-          <dl className="num mt-6 divide-y divide-line border-y border-line text-sm">
+          <ScoreScale score={score} />
+          <dl className="num divide-line border-line mt-6 divide-y border-y text-sm">
             <div className="flex justify-between py-2.5">
               <dt className="text-ink-3">Pages checked</dt>
               <dd className="font-mono text-[13px]">{checked}</dd>
             </div>
             <div className="flex justify-between py-2.5">
               <dt className="text-ink-3">Broken</dt>
-              <dd className="font-mono text-[13px] text-bad-fg">{broken}</dd>
+              <dd className="text-bad-fg font-mono text-[13px]">{broken}</dd>
             </div>
           </dl>
         </div>
@@ -169,61 +185,141 @@ export function SampleCrawl() {
 function CellHead({ title }: { title: string }) {
   return (
     <div className="flex items-center justify-between gap-3 px-5 pt-5 sm:px-6">
-      <h3 className="text-sm font-medium">{title}</h3>
-      <span className="chip chip-neutral">Sample</span>
+      <h2 className="text-sm font-medium">{title}</h2>
+      <Badge>Sample</Badge>
     </div>
   );
 }
 
+const dotRadius = (d: number) => (d === 0 ? 7 : d === 1 ? 5 : 3.6);
+// the hover ring sits outside the broken ring when there is one
+const hoverRingRadius = (i: number) => dotRadius(NODES[i].d) + (NODES[i].fail ? 7.5 : 4);
+
+// the report graph's tooltip, opening away from the centre so it never covers the traced path
 function SampleGraph({ p }: { p: number }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  // last page hovered, so the tooltip keeps its text while it fades out
+  const [tip, setTip] = useState(0);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const onHover = (i: number | null) => {
+    setHovered(i);
+    if (i !== null) {
+      setTip(i);
+    }
+  };
+
+  useLayoutEffect(() => {
+    const svg = svgRef.current;
+    const el = tipRef.current;
+    const ctm = svg?.getScreenCTM();
+    if (hovered === null || !svg?.parentElement || !el || !ctm) {
+      return;
+    }
+    const n = NODES[hovered];
+    const at = new DOMPoint(n.x, n.y).matrixTransform(ctm);
+    const box = svg.parentElement.getBoundingClientRect();
+    const gap = hoverRingRadius(hovered) * ctm.a + 6;
+    const dx = n.x < 150 ? '-14px' : n.x > 250 ? 'calc(-100% + 14px)' : '-50%';
+    const dy = n.y <= 150 ? `calc(-100% - ${gap}px)` : `${gap}px`;
+    el.style.transform = `translate3d(${at.x - box.left}px, ${at.y - box.top}px, 0) translate(${dx}, ${dy})`;
+  }, [hovered]);
+
   const shown = (d: number) => p >= DEPTH_AT[d];
+  // the hovered page's path from the homepage stays lit; everything else steps back
+  const lit = hovered === null ? null : new Set(chainTo(hovered));
+  // every link is a parent -> child edge, so a lit child means its incoming link is on the path
+  const linkLit = (child: number) => !!lit?.has(child);
+  const tipNode = NODES[tip];
+  const tipParent = PARENT.get(tip);
+  const tipFound = FOUND_HERE.get(tip) ?? 0;
   return (
-    <svg
-      viewBox="0 0 400 300"
-      className="mx-auto block h-auto w-full max-w-[420px] px-3"
-      role="img"
-      aria-label="Sample site graph: four sections, three broken pages"
-    >
-      <g stroke="#d4d4d4" strokeWidth="1">
-        {LINKS.map(([a, b]) => (
-          <line
-            key={`${a}-${b}`}
-            x1={NODES[a].x}
-            y1={NODES[a].y}
-            x2={NODES[b].x}
-            y2={NODES[b].y}
-            style={{ opacity: shown(NODES[b].d) ? 1 : 0, transition: 'opacity 300ms ease-out' }}
-          />
-        ))}
-      </g>
-      {NODES.map((n, i) => {
-        const r = n.d === 0 ? 7 : n.d === 1 ? 5 : 3.6;
-        const on = shown(n.d);
-        return (
-          <g
-            key={i}
-            style={{
-              opacity: on ? 1 : 0,
-              transform: on ? 'scale(1)' : 'scale(0.4)',
-              transformOrigin: `${n.x}px ${n.y}px`,
-              transition: 'opacity 260ms ease-out, transform 420ms cubic-bezier(0.16,1,0.3,1)',
-            }}
-          >
-            {n.broken && (
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={r + 4}
-                fill="none"
-                stroke="#e5484d"
-                strokeWidth="1.6"
-                style={{ opacity: p >= RING_AT ? 1 : 0, transition: 'opacity 300ms ease-out' }}
-              />
-            )}
-            <circle cx={n.x} cy={n.y} r={r} fill={n.s < 0 ? '#171717' : SECTION_HEX[n.s]} />
-          </g>
-        );
-      })}
-    </svg>
+    <div className="relative">
+      <svg
+        ref={svgRef}
+        viewBox="0 0 400 300"
+        className="mx-auto block h-auto w-full max-w-105 px-3"
+        aria-label="Sample site graph: four sections, three broken pages"
+        onMouseLeave={() => onHover(null)}
+      >
+        <g strokeWidth="1">
+          {LINKS.map(([a, b]) => (
+            <line
+              key={`${a}-${b}`}
+              x1={NODES[a].x}
+              y1={NODES[a].y}
+              x2={NODES[b].x}
+              y2={NODES[b].y}
+              stroke={linkLit(b) ? '#171717' : '#d4d4d4'}
+              strokeWidth={linkLit(b) ? 1.6 : 1}
+              style={{
+                opacity: !shown(NODES[b].d) ? 0 : lit && !linkLit(b) ? 0.4 : 1,
+                transition: 'opacity 300ms ease-out, stroke 150ms ease-out',
+              }}
+            />
+          ))}
+        </g>
+        {NODES.map((n, i) => {
+          const r = dotRadius(n.d);
+          const parent = PARENT.get(i);
+          const on = shown(n.d);
+          const dim = lit && !lit.has(i);
+          return (
+            <g
+              key={i}
+              role="img"
+              aria-label={`${n.path}, ${n.fail ?? '200 OK'}, ${
+                parent === undefined ? 'the homepage' : `first found on ${NODES[parent].path}`
+              }`}
+              onMouseEnter={() => onHover(i)}
+              className="cursor-pointer"
+              style={{
+                opacity: !on ? 0 : dim ? 0.3 : 1,
+                transform: on ? 'scale(1)' : 'scale(0.4)',
+                transformOrigin: `${n.x}px ${n.y}px`,
+                transition: 'opacity 260ms ease-out, transform 420ms cubic-bezier(0.16,1,0.3,1)',
+              }}
+            >
+              {/* generous invisible hit area around small dots */}
+              <circle cx={n.x} cy={n.y} r={r + 9} fill="transparent" />
+              {n.fail && (
+                <circle
+                  cx={n.x}
+                  cy={n.y}
+                  r={r + 4}
+                  fill="none"
+                  stroke={BROKEN_HEX}
+                  strokeWidth="1.6"
+                  style={{ opacity: p >= RING_AT ? 1 : 0, transition: 'opacity 300ms ease-out' }}
+                />
+              )}
+              {hovered === i && (
+                <circle
+                  cx={n.x}
+                  cy={n.y}
+                  r={hoverRingRadius(i)}
+                  fill="none"
+                  stroke="#171717"
+                  strokeWidth="1.6"
+                />
+              )}
+              <circle cx={n.x} cy={n.y} r={r} fill={n.s < 0 ? '#171717' : SECTION_HEX[n.s]} />
+            </g>
+          );
+        })}
+      </svg>
+      <NodeTooltip
+        ref={tipRef}
+        visible={hovered !== null}
+        path={tipNode.path}
+        detail={tipNode.fail ?? '200 OK'}
+        detailClass={tipNode.fail ? TOOLTIP_TEXT.poor : TOOLTIP_TEXT.good}
+        note={nodeNote(
+          tipNode.d,
+          tipParent === undefined ? undefined : NODES[tipParent].path,
+          tipFound,
+        )}
+      />
+    </div>
   );
 }

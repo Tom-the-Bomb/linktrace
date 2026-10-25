@@ -3,11 +3,13 @@
 package site
 
 import (
+	"context"
 	"log"
 	"net/url"
 	"sort"
 
 	"github.com/Tom-the-Bomb/linktrace/internal/crawler"
+	"github.com/Tom-the-Bomb/linktrace/internal/robots"
 )
 
 // holds every domain-level fact (mirrors the site_audits table).
@@ -23,6 +25,8 @@ type Audit struct {
 	HTTPSRedirect     bool     `json:"https_redirect"`
 	CertValid         bool     `json:"cert_valid"`
 	WWWCanonical      string   `json:"www_canonical"`
+
+	RobotsRules []robots.Rule `json:"-"` // handed to the crawl, not stored
 }
 
 const maxSitemapURLs = 2000
@@ -36,16 +40,20 @@ func Run(rawRoot string) Audit {
 		return a
 	}
 
-	// robots.txt: yields disallow + crawl-delay + sitemap hints
-	found, disallow, delay, sitemaps := fetchRobots(root)
-	a.RobotsFound, a.RobotsDisallowAll, a.CrawlDelay = found, disallow, delay
+	// robots.txt: path rules + crawl-delay + sitemap hints. "Disallow all" means the rules block
+	// the URL the crawl starts from, so a site that only blocks its homepage still counts.
+	ctx, cancel := context.WithTimeout(context.Background(), fetchDeadline)
+	defer cancel()
+	robotsFile, found := fetchRobots(ctx, root)
+	a.RobotsFound, a.CrawlDelay, a.RobotsRules = found, robotsFile.CrawlDelay, robotsFile.Rules
+	a.RobotsDisallowAll = !robots.Allowed(robotsFile.Rules, root.RequestURI())
 
 	// sitemap.xml: prefer one named in robots, else the conventional location
 	sitemapURL := root.Scheme + "://" + root.Host + "/sitemap.xml"
-	if len(sitemaps) > 0 {
-		sitemapURL = sitemaps[0]
+	if len(robotsFile.Sitemaps) > 0 {
+		sitemapURL = robotsFile.Sitemaps[0]
 	}
-	if ok, urls := fetchSitemap(sitemapURL, 0); ok {
+	if ok, urls := fetchSitemap(ctx, sitemapURL, 0); ok {
 		a.SitemapFound, a.SitemapURL, a.SitemapURLs = true, sitemapURL, urls
 		a.SitemapURLCount = len(urls)
 	}

@@ -13,16 +13,14 @@ const CookieName = "sid"
 // Redis session TTL (cache.sessionTTL) both derive from it.
 const SessionTTL = 7 * 24 * time.Hour
 
-// secureCookie sets the cookie Secure attribute (off for local HTTP dev, on behind HTTPS).
-// main wires it from config via SetCookieSecure before serving.
+// secureCookie is the Secure attribute on every cookie we set: off for local HTTP, on behind HTTPS.
 var secureCookie bool
 
-// SetCookieSecure sets whether session cookies carry the Secure attribute. Call once at startup.
+// SetCookieSecure sets whether cookies carry the Secure attribute. Call once at startup.
 func SetCookieSecure(secure bool) { secureCookie = secure }
 
-// returns 32 random bytes as hex: an opaque, unguessable token. Uses crypto/rand,
-// since math/rand is predictable and unsafe for security tokens.
-func NewSessionID() (string, error) {
+// NewToken returns 32 bytes from crypto/rand as hex, for session ids and owner tokens.
+func NewToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
@@ -30,30 +28,26 @@ func NewSessionID() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// writes the session cookie. HttpOnly so JS can't read it (XSS defence);
-// SameSite=Lax + Secure (in prod) keeps it first-party and HTTPS-only.
+// SetSessionCookie writes the session cookie.
 func SetSessionCookie(w http.ResponseWriter, sid string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     CookieName,
-		Value:    sid,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   secureCookie,
-		MaxAge:   int(SessionTTL.Seconds()),
-	})
+	setCookie(w, CookieName, sid, int(SessionTTL.Seconds()))
 }
 
-// expires the cookie immediately (logout). Secure must match the
-// attribute used when setting, or the browser won't overwrite the existing cookie.
+// ClearSessionCookie expires the session cookie (logout).
 func ClearSessionCookie(w http.ResponseWriter) {
+	setCookie(w, CookieName, "", -1)
+}
+
+// HttpOnly keeps the cookie from scripts (XSS); SameSite=Lax and Secure keep it first-party and
+// HTTPS-only. maxAge -1 deletes it.
+func setCookie(w http.ResponseWriter, name, value string, maxAge int) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     CookieName,
-		Value:    "",
+		Name:     name,
+		Value:    value,
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		Secure:   secureCookie,
-		MaxAge:   -1,
+		MaxAge:   maxAge,
 	})
 }

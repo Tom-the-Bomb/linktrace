@@ -20,16 +20,16 @@ export function CrawlStatsPanel({ stats }: { stats: CrawlStats }) {
   return (
     <section>
       <SectionHeader title="Crawl stats" />
-      <dl className="panel grid grid-cols-2 divide-line sm:grid-cols-3 lg:grid-cols-6 lg:divide-x [&>div]:border-line max-lg:[&>div]:border-b">
+      <dl className="panel divide-line [&>div]:border-line grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 lg:divide-x max-lg:[&>div]:border-b">
         {items.map((it) => (
           <div key={it.label} className="px-5 py-5 sm:px-8">
-            <dt className="text-[13px] font-medium text-ink-3">{it.label}</dt>
+            <dt className="text-ink-3 text-[13px] font-medium">{it.label}</dt>
             <dd
               className={`num mt-1 text-xl font-bold tracking-[-0.02em] ${it.bad ? 'text-bad-fg' : ''}`}
             >
               {it.value}
             </dd>
-            {it.hint && <dd className="text-xs text-ink-3">{it.hint}</dd>}
+            {it.hint && <dd className="text-ink-3 text-xs">{it.hint}</dd>}
           </div>
         ))}
       </dl>

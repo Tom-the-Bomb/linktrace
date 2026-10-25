@@ -1,13 +1,15 @@
 import { TriangleAlert } from 'lucide-react';
 
 import type { Report } from '../api';
-import { pct, scoreTierChip } from '../lib/colours';
+import { pct, scoreTierBadge } from '../lib/colours';
 import { SectionHeader } from './SectionHeader';
+import { ScoreScale } from './ui/ScoreScale';
+import { Badge } from './ui/badge';
 
 // the two numbers that matter, side by side, then the recurring issues
 export function OverallReport({ report }: { report: Report }) {
   const { total_pages, rotten, avg_seo_score, top_issues } = report.overall;
-  const tier = scoreTierChip(avg_seo_score);
+  const tier = scoreTierBadge(avg_seo_score);
   const rottenPct = pct(rotten, total_pages);
 
   return (
@@ -17,19 +19,19 @@ export function OverallReport({ report }: { report: Report }) {
         <div className="p-5 sm:p-8">
           <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
             <div>
-              <p className="text-[13px] font-medium text-ink-3">Broken pages</p>
+              <p className="text-ink-3 text-[13px] font-medium">Broken pages</p>
               <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
                 <span
                   className={`num text-7xl font-semibold tracking-[-0.05em] ${rotten > 0 ? 'text-bad-fg' : 'text-ok-fg'}`}
                 >
                   {rotten.toLocaleString()}
                 </span>
-                <span className="num text-xl font-semibold text-ink-3">
+                <span className="num text-ink-3 text-xl font-semibold">
                   of {total_pages.toLocaleString()}
                 </span>
               </p>
               <BrokenBar pct={rottenPct} />
-              <p className="mt-1.5 text-[13px] text-ink-3">
+              <p className="text-ink-3 mt-1.5 text-[13px]">
                 {rotten === 0 ? (
                   'No broken pages'
                 ) : (
@@ -43,33 +45,35 @@ export function OverallReport({ report }: { report: Report }) {
               </p>
             </div>
             <div>
-              <p className="text-[13px] font-medium text-ink-3">Average SEO score</p>
+              <p className="text-ink-3 text-[13px] font-medium">Average SEO score</p>
               <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
                 <span className="num text-7xl font-semibold tracking-[-0.05em]">
                   {avg_seo_score}
                 </span>
-                <span className="text-xl font-semibold text-ink-3">/100</span>
-                <span className={`chip ml-1 self-center ${tier.chip}`}>{tier.label}</span>
+                <span className="text-ink-3 text-xl font-semibold">/100</span>
+                <Badge variant={tier.tone} className="ml-1 self-center">
+                  {tier.label}
+                </Badge>
               </p>
               <ScoreScale score={avg_seo_score} />
             </div>
           </div>
-          <p className="mt-6 border-t border-line pt-5 text-[17px] font-semibold leading-snug tracking-tight">
+          <p className="border-line mt-6 border-t pt-5 text-[17px] leading-snug font-semibold tracking-tight">
             <span>{linkVerdict(rotten, rottenPct)}</span>{' '}
-            <span className="font-normal text-ink-2">{scoreVerdict(avg_seo_score)}</span>
+            <span className="text-ink-2 font-normal">{scoreVerdict(avg_seo_score)}</span>
           </p>
         </div>
 
-        <div className="border-t border-line bg-sunken/50 p-5 sm:p-8 lg:border-l lg:border-t-0">
+        <div className="border-line bg-sunken/50 border-t p-5 sm:p-8 lg:border-t-0 lg:border-l">
           <h3 className="text-[15px] font-bold tracking-tight">Most common SEO issues</h3>
           {top_issues.length === 0 ? (
-            <p className="mt-3 text-[15px] text-ink-2">No recurring issues found.</p>
+            <p className="text-ink-2 mt-3 text-[15px]">No recurring issues found.</p>
           ) : (
-            <ul className="mt-3 divide-y divide-line">
+            <ul className="divide-line mt-3 divide-y">
               {top_issues.map((iss) => (
                 <li key={iss} className="flex items-start gap-3 py-2.5 text-[15px] leading-snug">
                   <TriangleAlert
-                    className="mt-0.5 size-4 shrink-0 text-warn-dot"
+                    className="text-warn-dot mt-0.5 size-4 shrink-0"
                     strokeWidth={2.25}
                     aria-hidden="true"
                   />
@@ -86,33 +90,8 @@ export function OverallReport({ report }: { report: Report }) {
 
 function BrokenBar({ pct: p }: { pct: number }) {
   return (
-    <div className="mt-4 h-2 overflow-hidden rounded-full bg-ok-dot/80" aria-hidden="true">
-      <div className="h-full bg-bad-dot" style={{ width: `${p > 0 ? Math.max(p, 1.5) : 0}%` }} />
-    </div>
-  );
-}
-
-// 0-100 track split at the tier thresholds, with a marker at the score
-export function ScoreScale({ score }: { score: number }) {
-  const clamped = Math.max(0, Math.min(100, score));
-  return (
-    <div className="mt-4" aria-hidden="true">
-      <div className="relative">
-        <div className="flex h-2 gap-[3px]">
-          <span className="h-full w-1/2 rounded-l-full bg-bad-dot/80" />
-          <span className="h-full w-[30%] bg-warn-dot/80" />
-          <span className="h-full w-[20%] rounded-r-full bg-ok-dot/80" />
-        </div>
-        <span
-          className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-panel shadow-control ring-2 ring-ink"
-          style={{ left: `${clamped}%` }}
-        />
-      </div>
-      <div className="num relative mt-1.5 h-3 font-mono text-[10px] text-ink-3">
-        <span className="absolute left-0">0</span>
-        <span className="absolute left-1/2 -translate-x-1/2">50</span>
-        <span className="absolute left-[80%] -translate-x-1/2">80</span>
-      </div>
+    <div className="bg-ok-dot/80 mt-4 h-2 overflow-hidden rounded-full" aria-hidden="true">
+      <div className="bg-bad-dot h-full" style={{ width: `${p > 0 ? Math.max(p, 1.5) : 0}%` }} />
     </div>
   );
 }

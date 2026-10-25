@@ -1,9 +1,11 @@
-import { type FormEvent, useState } from 'react';
-
-import { LoaderCircle } from 'lucide-react';
+import { type SubmitEvent, useState } from 'react';
 
 import { ApiError } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Spinner } from './ui/spinner';
+import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
 // map server responses to a friendly message, overriding per status where clearer
 function friendlyError(err: unknown, mode: 'login' | 'register'): string {
@@ -39,7 +41,7 @@ export function AuthForm({ onDone }: { onDone?: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function onSubmit(e: FormEvent) {
+  async function onSubmit(e: SubmitEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
@@ -64,31 +66,27 @@ export function AuthForm({ onDone }: { onDone?: () => void }) {
 
   return (
     <form onSubmit={onSubmit} className="w-full">
-      <div className="seg flex w-full" role="group" aria-label="Account">
-        <button
-          type="button"
-          aria-pressed={mode === 'login'}
-          onClick={() => switchMode('login')}
-          className="seg-btn flex-1 justify-center"
-        >
+      <ToggleGroup
+        type="single"
+        value={mode}
+        onValueChange={(v) => v && switchMode(v as 'login' | 'register')}
+        aria-label="Account"
+        className="flex w-full"
+      >
+        <ToggleGroupItem value="login" className="flex-1">
           Log in
-        </button>
-        <button
-          type="button"
-          aria-pressed={mode === 'register'}
-          onClick={() => switchMode('register')}
-          className="seg-btn flex-1 justify-center"
-        >
+        </ToggleGroupItem>
+        <ToggleGroupItem value="register" className="flex-1">
           Create account
-        </button>
-      </div>
+        </ToggleGroupItem>
+      </ToggleGroup>
 
       <div className="mt-6 space-y-4">
         <div>
           <label htmlFor="auth-username" className="mb-1.5 block text-sm font-semibold">
             Username
           </label>
-          <input
+          <Input
             id="auth-username"
             type="text"
             required
@@ -98,14 +96,14 @@ export function AuthForm({ onDone }: { onDone?: () => void }) {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoFocus
-            className="input h-11 w-full px-3.5 text-[15px]"
+            className="h-11 px-3.5 text-[15px]"
           />
         </div>
         <div>
           <label htmlFor="auth-password" className="mb-1.5 block text-sm font-semibold">
             Password
           </label>
-          <input
+          <Input
             id="auth-password"
             type="password"
             required
@@ -114,10 +112,10 @@ export function AuthForm({ onDone }: { onDone?: () => void }) {
             aria-describedby={mode === 'register' ? 'auth-password-hint' : undefined}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="input h-11 w-full px-3.5 text-[15px]"
+            className="h-11 px-3.5 text-[15px]"
           />
           {mode === 'register' && (
-            <p id="auth-password-hint" className="mt-1.5 text-[13px] text-ink-3">
+            <p id="auth-password-hint" className="text-ink-3 mt-1.5 text-[13px]">
               At least 8 characters.
             </p>
           )}
@@ -127,21 +125,15 @@ export function AuthForm({ onDone }: { onDone?: () => void }) {
       {error && (
         <p
           role="alert"
-          className="mt-4 rounded-control bg-bad-bg px-3.5 py-2.5 text-sm font-medium text-bad-fg"
+          className="rounded-control bg-bad-bg text-bad-fg mt-4 px-3.5 py-2.5 text-sm font-medium"
         >
           {error}
         </p>
       )}
 
-      <button type="submit" disabled={busy} className="btn-primary mt-6 h-11 w-full text-[15px]">
-        {busy ? (
-          <LoaderCircle className="spin size-4" strokeWidth={2.5} aria-label="Working" />
-        ) : mode === 'login' ? (
-          'Log in'
-        ) : (
-          'Create account'
-        )}
-      </button>
+      <Button type="submit" size="xl" disabled={busy} className="mt-6 w-full">
+        {busy ? <Spinner aria-label="Working" /> : mode === 'login' ? 'Log in' : 'Create account'}
+      </Button>
     </form>
   );
 }

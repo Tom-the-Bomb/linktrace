@@ -18,19 +18,18 @@ export function ConfirmDeleteDialog({ url, startedAt, busy, error, onConfirm, on
       title="Delete this crawl?"
       message="This permanently deletes the crawl and its results (and stops it, if it's still running). This can't be undone."
       confirmLabel="Delete crawl"
-      busyLabel="Deleting…"
       busy={busy}
       error={error}
       onConfirm={onConfirm}
       onCancel={onCancel}
     >
-      <dl className="mt-4 divide-y divide-line border-y border-line text-sm">
+      <dl className="divide-line border-line mt-4 divide-y border-y text-sm">
         <div className="flex items-baseline justify-between gap-4 py-2.5">
-          <dt className="shrink-0 text-ink-3">Website</dt>
+          <dt className="text-ink-3 shrink-0">Website</dt>
           <dd className="truncate font-mono text-[13px]">{url}</dd>
         </div>
         <div className="flex items-baseline justify-between gap-4 py-2.5">
-          <dt className="shrink-0 text-ink-3">Started</dt>
+          <dt className="text-ink-3 shrink-0">Started</dt>
           <dd>{formatDate(startedAt, true)}</dd>
         </div>
       </dl>

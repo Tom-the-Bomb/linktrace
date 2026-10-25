@@ -1,16 +1,24 @@
 import { useMemo, useState } from 'react';
 
-import { ArrowDown, ArrowUp, ExternalLink, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, ExternalLink, Search } from 'lucide-react';
 
 import type { PageRow } from '../api';
-import { scoreTextColour, sectionOf } from '../lib/colours';
+import { usePagination } from '../hooks/usePagination';
+import { scoreTextColour } from '../lib/colours';
+import { downloadCsv, toCsv } from '../lib/csv';
+import { pageStatusLabel } from '../lib/status';
+import { hostSlug, pathOf, sectionOf } from '../lib/url';
 import { Pager } from './ui/Pager';
 import { SectionDot } from './ui/SectionDot';
-import { SegButton } from './ui/SegButton';
 import { StatusChip } from './ui/StatusChip';
+import { Button } from './ui/button';
+import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
 type Filter = 'all' | 'healthy' | 'rotten';
-type SortKey = 'depth' | 'seo';
+type SortKey = 'depth' | 'seo' | 'response';
+const SORT_LABEL: Record<SortKey, string> = { depth: 'Depth', seo: 'SEO', response: 'Response' };
 type SortDir = 'asc' | 'desc';
 
 const PAGE_SIZE = 20;
@@ -21,16 +29,20 @@ export function ResultsTable({
   rows,
   onSelect,
   colourFor,
+  siteUrl,
+  foundOn,
 }: {
   rows: PageRow[];
   onSelect: (url: string) => void;
   colourFor: (section: string) => string;
+  siteUrl: string;
+  // url -> page it was first found on, for the export
+  foundOn: Map<string, string>;
 }) {
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('depth');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [page, setPage] = useState(1);
 
   const counts = useMemo(() => {
     const rotten = rows.filter((r) => !r.is_alive).length;
@@ -64,16 +76,31 @@ export function ResultsTable({
         }
         return (a.seo_score - b.seo_score) * dir;
       }
+      if (sortKey === 'response') {
+        return (a.response_time - b.response_time) * dir;
+      }
       return (a.depth - b.depth) * dir;
     });
   }, [filtered, sortKey, sortDir]);
 
-  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const current = Math.min(page, pageCount);
-  const paged = useMemo(
-    () => sorted.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE),
-    [sorted, current],
-  );
+  // exports what the filters and search currently show, in the current sort order
+  function exportCsv() {
+    const csv = toCsv(
+      ['url', 'status', 'seo_score', 'depth', 'response_ms', 'first_found_on', 'wayback_copy'],
+      sorted.map((r) => [
+        r.url,
+        pageStatusLabel(r.is_alive, r.status_code, r.error_type),
+        r.seo_score,
+        r.depth,
+        r.response_time,
+        foundOn.get(r.url) ?? '',
+        r.archive_url,
+      ]),
+    );
+    downloadCsv(`linktrace-${hostSlug(siteUrl)}-pages.csv`, csv);
+  }
+
+  const { page, setPage, paged } = usePagination(sorted, PAGE_SIZE);
 
   // reset to page 1 when filter/search/sort changes the result set
   function selectFilter(f: Filter) {
@@ -92,13 +119,10 @@ export function ResultsTable({
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortKey(k);
-      setSortDir('asc');
+      // response is sorted to find slow pages, so it starts slowest-first
+      setSortDir(k === 'response' ? 'desc' : 'asc');
     }
     setPage(1);
-  }
-
-  if (rows.length === 0) {
-    return null;
   }
 
   const DirIcon = sortDir === 'asc' ? ArrowUp : ArrowDown;
@@ -106,40 +130,41 @@ export function ResultsTable({
   return (
     <section className="panel">
       <header className="panel-head">
-        <div className="seg" role="group" aria-label="Filter pages">
+        <ToggleGroup
+          type="single"
+          value={filter}
+          onValueChange={(v) => v && selectFilter(v as Filter)}
+          aria-label="Filter pages"
+        >
           {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
-            <SegButton
-              key={f}
-              active={filter === f}
-              onClick={() => selectFilter(f)}
-              count={counts[f]}
-            >
+            <ToggleGroupItem key={f} value={f} count={counts[f]}>
               {FILTER_LABEL[f]}
-            </SegButton>
+            </ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-          <label className="field flex h-9 min-w-0 flex-1 items-center gap-2 px-2.5 sm:w-56 sm:flex-none">
-            <span className="sr-only">Search pages by URL</span>
-            <Search className="size-4 shrink-0 text-ink-3" aria-hidden="true" />
-            <input
+          <InputGroup className="flex-1 sm:w-56 sm:flex-none">
+            <InputGroupAddon>
+              <Search aria-hidden="true" />
+            </InputGroupAddon>
+            <InputGroupInput
               type="search"
+              aria-label="Search pages by URL"
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
               placeholder="Search URLs"
-              className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink-3"
             />
-          </label>
-          <div className="seg" role="group" aria-label="Sort pages">
-            {(['depth', 'seo'] as SortKey[]).map((k) => (
-              <button
-                key={k}
-                type="button"
-                aria-pressed={sortKey === k}
-                onClick={() => pickSort(k)}
-                className="seg-btn"
-              >
-                {k === 'depth' ? 'Depth' : 'SEO'}
+          </InputGroup>
+          {/* clicking the active key again flips the direction */}
+          <ToggleGroup
+            type="single"
+            value={sortKey}
+            onValueChange={(v) => pickSort((v || sortKey) as SortKey)}
+            aria-label="Sort pages"
+          >
+            {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
+              <ToggleGroupItem key={k} value={k}>
+                {SORT_LABEL[k]}
                 {sortKey === k && (
                   <DirIcon
                     className="size-3.5"
@@ -147,100 +172,90 @@ export function ResultsTable({
                     aria-label={sortDir === 'asc' ? 'ascending' : 'descending'}
                   />
                 )}
-              </button>
+              </ToggleGroupItem>
             ))}
-          </div>
+          </ToggleGroup>
+          <Button
+            variant="secondary"
+            onClick={exportCsv}
+            disabled={sorted.length === 0}
+            title="Download the pages shown as CSV"
+          >
+            <Download strokeWidth={2} aria-hidden="true" />
+            CSV
+          </Button>
         </div>
       </header>
 
       {sorted.length === 0 ? (
-        <p className="px-6 py-10 text-center text-[15px] text-ink-3">No pages match.</p>
+        <p className="text-ink-3 px-6 py-10 text-center text-[15px]">No pages match.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th className="pl-5 sm:pl-8">Page</th>
-                <th>Status</th>
-                <th className="text-right">Depth</th>
-                <th className="text-right">Response</th>
-                <th className="text-right">SEO</th>
-                <th className="pr-5 sm:pr-8">Archive</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paged.map((r) => (
-                <tr
-                  key={r.url}
-                  onClick={() => onSelect(r.url)}
-                  onKeyDown={(e) =>
-                    (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onSelect(r.url))
-                  }
-                  tabIndex={0}
-                  aria-label={`Open audit for ${r.url}`}
-                  className="cursor-pointer focus-visible:bg-sunken focus-visible:outline-none"
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pl-5 sm:pl-8">Page</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Depth</TableHead>
+              <TableHead className="text-right">Response</TableHead>
+              <TableHead className="text-right">SEO</TableHead>
+              <TableHead className="pr-5 sm:pr-8">Archive</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paged.map((r) => (
+              <TableRow
+                key={r.url}
+                onClick={() => onSelect(r.url)}
+                onKeyDown={(e) =>
+                  (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onSelect(r.url))
+                }
+                tabIndex={0}
+                aria-label={`Open audit for ${r.url}`}
+                className="focus-visible:bg-sunken cursor-pointer focus-visible:outline-hidden"
+              >
+                <TableCell className="max-w-md pl-5 sm:pl-8">
+                  <span className="flex items-center gap-2.5" title={r.url}>
+                    <SectionDot colour={colourFor(sectionOf(r.url))} />
+                    <span className="truncate font-mono text-[13px]">{pathOf(r.url)}</span>
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <StatusChip alive={r.is_alive} code={r.status_code} error={r.error_type} />
+                </TableCell>
+                <TableCell className="num text-ink-2 text-right font-mono text-[13px]">
+                  {r.depth}
+                </TableCell>
+                <TableCell className="num text-ink-2 text-right font-mono text-[13px] whitespace-nowrap">
+                  {r.response_time > 0 ? `${r.response_time.toLocaleString()} ms` : 'None'}
+                </TableCell>
+                <TableCell
+                  className={`num text-right font-mono text-[13px] font-medium ${scoreTextColour(r.seo_score)}`}
                 >
-                  <td className="max-w-[28rem] pl-5 sm:pl-8">
-                    <span className="flex items-center gap-2.5" title={r.url}>
-                      <SectionDot colour={colourFor(sectionOf(r.url))} className="!size-2.5" />
-                      <span className="truncate font-mono text-[13px]">{pathOf(r.url)}</span>
-                    </span>
-                  </td>
-                  <td>
-                    <StatusChip alive={r.is_alive} code={r.status_code} error={r.error_type} />
-                  </td>
-                  <td className="num text-right font-mono text-[13px] text-ink-2">{r.depth}</td>
-                  <td className="num whitespace-nowrap text-right font-mono text-[13px] text-ink-2">
-                    {r.response_time > 0 ? `${r.response_time.toLocaleString()} ms` : '—'}
-                  </td>
-                  <td
-                    className={`num text-right font-mono text-[13px] font-medium ${scoreTextColour(r.seo_score)}`}
-                  >
-                    {r.seo_score ?? '—'}
-                  </td>
-                  <td className="pr-5 sm:pr-8">
-                    {r.archive_url ? (
-                      <a
-                        href={r.archive_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-1 whitespace-nowrap text-[13px] font-medium text-accent-600 hover:text-accent-700 hover:underline"
-                      >
-                        Wayback
-                        <ExternalLink className="size-3" strokeWidth={2.25} aria-hidden="true" />
-                      </a>
-                    ) : (
-                      <span className="text-[13px] text-ink-3">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  {r.seo_score ?? 'n/a'}
+                </TableCell>
+                <TableCell className="pr-5 sm:pr-8">
+                  {r.archive_url ? (
+                    <a
+                      href={r.archive_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-link-600 hover:text-link-700 inline-flex items-center gap-1 text-[13px] font-medium whitespace-nowrap hover:underline"
+                    >
+                      Wayback
+                      <ExternalLink className="size-3" strokeWidth={2.25} aria-hidden="true" />
+                    </a>
+                  ) : (
+                    <span className="text-ink-3 text-[13px]">None</span>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
 
-      {pageCount > 1 && (
-        <footer className="flex items-center justify-between gap-3 border-t border-line px-5 py-2.5 sm:px-8">
-          <span className="num text-[13px] text-ink-3">
-            {((current - 1) * PAGE_SIZE + 1).toLocaleString()}–
-            {Math.min(current * PAGE_SIZE, sorted.length).toLocaleString()} of{' '}
-            {sorted.length.toLocaleString()}
-          </span>
-          <Pager current={current} pageCount={pageCount} onPage={setPage} />
-        </footer>
-      )}
+      <Pager page={page} total={sorted.length} size={PAGE_SIZE} onPage={setPage} />
     </section>
   );
-}
-
-// path + query only; the report header already names the host
-function pathOf(url: string): string {
-  try {
-    const u = new URL(url);
-    return u.pathname + u.search || '/';
-  } catch {
-    return url;
-  }
 }

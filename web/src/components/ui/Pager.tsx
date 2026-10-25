@@ -1,34 +1,52 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
+import { Button } from './button';
+
 interface Props {
-  current: number;
-  pageCount: number;
+  page: number;
+  total: number;
+  size: number;
   onPage: (page: number) => void;
 }
 
-// prev / "current of pageCount" / next paginator
-export function Pager({ current, pageCount, onPage }: Props) {
+// list footer with the shown range and previous / next; nothing when one page holds everything
+export function Pager({ page, total, size, onPage }: Props) {
+  const pageCount = Math.ceil(total / size);
+  if (pageCount <= 1) {
+    return null;
+  }
+  const start = (page - 1) * size;
   return (
-    <div className="flex items-center gap-1">
-      <button
-        onClick={() => onPage(current - 1)}
-        disabled={current <= 1}
-        aria-label="Previous page"
-        className="icon-btn disabled:pointer-events-none disabled:opacity-30"
-      >
-        <ChevronLeft className="size-4" strokeWidth={2.25} />
-      </button>
-      <span className="num min-w-16 text-center text-[13px] font-medium text-ink-2">
-        {current} of {pageCount}
+    <footer className="border-line flex items-center justify-between gap-3 border-t px-5 py-2.5 sm:px-8">
+      <span className="num text-ink-3 text-[13px]">
+        {(start + 1).toLocaleString()} to {Math.min(start + size, total).toLocaleString()} of{' '}
+        {total.toLocaleString()}
       </span>
-      <button
-        onClick={() => onPage(current + 1)}
-        disabled={current >= pageCount}
-        aria-label="Next page"
-        className="icon-btn disabled:pointer-events-none disabled:opacity-30"
-      >
-        <ChevronRight className="size-4" strokeWidth={2.25} />
-      </button>
-    </div>
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onPage(page - 1)}
+          disabled={page <= 1}
+          aria-label="Previous page"
+          className="disabled:opacity-30"
+        >
+          <ChevronLeft strokeWidth={2.25} />
+        </Button>
+        <span className="num text-ink-2 min-w-16 text-center text-[13px] font-medium">
+          {page} of {pageCount}
+        </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onPage(page + 1)}
+          disabled={page >= pageCount}
+          aria-label="Next page"
+          className="disabled:opacity-30"
+        >
+          <ChevronRight strokeWidth={2.25} />
+        </Button>
+      </div>
+    </footer>
   );
 }

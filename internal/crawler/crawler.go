@@ -4,6 +4,7 @@ package crawler
 import (
 	"bytes"
 	"net/url"
+	"strings"
 
 	"golang.org/x/net/html"
 
@@ -17,6 +18,13 @@ func NormalizeURL(raw string) string {
 		return raw
 	}
 	return canonicalize(u, false)
+}
+
+// SiteKey names the site a host belongs to, ignoring letter case, a trailing dot and a www.
+// prefix, so those variants count as one site.
+func SiteKey(host string) string {
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	return strings.TrimPrefix(host, "www.")
 }
 
 // returns a URL's dedup key: the canonical form with the query dropped, so

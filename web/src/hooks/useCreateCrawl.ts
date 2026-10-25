@@ -15,8 +15,8 @@ export function useCreateCrawl() {
     setError(null);
     setSubmitting(true);
     try {
-      const { job_id } = await createCheck(url);
-      navigate(`/jobs/${job_id}`);
+      const { job_id, joined } = await createCheck(url);
+      navigate(`/jobs/${job_id}`, { state: { joined: !!joined } });
     } catch (err) {
       setError(errMessage(err));
     } finally {

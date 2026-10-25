@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS jobs (
     id BINARY(16) PRIMARY KEY,
     user_id BINARY(16) NULL,
+    -- sha256 of an anonymous creator's owner cookie; lets them stop/delete without an account
+    anon_owner CHAR(64) NULL,
     url TEXT NOT NULL,
     status ENUM(
         'pending',
