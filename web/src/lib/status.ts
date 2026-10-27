@@ -1,8 +1,7 @@
 import type { JobStatus } from '../api';
 import type { Tone } from './colours';
 
-// whether a crawl has stopped, so polling can end
-export function isTerminalStatus(status: string | undefined): boolean {
+export function isTerminalStatus(status: JobStatus | undefined): boolean {
   return status === 'complete' || status === 'failed' || status === 'stopped';
 }
 
@@ -87,28 +86,10 @@ export function pageStatusTone(alive: boolean, errorType: string): Tone {
   return errorType === 'blocked' ? 'warn' : 'bad';
 }
 
-const JOB_LABEL: Record<JobStatus, string> = {
-  pending: 'Queued',
-  crawling: 'Crawling',
-  complete: 'Complete',
-  failed: 'Failed',
-  stopped: 'Stopped',
+export const JOB_STATUS: Record<JobStatus, { label: string; tone: Tone | 'neutral' }> = {
+  pending: { label: 'Queued', tone: 'warn' },
+  crawling: { label: 'Crawling', tone: 'warn' },
+  complete: { label: 'Complete', tone: 'ok' },
+  failed: { label: 'Failed', tone: 'bad' },
+  stopped: { label: 'Stopped', tone: 'neutral' },
 };
-
-export function jobStatusLabel(status: string): string {
-  return JOB_LABEL[status as JobStatus] ?? status;
-}
-
-export function jobStatusTone(status: string): Tone | 'neutral' {
-  switch (status) {
-    case 'complete':
-      return 'ok';
-    case 'failed':
-      return 'bad';
-    case 'crawling':
-    case 'pending':
-      return 'warn';
-    default:
-      return 'neutral';
-  }
-}

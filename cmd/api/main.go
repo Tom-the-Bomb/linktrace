@@ -118,8 +118,8 @@ func main() {
 		r.Delete("/check/{id}", s.handleDelete)
 		r.Get("/check/{id}", s.handleStatus)
 
-		r.With(auth.Require(s.cache)).Get("/history", s.handleHistory)
-		r.With(auth.Require(s.cache)).Delete("/auth/account", s.handleDeleteAccount)
+		r.With(auth.Require).Get("/history", s.handleHistory)
+		r.With(auth.Require).Delete("/auth/account", s.handleDeleteAccount)
 	})
 
 	r.Group(func(r chi.Router) {
@@ -140,7 +140,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("API listening on %s", cfg.HTTPAddr)
+		log.Printf("[api] listening on %s", cfg.HTTPAddr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
@@ -198,7 +198,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	if owner == "" {
 		hash, err := auth.OwnerHash(w, r)
 		if err != nil {
-			httpError(w, http.StatusInternalServerError, "Couldn't start the crawl. Try again in a moment.")
+			serverError(w, "start the crawl", err)
 			return
 		}
 		anonOwner, seedJob.MaxPages = hash, s.cfg.AnonMaxPages
@@ -221,17 +221,16 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	if err := s.store.CreateJob(id, seed, owner, anonOwner); err != nil {
-		httpError(w, http.StatusInternalServerError, "Couldn't start the crawl. Try again in a moment.")
+		serverError(w, "start the crawl", err)
 		return
 	}
 
 	// before the crawl, so robots.txt applies from the first page
 	audit := site.Run(seed)
-	siteAudit := toStoreSiteAudit(audit)
-	if err := s.store.SaveSiteAudit(id, siteAudit); err != nil {
+	if err := s.store.SaveSiteAudit(id, audit); err != nil {
 		log.Printf("[api] save site audit: %v", err)
 	}
-	if siteAudit.RobotsDisallowAll {
+	if audit.RobotsDisallowAll {
 		log.Printf("[api] job %s BLOCKED by robots.txt", short(id))
 		_ = s.store.UpdateJobStatus(id, "failed")
 		writeJSON(w, http.StatusOK, map[string]string{"job_id": id, "status": "blocked_by_robots"})
@@ -239,9 +238,8 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	// without the rules the workers would ignore robots.txt, so this one can't be skipped
 	if err := s.cache.SetRobotsRules(id, audit.RobotsRules); err != nil {
-		log.Printf("[api] save robots rules: %v", err)
 		_ = s.store.UpdateJobStatus(id, "failed")
-		httpError(w, http.StatusInternalServerError, "Couldn't start the crawl. Try again in a moment.")
+		serverError(w, "start the crawl", err)
 		return
 	}
 
@@ -259,10 +257,10 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[api] MarkSeen seed: %v", err)
 	}
 	_ = s.cache.IncDiscovered(id)
-	seedJob.Shard, seedJob.CrawlDelay = shard, siteAudit.CrawlDelay
+	seedJob.Shard, seedJob.CrawlDelay = shard, audit.CrawlDelay
 	if err := s.queue.PublishPageJob(seedJob); err != nil {
 		_ = s.store.UpdateJobStatus(id, "failed")
-		httpError(w, http.StatusInternalServerError, "Couldn't start the crawl. Try again in a moment.")
+		serverError(w, "start the crawl", err)
 		return
 	}
 	queued = true
@@ -280,7 +278,7 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.cache.Cancel(job.ID); err != nil {
-		httpError(w, http.StatusInternalServerError, "Couldn't stop the crawl. Try again in a moment.")
+		serverError(w, "stop the crawl", err)
 		return
 	}
 	log.Printf("[api] job %s STOPPED by user", short(job.ID))
@@ -302,7 +300,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[api] job %s purge cache: %v", short(job.ID), err)
 	}
 	if err := s.store.DeleteJob(job.ID); err != nil {
-		httpError(w, http.StatusInternalServerError, "Couldn't delete the crawl. Try again in a moment.")
+		serverError(w, "delete the crawl", err)
 		return
 	}
 	log.Printf("[api] job %s DELETED by user", short(job.ID))
@@ -318,18 +316,20 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	prog, err := s.cache.GetProgress(job.ID)
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "progress lookup failed")
+		serverError(w, "load this crawl", err)
 		return
 	}
 
 	// Redis progress counters expire after progressTTL, so a finished job reopened from
 	// history later returns 0/0. Rebuild the counts from the persisted page rows instead.
-	if prog["checked"] == 0 {
+	if prog.Checked == 0 {
 		if cs, serr := s.store.GetCrawlStats(job.ID); serr == nil && cs.TotalPages > 0 {
-			prog["checked"] = cs.TotalPages
-			prog["discovered"] = cs.TotalPages
-			prog["rotten"] = cs.RottenCount
-			prog["healthy"] = cs.TotalPages - cs.RottenCount
+			prog = cache.Progress{
+				Discovered: cs.TotalPages,
+				Checked:    cs.TotalPages,
+				Healthy:    cs.TotalPages - cs.RottenCount,
+				Rotten:     cs.RottenCount,
+			}
 		}
 	}
 
@@ -338,10 +338,10 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"url":        job.URL,
 		"status":     job.Status,
 		"created_at": job.CreatedAt,
-		"discovered": prog["discovered"],
-		"checked":    prog["checked"],
-		"healthy":    prog["healthy"],
-		"rotten":     prog["rotten"],
+		"discovered": prog.Discovered,
+		"checked":    prog.Checked,
+		"healthy":    prog.Healthy,
+		"rotten":     prog.Rotten,
 		"can_manage": canManage(job, r),
 	})
 }
@@ -400,8 +400,7 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	}
 	cats, err := s.store.ListCategoryReports(id)
 	if err != nil {
-		log.Printf("handleReport: ListCategoryReports(%s): %v", id, err)
-		httpError(w, http.StatusInternalServerError, "category lookup failed")
+		serverError(w, "load this report", err)
 		return
 	}
 	if cats == nil {
@@ -411,18 +410,18 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	// site-level sections are best-effort: log and continue so one missing row doesn't kill the report
 	siteAudit, err := s.store.GetSiteAudit(id)
 	if err != nil {
-		log.Printf("site audit lookup: %v", err)
+		log.Printf("[api] site audit lookup: %v", err)
 	}
 	// pointer so a failed lookup serializes as null (panel hidden) instead of all-zeros
 	var crawlStats *store.CrawlStats
 	if cs, err := s.store.GetCrawlStats(id); err != nil {
-		log.Printf("crawl stats lookup: %v", err)
+		log.Printf("[api] crawl stats lookup: %v", err)
 	} else {
 		crawlStats = &cs
 	}
 	var siteSEO *store.SiteSEO
 	if ss, err := s.store.GetSiteSEO(id); err != nil {
-		log.Printf("site seo lookup: %v", err)
+		log.Printf("[api] site seo lookup: %v", err)
 	} else {
 		siteSEO = &ss
 	}
@@ -479,8 +478,7 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	links, err := s.store.ListLinks(id)
 	if err != nil {
-		log.Printf("handleGraph: ListLinks(%s): %v", id, err)
-		httpError(w, http.StatusInternalServerError, "links lookup failed")
+		serverError(w, "load this report", err)
 		return
 	}
 
@@ -534,7 +532,7 @@ func (s *Server) handleSEODetail(w http.ResponseWriter, r *http.Request) {
 	}
 	audit, err := s.store.GetSEOAudit(id, pageURL)
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "Couldn't load this page's audit. Try again in a moment.")
+		serverError(w, "load this page's audit", err)
 		return
 	}
 	if audit == nil {
@@ -571,7 +569,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "Couldn't create your account. Try again in a moment.")
+		serverError(w, "create your account", err)
 		return
 	}
 	user := store.User{ID: uuid.NewString(), Username: username, PasswordHash: hash}
@@ -580,10 +578,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 			httpError(w, http.StatusConflict, "That username is taken. Try a different one.")
 			return
 		}
-		httpError(w, http.StatusInternalServerError, "Couldn't create your account. Try again in a moment.")
+		serverError(w, "create your account", err)
 		return
 	}
 	if err := s.startSession(w, user.ID); err != nil {
+		log.Printf("[api] start session after register: %v", err)
 		httpError(w, http.StatusInternalServerError, "Your account was created, but logging in failed. Log in to continue.")
 		return
 	}
@@ -599,7 +598,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(req.Username)
 	user, err := s.store.GetUserByUsername(name)
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "Couldn't log you in. Try again in a moment.")
+		serverError(w, "log you in", err)
 		return
 	}
 
@@ -612,8 +611,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		acct, hash = user.ID, user.PasswordHash
 	}
 	fromIP, fromAll := "loginfail:"+acct+":"+clientIP(r), "loginfail:"+acct
-	nIP, errIP := s.cache.RequestCount(fromIP)
-	nAll, errAll := s.cache.RequestCount(fromAll)
+	nIP, errIP := s.cache.Hits(fromIP)
+	nAll, errAll := s.cache.Hits(fromAll)
 	if errIP != nil || errAll != nil {
 		log.Printf("[api] login limit: %v %v", errIP, errAll)
 		httpError(w, http.StatusServiceUnavailable, "Couldn't log you in. Try again in a moment.")
@@ -625,13 +624,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	// the hash is checked even for an unknown name, so both take as long as a wrong password
 	if !auth.CheckPassword(hash, req.Password) || user == nil {
-		_ = s.cache.CountRequest(fromIP)
-		_ = s.cache.CountRequest(fromAll)
+		_ = s.cache.RecordHit(fromIP)
+		_ = s.cache.RecordHit(fromAll)
 		httpError(w, http.StatusUnauthorized, "Wrong username or password.")
 		return
 	}
 	if err := s.startSession(w, user.ID); err != nil {
-		httpError(w, http.StatusInternalServerError, "Couldn't log you in. Try again in a moment.")
+		serverError(w, "log you in", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"username": user.Username})
@@ -668,7 +667,7 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 
 	jobIDs, err := s.store.ListUserJobIDs(userID)
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "Couldn't delete the account. Try again in a moment.")
+		serverError(w, "delete the account", err)
 		return
 	}
 	for _, id := range jobIDs {
@@ -676,12 +675,12 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[api] account delete: purge job %s: %v", short(id), err)
 		}
 		if err := s.store.DeleteJob(id); err != nil {
-			httpError(w, http.StatusInternalServerError, "Couldn't delete the account. Try again in a moment.")
+			serverError(w, "delete the account", err)
 			return
 		}
 	}
 	if err := s.store.DeleteUser(userID); err != nil {
-		httpError(w, http.StatusInternalServerError, "Couldn't delete the account. Try again in a moment.")
+		serverError(w, "delete the account", err)
 		return
 	}
 
@@ -698,7 +697,7 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	entries, err := s.store.ListUserHistory(auth.UserID(r))
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "Couldn't load your history. Try again in a moment.")
+		serverError(w, "load your history", err)
 		return
 	}
 	if entries == nil {

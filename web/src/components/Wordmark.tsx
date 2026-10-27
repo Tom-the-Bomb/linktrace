@@ -9,7 +9,7 @@ export function Wordmark() {
       aria-label="LinkTrace home"
     >
       <span className="rounded-control bg-ink flex size-6 items-center justify-center text-white">
-        <Link2 className="size-3.5" strokeWidth={2.5} aria-hidden="true" />
+        <Link2 className="size-3.5" strokeWidth={2.5} />
       </span>
       <span className="tracking-headline text-[19px] font-semibold">linktrace</span>
     </Link>

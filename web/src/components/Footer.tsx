@@ -1,7 +1,6 @@
-// bottom-of-page footer, in every route via the App layout shell
 export function Footer() {
   return (
-    <footer className="border-line mt-auto border-t">
+    <footer className="mt-auto border-t">
       <div className="frame text-ink-3 text-label flex items-center justify-between gap-4 px-4 py-5 sm:px-6">
         <span>© 2026 Tom the Bomb</span>
         <a

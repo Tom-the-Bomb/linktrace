@@ -1,5 +1,3 @@
-import * as React from 'react';
-
 import { type VariantProps, cva } from 'class-variance-authority';
 
 import { fieldStyle } from '@/components/ui/input';
@@ -57,7 +55,7 @@ function InputGroupInput({ className, ...props }: React.ComponentProps<'input'>)
     <input
       data-slot="input-group-control"
       className={cn(
-        'placeholder:text-ink-3 h-full min-w-0 flex-1 bg-transparent px-2 text-sm outline-none focus-visible:outline-none',
+        'placeholder:text-ink-3 h-full min-w-0 flex-1 bg-transparent px-2 text-sm outline-none',
         className,
       )}
       {...props}

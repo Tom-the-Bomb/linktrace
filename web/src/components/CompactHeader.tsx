@@ -1,5 +1,3 @@
-import { type SubmitEvent } from 'react';
-
 import { ArrowLeft, Square } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -10,9 +8,7 @@ import { Wordmark } from './Wordmark';
 import { Button } from './ui/button';
 
 interface CompactHeaderProps {
-  url: string;
-  setUrl: (s: string) => void;
-  onSubmit: (e: SubmitEvent) => void;
+  onSubmit: (url: string) => void;
   submitting: boolean;
   // the report page's button: Stop while the viewer's own crawl runs, Home otherwise
   canStop?: boolean;
@@ -20,16 +16,9 @@ interface CompactHeaderProps {
 }
 
 // sticky top bar on /history and /jobs/:id: new-crawl launcher, stop/back button, AuthBar
-export function CompactHeader({
-  url,
-  setUrl,
-  onSubmit,
-  submitting,
-  canStop,
-  onStopOrBack,
-}: CompactHeaderProps) {
+export function CompactHeader({ onSubmit, submitting, canStop, onStopOrBack }: CompactHeaderProps) {
   return (
-    <header className="border-line bg-canvas sticky top-0 z-30 border-b">
+    <header className="bg-canvas sticky top-0 z-30 border-b">
       <div className="frame flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:gap-5 md:px-6">
         {/* mobile: logo left + auth right on their own line; desktop: dissolve into the row */}
         <div className="flex items-center justify-between gap-3 md:contents">
@@ -38,7 +27,7 @@ export function CompactHeader({
             <AuthBar />
           </div>
         </div>
-        <CrawlForm url={url} setUrl={setUrl} onSubmit={onSubmit} submitting={submitting}>
+        <CrawlForm onSubmit={onSubmit} submitting={submitting}>
           {onStopOrBack && (
             <Button
               type="button"
@@ -48,12 +37,12 @@ export function CompactHeader({
             >
               {canStop ? (
                 <>
-                  <Square className="size-3 fill-current" strokeWidth={2.5} aria-hidden="true" />
+                  <Square className="size-3 fill-current" strokeWidth={2.5} />
                   Stop
                 </>
               ) : (
                 <>
-                  <ArrowLeft strokeWidth={2.25} aria-hidden="true" />
+                  <ArrowLeft strokeWidth={2.25} />
                   <span className="hidden sm:inline">Home</span>
                 </>
               )}

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { ArrowUpRight, Check, ChevronRight, ExternalLink, X } from 'lucide-react';
 
-import { type PageRow, type SEODetail, getSEODetail } from '../api';
+import { type Issue, type PageRow, type SEODetail, getSEODetail } from '../api';
 import { type Tone, pct, scoreTierBadge, toneColour } from '../lib/colours';
 import { errMessage } from '../lib/format';
 import { type SiteTree, depthLabel, pathFromRoot } from '../lib/graph';
@@ -67,7 +67,7 @@ export function SeoDrawer({ jobId, url, open, row, tree, onNavigate, onClose }: 
           opener.current?.focus();
         }}
       >
-        <header className="border-line flex items-start justify-between gap-3 border-b px-5 py-4 sm:px-6">
+        <header className="flex items-start justify-between gap-3 border-b px-5 py-4 sm:px-6">
           <div className="min-w-0">
             <SheetTitle className="truncate text-lg font-semibold tracking-tight">
               Audit of <span className="font-mono text-base font-medium">{pathOf(url)}</span>
@@ -79,7 +79,7 @@ export function SeoDrawer({ jobId, url, open, row, tree, onNavigate, onClose }: 
               className="text-ink-3 hover:text-link-600 text-caption mt-0.5 flex items-center gap-1.5 font-mono"
             >
               <span className="truncate">{url}</span>
-              <ExternalLink className="size-3 shrink-0" strokeWidth={2.25} aria-hidden="true" />
+              <ExternalLink className="size-3 shrink-0" strokeWidth={2.25} />
             </a>
           </div>
           <SheetClose asChild>
@@ -94,7 +94,7 @@ export function SeoDrawer({ jobId, url, open, row, tree, onNavigate, onClose }: 
           role="region"
           aria-label="Audit details"
           tabIndex={0}
-          className="flex-1 overflow-y-auto px-5 py-5 focus-visible:-outline-offset-2 sm:px-6"
+          className="flex-1 overflow-y-auto p-5 focus-visible:-outline-offset-2 sm:px-6"
         >
           <PageContext url={url} row={row} tree={tree} onNavigate={onNavigate} />
           {loading && <Skeleton />}
@@ -124,7 +124,7 @@ function PageContext({
   const foundHere = tree.children.get(url)?.length ?? 0;
 
   return (
-    <section className="border-line mb-7 border-b pb-6">
+    <section className="mb-7 border-b pb-6">
       {row && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <StatusChip alive={row.is_alive} code={row.status_code} error={row.error_type} />
@@ -147,7 +147,7 @@ function PageContext({
                 className="text-link-600 inline-flex items-center gap-0.5 underline-offset-4 hover:underline"
               >
                 See the saved copy on the Wayback Machine
-                <ArrowUpRight className="size-3.5" strokeWidth={2.25} aria-hidden="true" />
+                <ArrowUpRight className="size-3.5" strokeWidth={2.25} />
               </a>
             </>
           ) : (
@@ -184,13 +184,7 @@ function PageContext({
               <ol className="text-caption flex flex-wrap items-center gap-x-1 gap-y-1 font-mono">
                 {chain.map((u, i) => (
                   <li key={u} className="flex items-center gap-1">
-                    {i > 0 && (
-                      <ChevronRight
-                        className="text-ink-4 size-3"
-                        strokeWidth={2.5}
-                        aria-hidden="true"
-                      />
-                    )}
+                    {i > 0 && <ChevronRight className="text-ink-4 size-3" strokeWidth={2.5} />}
                     {u === url ? (
                       <span className="text-ink" aria-current="page">
                         {pathOf(u)}
@@ -247,7 +241,7 @@ function SeoBody({ detail }: { detail: SEODetail }) {
   const tier = scoreTierBadge(detail.score);
   return (
     <div className="space-y-7">
-      <div className="border-line flex items-end justify-between border-b pb-6">
+      <div className="flex items-end justify-between border-b pb-6">
         <span>
           <span className="text-ink-3 text-label block font-medium">SEO score</span>
           <Badge variant={tier.tone} className="mt-1.5">
@@ -262,10 +256,10 @@ function SeoBody({ detail }: { detail: SEODetail }) {
 
       {detail.issues && detail.issues.length > 0 && (
         <Section label="Issues" count={detail.issues.length}>
-          <ul className="divide-line divide-y">
+          <ul className="divide-y">
             {detail.issues.map((iss) => (
               <li key={iss.code} className="text-body flex items-start gap-3 py-2.5 leading-snug">
-                <Badge variant={SEVERITY_TONE[iss.severity] ?? 'neutral'} className="mt-px">
+                <Badge variant={SEVERITY_TONE[iss.severity]} className="mt-px">
                   {iss.severity}
                 </Badge>
                 <span>{iss.message}</span>
@@ -290,8 +284,8 @@ function SeoBody({ detail }: { detail: SEODetail }) {
       </Section>
 
       <Section label="Headings">
-        <div className="divide-line rounded-control ring-line grid grid-cols-6 divide-x ring-1 ring-inset">
-          <HeadingTile label="h1" count={detail.h1_count} flagWhen={(n) => n !== 1} />
+        <div className="rounded-control ring-line grid grid-cols-6 divide-x ring-1 ring-inset">
+          <HeadingTile label="h1" count={detail.h1_count} flagged={detail.h1_count !== 1} />
           <HeadingTile label="h2" count={detail.h2_count} />
           <HeadingTile label="h3" count={detail.h3_count} />
           <HeadingTile label="h4" count={detail.h4_count} />
@@ -323,7 +317,7 @@ function SeoBody({ detail }: { detail: SEODetail }) {
 
       {detail.images_total > 0 && (
         <Section label="Images" count={detail.images_total}>
-          <ul className="divide-line divide-y">
+          <ul className="divide-y">
             <CountSignal
               label="Alt text"
               count={detail.images_with_alt}
@@ -350,7 +344,7 @@ function SeoBody({ detail }: { detail: SEODetail }) {
 
       {detail.links_internal + detail.links_external > 0 && (
         <Section label="Links">
-          <ul className="divide-line divide-y">
+          <ul className="divide-y">
             <RawStat label="Internal" value={detail.links_internal} />
             <RawStat label="External" value={detail.links_external} />
             <RawStat label="nofollow" value={detail.links_nofollow} />
@@ -416,15 +410,14 @@ function Meta({ value }: { value: string }) {
 function HeadingTile({
   label,
   count,
-  flagWhen,
+  flagged,
 }: {
   label: string;
   count: number;
-  flagWhen?: (n: number) => boolean;
+  flagged?: boolean;
 }) {
-  const flagged = flagWhen?.(count);
   return (
-    <div className={`px-2 py-2 text-center ${flagged ? 'bg-bad-bg' : ''}`}>
+    <div className={`p-2 text-center ${flagged ? 'bg-bad-bg' : ''}`}>
       <div className="text-ink-3 text-code font-mono">{label}</div>
       <div className={`num text-lg font-semibold tracking-tight ${flagged ? 'text-bad-fg' : ''}`}>
         {count}
@@ -434,16 +427,13 @@ function HeadingTile({
 }
 
 function Signal({ label, ok }: { label: string; ok: boolean }) {
+  const Icon = ok ? Check : X;
   return (
-    <li className="border-line flex items-center gap-2.5 border-b py-2 text-sm">
+    <li className="flex items-center gap-2.5 border-b py-2 text-sm">
       <span
         className={`flex size-4.5 items-center justify-center rounded-md ${ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}
       >
-        {ok ? (
-          <Check className="size-3" strokeWidth={3} />
-        ) : (
-          <X className="size-3" strokeWidth={3} />
-        )}
+        <Icon className="size-3" strokeWidth={3} />
       </span>
       {label}
       <span className="sr-only">{ok ? 'present' : 'missing'}</span>
@@ -477,17 +467,18 @@ function RawStat({ label, value }: { label: string; value: number }) {
 }
 
 function Placement({ label, ok }: { label: string; ok: boolean }) {
+  const Icon = ok ? Check : X;
   return (
     <Badge variant={ok ? 'ok' : 'bad'}>
-      {ok ? (
-        <Check className="size-3" strokeWidth={3} aria-hidden="true" />
-      ) : (
-        <X className="size-3" strokeWidth={3} aria-hidden="true" />
-      )}
+      <Icon className="size-3" strokeWidth={3} />
       {label}
       <span className="sr-only">{ok ? 'yes' : 'no'}</span>
     </Badge>
   );
 }
 
-const SEVERITY_TONE: Record<string, Tone> = { error: 'bad', warning: 'warn' };
+const SEVERITY_TONE: Record<Issue['severity'], Tone | 'neutral'> = {
+  error: 'bad',
+  warning: 'warn',
+  info: 'neutral',
+};

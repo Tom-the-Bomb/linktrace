@@ -54,7 +54,7 @@ GET    /history                past crawls (auth)
 Docker, Go 1.26+, Node 20+ are needed as MySQL, Redis and RabbitMQ all run in containers.
 
 ```bash
-cp .env.example .env        # fill in the empty passwords
+cp .env.example .env
 docker compose up -d        # spin up docker
 
 go run ./cmd/api            # :8080

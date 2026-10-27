@@ -1,7 +1,6 @@
 import type { CrawlStats } from '../api';
 import { SectionHeader } from './SectionHeader';
 
-// crawl performance, computed from page_results (no separate telemetry table)
 export function CrawlStatsPanel({ stats }: { stats: CrawlStats }) {
   const errorPct = (stats.error_rate * 100).toFixed(1);
   const mins = Math.floor(stats.duration_seconds / 60);
@@ -20,9 +19,9 @@ export function CrawlStatsPanel({ stats }: { stats: CrawlStats }) {
   return (
     <section>
       <SectionHeader title="Crawl stats" />
-      <dl className="panel divide-line [&>div]:border-line grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 xl:divide-x max-xl:[&>div]:border-b">
+      <dl className="panel grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 xl:divide-x max-xl:[&>div]:border-b">
         {items.map((it) => (
-          <div key={it.label} className="px-5 py-5 sm:px-8">
+          <div key={it.label} className="p-5 sm:px-8">
             <dt className="text-ink-3 text-label font-medium">{it.label}</dt>
             <dd
               className={`num mt-1 text-xl font-semibold tracking-tight ${it.bad ? 'text-bad-fg' : ''}`}

@@ -56,24 +56,23 @@ export function OverallReport({ report }: { report: Report }) {
               <ScoreScale score={avg_seo_score} />
             </div>
           </div>
-          <p className="border-line text-lead mt-6 border-t pt-5 leading-snug font-semibold tracking-tight">
+          <p className="text-lead mt-6 border-t pt-5 leading-snug font-semibold tracking-tight">
             <span>{linkVerdict(rotten, rottenPct)}</span>{' '}
             <span className="text-ink-2 font-normal">{scoreVerdict(avg_seo_score)}</span>
           </p>
         </div>
 
-        <div className="border-line bg-sunken/50 border-t p-5 sm:p-8 lg:border-t-0 lg:border-l">
+        <div className="bg-sunken/50 border-t p-5 sm:p-8 lg:border-t-0 lg:border-l">
           <h3 className="text-body font-semibold tracking-tight">Most common SEO issues</h3>
           {top_issues.length === 0 ? (
             <p className="text-ink-2 text-body mt-3">No recurring issues found.</p>
           ) : (
-            <ul className="divide-line mt-3 divide-y">
+            <ul className="mt-3 divide-y">
               {top_issues.map((iss) => (
                 <li key={iss} className="text-body flex items-start gap-3 py-2.5 leading-snug">
                   <TriangleAlert
                     className="text-warn-dot mt-0.5 size-4 shrink-0"
                     strokeWidth={2.25}
-                    aria-hidden="true"
                   />
                   <span>{iss}</span>
                 </li>

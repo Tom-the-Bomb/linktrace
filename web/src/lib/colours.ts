@@ -2,27 +2,19 @@
 
 export type Tone = 'ok' | 'warn' | 'bad';
 
-// maps a tone to a text colour class; undefined = default ink.
+const TONE_TEXT: Record<Tone, string> = {
+  ok: 'text-ok-fg',
+  warn: 'text-warn-fg',
+  bad: 'text-bad-fg',
+};
+
 export function toneColour(tone?: Tone): string {
-  if (tone === 'ok') {
-    return 'text-ok-fg';
-  }
-  if (tone === 'warn') {
-    return 'text-warn-fg';
-  }
-  if (tone === 'bad') {
-    return 'text-bad-fg';
-  }
-  return 'text-ink';
+  return tone ? TONE_TEXT[tone] : 'text-ink';
 }
 
 type ScoreTier = 'good' | 'ok' | 'poor';
 
-// SEO score thresholds; the colour maps key off this.
-export function scoreTier(score: number | null): ScoreTier {
-  if (score === null) {
-    return 'poor'; // null has no colour of its own; callers handle null first
-  }
+export function scoreTier(score: number): ScoreTier {
   if (score >= 80) {
     return 'good';
   }

@@ -11,7 +11,6 @@ import { JobStatusChip } from './ui/StatusChip';
 import { Button } from './ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 
-// a run targeted for deletion; url + startedAt populate the confirm dialog
 interface DeleteTarget {
   jobId: string;
   url: string;
@@ -25,8 +24,6 @@ export function History() {
   const [error, setError] = useState<string | null>(null);
 
   const [pendingDelete, setPendingDelete] = useState<DeleteTarget | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     getHistory()
@@ -60,26 +57,10 @@ export function History() {
         : prev,
     );
 
-  async function confirmDelete() {
-    if (!pendingDelete) {
-      return;
-    }
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      await deleteJob(pendingDelete.jobId);
-      removeRun(pendingDelete.jobId);
-      setPendingDelete(null);
-    } catch (e) {
-      setDeleteError(errMessage(e));
-    } finally {
-      setDeleting(false);
-    }
-  }
-
-  function closeDialog() {
+  async function confirmDelete(jobId: string) {
+    await deleteJob(jobId);
+    removeRun(jobId);
     setPendingDelete(null);
-    setDeleteError(null);
   }
 
   return (
@@ -103,7 +84,7 @@ export function History() {
       )}
 
       {entries && entries.length > 0 && (
-        <ul className="panel divide-line divide-y">
+        <ul className="panel divide-y">
           {entries.map((e) => (
             <HistoryRow
               key={e.url}
@@ -119,10 +100,8 @@ export function History() {
         <ConfirmDeleteDialog
           url={pendingDelete.url}
           startedAt={pendingDelete.startedAt}
-          busy={deleting}
-          error={deleteError}
-          onConfirm={confirmDelete}
-          onCancel={closeDialog}
+          onConfirm={() => confirmDelete(pendingDelete.jobId)}
+          onCancel={() => setPendingDelete(null)}
         />
       )}
     </section>
@@ -143,11 +122,11 @@ function HistoryRow({
   return (
     <Collapsible asChild>
       <li>
-        <div className="group hover:bg-sunken flex items-center gap-3 px-3 py-3 transition sm:px-6">
+        <div className="group hover:bg-sunken flex items-center gap-3 p-3 transition sm:px-6">
           {/* chevron toggles the run list; a spacer keeps single-run rows aligned */}
           {multi ? (
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Runs" className="peer size-7">
+              <Button variant="ghost" size="icon" aria-label="Runs" className="size-7">
                 <ChevronRight
                   className="transition-transform [[data-state=open]>&]:rotate-90"
                   strokeWidth={2.25}
@@ -178,11 +157,11 @@ function HistoryRow({
                 onRequestDelete({
                   jobId: entry.last_job_id,
                   url: entry.url,
-                  startedAt: entry.runs[0]?.created_at ?? entry.last_crawled,
+                  startedAt: entry.last_crawled,
                 })
               }
             />
-            {entry.runs[0] && <JobStatusChip status={entry.runs[0].status} />}
+            <JobStatusChip status={entry.runs[0].status} />
             <Button
               variant="secondary"
               size="sm"
@@ -191,14 +170,14 @@ function HistoryRow({
               className="ml-1.5 sm:ml-2 sm:px-3"
             >
               <span className="hidden sm:inline">{multi ? 'Latest report' : 'Report'}</span>
-              <ArrowRight className="size-3.5" strokeWidth={2.25} aria-hidden="true" />
+              <ArrowRight className="size-3.5" strokeWidth={2.25} />
             </Button>
           </div>
         </div>
 
         {multi && (
           <CollapsibleContent asChild>
-            <ul className="border-line bg-sunken border-t py-1 pr-3 pl-12 sm:pr-6 sm:pl-16">
+            <ul className="bg-sunken border-t py-1 pr-3 pl-12 sm:pr-6 sm:pl-16">
               {entry.runs.map((run, i) => (
                 <RunRow
                   key={run.job_id}
@@ -254,7 +233,7 @@ function RunRow({
           className="text-label ml-1.5 sm:ml-2"
         >
           <span className="hidden sm:inline">Report</span>
-          <ArrowRight className="size-3.5" strokeWidth={2.25} aria-hidden="true" />
+          <ArrowRight className="size-3.5" strokeWidth={2.25} />
         </Button>
       </div>
     </li>
@@ -272,7 +251,7 @@ function DeleteButton({ onClick }: { onClick: () => void }) {
       title="Delete crawl"
       className="hover:bg-bad-bg hover:text-bad-fg focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
     >
-      <Trash2 strokeWidth={2} />
+      <Trash2 />
     </Button>
   );
 }

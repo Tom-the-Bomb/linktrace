@@ -5,6 +5,20 @@
 # Security note: only Caddy publishes ports (80/443). MySQL/Redis/RabbitMQ and the
 # API are reachable ONLY on the internal docker network — never from the internet.
 
+# settings the api and worker share
+x-go-service: &go-service
+  restart: unless-stopped
+  depends_on:
+    mysql: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    rabbitmq: { condition: service_healthy }
+
+x-go-env: &go-env
+  MYSQL_DSN: "${MYSQL_USER:-linktrace}:${MYSQL_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-linktrace}?parseTime=true"
+  REDIS_ADDR: "redis:6379"
+  RABBIT_URL: "amqp://${RABBITMQ_USER:-linktrace}:${RABBITMQ_PASS}@rabbitmq:5672/"
+  SHARD_COUNT: "${SHARD_COUNT:-5}" # one value for both, so every lane the api places is consumed
+
 services:
   mysql:
     image: mysql:8.0
@@ -66,45 +80,27 @@ services:
       retries: 20
 
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
+    <<: *go-service
+    build: { context: ., dockerfile: Dockerfile.api }
     container_name: linktrace-api
-    restart: unless-stopped
     environment:
-      MYSQL_DSN: "${MYSQL_USER:-linktrace}:${MYSQL_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-linktrace}?parseTime=true"
-      REDIS_ADDR: "redis:6379"
-      RABBIT_URL: "amqp://${RABBITMQ_USER:-linktrace}:${RABBITMQ_PASS}@rabbitmq:5672/"
+      <<: *go-env
       HTTP_ADDR: ":8080"
       FRONTEND_ORIGIN: "https://${DOMAIN}"
       COOKIE_SECURE: "true"
-      SHARD_COUNT: "${SHARD_COUNT:-5}" # must match the worker so placed lanes are consumed
       ANON_MAX_PAGES: "${ANON_MAX_PAGES:-500}"
-    depends_on:
-      mysql: { condition: service_healthy }
-      redis: { condition: service_healthy }
-      rabbitmq: { condition: service_healthy }
 
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
+    <<: *go-service
+    build: { context: ., dockerfile: Dockerfile.worker }
     container_name: linktrace-worker
-    restart: unless-stopped
     environment:
-      MYSQL_DSN: "${MYSQL_USER:-linktrace}:${MYSQL_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-linktrace}?parseTime=true"
-      REDIS_ADDR: "redis:6379"
-      RABBIT_URL: "amqp://${RABBITMQ_USER:-linktrace}:${RABBITMQ_PASS}@rabbitmq:5672/"
+      <<: *go-env
       WORKER_COUNT: "${WORKER_COUNT:-100}"
       MAX_PAGES: "${MAX_PAGES:-10000}"
       MAX_DEPTH: "${MAX_DEPTH:-20}"
       MAX_PER_CATEGORY: "${MAX_PER_CATEGORY:-1000}"
       RATE_PER_MIN: "${RATE_PER_MIN:-300}"
-      SHARD_COUNT: "${SHARD_COUNT:-5}"
-    depends_on:
-      mysql: { condition: service_healthy }
-      redis: { condition: service_healthy }
-      rabbitmq: { condition: service_healthy }
 
   caddy:
     build:

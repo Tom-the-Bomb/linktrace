@@ -22,7 +22,7 @@ export function CoverageGapPanel({ gap }: { gap: CoverageGap }) {
             : `${total.toLocaleString()} ${total === 1 ? 'difference' : 'differences'} between your sitemap and the crawl.`
         }
       />
-      <div className="panel divide-line divide-y">
+      <div className="panel divide-y">
         <GapList
           label="Not in sitemap"
           hint="Crawled, but missing from sitemap.xml"
@@ -67,18 +67,17 @@ function GapList({
       </span>
       {empty ? (
         <Badge variant="ok">
-          <CircleCheck className="size-3" strokeWidth={2.5} aria-hidden="true" />
+          <CircleCheck className="size-3" strokeWidth={2.5} />
           none
         </Badge>
       ) : (
         <span className="flex items-center gap-2">
-          <Badge variant={tone === 'bad' ? 'bad' : 'warn'} mono className="num">
+          <Badge variant={tone} mono className="num">
             {urls.length.toLocaleString()}
           </Badge>
           <ChevronRight
             className="text-ink-3 size-4 transition-transform group-data-[state=open]:rotate-90"
             strokeWidth={2.25}
-            aria-hidden="true"
           />
         </span>
       )}
@@ -86,17 +85,15 @@ function GapList({
   );
 
   if (empty) {
-    return (
-      <div className="flex items-center justify-between gap-4 px-5 py-3.5 sm:px-8">{header}</div>
-    );
+    return <div className="gutter flex items-center justify-between gap-4 py-3.5">{header}</div>;
   }
   return (
     <Collapsible className="group">
-      <CollapsibleTrigger className="hover:bg-sunken flex w-full items-center justify-between gap-4 px-5 py-3.5 text-left transition sm:px-8">
+      <CollapsibleTrigger className="hover:bg-sunken gutter flex w-full items-center justify-between gap-4 py-3.5 text-left transition">
         {header}
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <ul className="border-line bg-sunken/60 max-h-80 space-y-1 overflow-y-auto border-t px-5 py-3 sm:px-8">
+        <ul className="bg-sunken/60 gutter max-h-80 space-y-1 overflow-y-auto border-t py-3">
           {urls.slice(0, CAP).map((u) => (
             <li key={u} className="text-caption truncate font-mono">
               <a

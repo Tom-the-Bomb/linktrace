@@ -38,13 +38,9 @@ function inFilter(pattern: string, filter: Filter): boolean {
   return pattern === 'mostly_rotten' || pattern === 'all_rotten';
 }
 
-function rotRatio(c: CategoryReport): number {
-  return c.total_pages > 0 ? c.rotten_pages / c.total_pages : 0;
-}
-
 const SORT_VALUE: Record<SortKey, (c: CategoryReport) => number> = {
   pages: (c) => c.total_pages,
-  rot: rotRatio,
+  rot: (c) => (c.total_pages > 0 ? c.rotten_pages / c.total_pages : 0),
   seo: (c) => c.avg_seo_score,
 };
 
@@ -58,18 +54,6 @@ export function Categories({
   const [filter, setFilter] = useState<Filter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('pages');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-
-  const counts = useMemo(() => {
-    const c: Record<Filter, number> = { all: categories.length, healthy: 0, mixed: 0, rotten: 0 };
-    for (const cat of categories) {
-      for (const f of ['healthy', 'mixed', 'rotten'] as Filter[]) {
-        if (inFilter(cat.pattern, f)) {
-          c[f]++;
-        }
-      }
-    }
-    return c;
-  }, [categories]);
 
   const filtered = useMemo(() => {
     let r = categories;
@@ -85,12 +69,10 @@ export function Categories({
 
   const { page, setPage, paged } = usePagination(filtered, PAGE_SIZE);
 
-  // controls that mutate the result set reset paging
-  function setFilterReset(f: Filter) {
+  function pickFilter(f: Filter) {
     setFilter(f);
     setPage(1);
   }
-  // click active key flips direction; click another sets it (resets to desc)
   function pickSort(k: SortKey) {
     if (k === sortKey) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -115,11 +97,15 @@ export function Categories({
           <ToggleGroup
             type="single"
             value={filter}
-            onValueChange={(v) => v && setFilterReset(v as Filter)}
+            onValueChange={(v) => v && pickFilter(v as Filter)}
             aria-label="Filter sections"
           >
             {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
-              <ToggleGroupItem key={f} value={f} count={counts[f]}>
+              <ToggleGroupItem
+                key={f}
+                value={f}
+                count={categories.filter((c) => inFilter(c.pattern, f)).length}
+              >
                 {FILTER_LABEL[f]}
               </ToggleGroupItem>
             ))}
@@ -148,7 +134,7 @@ export function Categories({
 
         <div
           aria-hidden="true"
-          className="border-line bg-sunken/60 text-ink-3 hidden grid-cols-[14px_minmax(0,1fr)_170px_64px_118px] gap-x-4 border-b px-8 py-2 text-xs font-medium sm:grid"
+          className="bg-sunken/60 text-ink-3 hidden grid-cols-[14px_minmax(0,1fr)_170px_64px_118px] gap-x-4 border-b px-8 py-2 text-xs font-medium sm:grid"
         >
           <span />
           <span>Section</span>
@@ -161,7 +147,7 @@ export function Categories({
             No sections match this filter.
           </p>
         ) : (
-          <ul className="divide-line divide-y">
+          <ul className="divide-y">
             {paged.map((c) => (
               <CategoryRow key={c.category} cat={c} colour={colourFor(c.category)} />
             ))}
@@ -201,7 +187,7 @@ function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
   const style = PATTERN[cat.pattern] ?? PATTERN.mixed;
 
   return (
-    <li className="grid grid-cols-[14px_minmax(0,1fr)_auto] items-center gap-x-4 px-5 py-3.5 sm:grid-cols-[14px_minmax(0,1fr)_170px_64px_118px] sm:px-8">
+    <li className="gutter grid grid-cols-[14px_minmax(0,1fr)_auto] items-center gap-x-4 py-3.5 sm:grid-cols-[14px_minmax(0,1fr)_170px_64px_118px]">
       <SectionDot colour={colour} />
       <div className="min-w-0">
         <div className="truncate font-mono text-sm font-medium">{cat.category}</div>

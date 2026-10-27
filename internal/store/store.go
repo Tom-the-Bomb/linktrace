@@ -1,91 +1,45 @@
 // Package store is the MySQL persistence layer: jobs, page results, SEO audits, links,
 // category reports, users, site audits, and the derived crawl-stats/site-SEO aggregates.
-// Job/page/link CRUD lives here; user/session/history methods are in users.go and the
+// Job/page/link CRUD lives here; user and history methods are in users.go and the
 // read-only aggregates in audits.go. Row-scanning helpers and small utilities live in utils.go.
 package store
 
 import (
 	"database/sql"
-	"encoding/json"
 	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
+
+	"github.com/Tom-the-Bomb/linktrace/internal/seo"
 )
 
 type Job struct {
-	ID         string
-	UserID     string // owner; "" for anonymous jobs
-	AnonOwner  string // sha256 of the anonymous creator's owner token; "" for account jobs
-	URL        string
-	Status     string
-	TotalPages int
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID        string
+	UserID    string // owner; "" for anonymous jobs
+	AnonOwner string // sha256 of the anonymous creator's owner token; "" for account jobs
+	URL       string
+	Status    string
+	CreatedAt time.Time
 }
 
 type PageResult struct {
-	ID            int64
-	JobID         string
-	URL           string
-	StatusCode    int
-	ResponseTime  int
-	ErrorType     string
-	IsAlive       bool
-	Depth         int
-	RetryCount    int
-	RedirectChain []string
-	ArchiveURL    string
+	JobID        string
+	URL          string
+	StatusCode   int
+	ResponseTime int
+	ErrorType    string
+	IsAlive      bool
+	Depth        int
+	RetryCount   int
+	ArchiveURL   string
 }
 
 type SEOAudit struct {
-	JobID                 string            `json:"job_id"`
-	URL                   string            `json:"url"`
-	Title                 string            `json:"title"`
-	TitleLength           int               `json:"title_length"`
-	MetaDescription       string            `json:"meta_description"`
-	MetaDescriptionLength int               `json:"meta_description_length"`
-	H1Count               int               `json:"h1_count"`
-	H2Count               int               `json:"h2_count"`
-	H3Count               int               `json:"h3_count"`
-	H4Count               int               `json:"h4_count"`
-	H5Count               int               `json:"h5_count"`
-	H6Count               int               `json:"h6_count"`
-	ImagesTotal           int               `json:"images_total"`
-	ImagesWithAlt         int               `json:"images_with_alt"`
-	ImagesWithDims        int               `json:"images_with_dims"`
-	ImagesLazyLoaded      int               `json:"images_lazy_loaded"`
-	ImagesResponsive      int               `json:"images_responsive"`
-	LinksInternal         int               `json:"links_internal"`
-	LinksExternal         int               `json:"links_external"`
-	LinksNofollow         int               `json:"links_nofollow"`
-	HTMLLang              string            `json:"html_lang"`
-	Canonical             string            `json:"canonical"`
-	OGTags                map[string]string `json:"og_tags"`
-	TwitterTags           map[string]string `json:"twitter_tags"`
-	JSONLDCount           int               `json:"jsonld_count"`
-	JSONLDTypes           []string          `json:"jsonld_types"`
-	HasViewport           bool              `json:"has_viewport"`
-	Noindex               bool              `json:"noindex"`
-	TopKeywords           []KeywordCount    `json:"top_keywords"`
-	PrimaryKeyword        string            `json:"primary_keyword"`
-	KeywordInTitle        bool              `json:"keyword_in_title"`
-	KeywordInH1           bool              `json:"keyword_in_h1"`
-	KeywordInURL          bool              `json:"keyword_in_url"`
-	Issues                []Issue           `json:"issues"`
-	Score                 int               `json:"score"`
-}
-
-type KeywordCount struct {
-	Term  string `json:"term"`
-	Count int    `json:"count"`
-}
-
-type Issue struct {
-	Code     string `json:"code"`
-	Message  string `json:"message"`
-	Severity string `json:"severity"` // "error" | "warning" | "info"
+	JobID string `json:"job_id"`
+	URL   string `json:"url"`
+	seo.Audit
 }
 
 type CategoryReport struct {
@@ -155,14 +109,6 @@ func (s *Store) UpdateJobStatus(id, status string) error {
 	return err
 }
 
-// records the final crawled-page count on the job row.
-func (s *Store) SetTotalPages(id string, n int) error {
-	_, err := s.db.Exec(
-		"UPDATE jobs SET total_pages = ? WHERE id = UUID_TO_BIN(?)", n, id,
-	)
-	return err
-}
-
 // removes a job and every row that references it. The child tables have
 // FK(job_id) -> jobs(id) with no ON DELETE CASCADE, so we delete children before the
 // parent, all inside one transaction so a partial failure leaves nothing orphaned.
@@ -201,9 +147,9 @@ func (s *Store) GetJob(id string) (*Job, error) {
 	var userID, anonOwner sql.NullString // both nullable: one or neither is set
 	out, err := getOne(&j, func() error {
 		return s.db.QueryRow(
-			"SELECT BIN_TO_UUID(id), BIN_TO_UUID(user_id), anon_owner, url, status, total_pages, created_at, updated_at FROM jobs WHERE id = UUID_TO_BIN(?)",
+			"SELECT BIN_TO_UUID(id), BIN_TO_UUID(user_id), anon_owner, url, status, created_at FROM jobs WHERE id = UUID_TO_BIN(?)",
 			id,
-		).Scan(&j.ID, &userID, &anonOwner, &j.URL, &j.Status, &j.TotalPages, &j.CreatedAt, &j.UpdatedAt)
+		).Scan(&j.ID, &userID, &anonOwner, &j.URL, &j.Status, &j.CreatedAt)
 	})
 	if out == nil || err != nil {
 		return out, err
@@ -212,16 +158,15 @@ func (s *Store) GetJob(id string) (*Job, error) {
 	return out, nil
 }
 
-// persists one crawled page's rot record (status, timing, redirect chain).
+// persists one crawled page's rot record (status, timing, retries).
 func (s *Store) InsertPageResult(result PageResult) error {
 	_, err := s.db.Exec(
 		`INSERT INTO pages (job_id, url, status_code,
-		response_time, error_type, is_alive, depth,
-		retry_count, redirect_chain)
-		VALUES (UUID_TO_BIN(?), ?, ?, ?, ?, ?, ?, ?, ?)`,
+		response_time, error_type, is_alive, depth, retry_count)
+		VALUES (UUID_TO_BIN(?), ?, ?, ?, ?, ?, ?, ?)`,
 		result.JobID, result.URL, result.StatusCode,
 		result.ResponseTime, nullIfEmpty(result.ErrorType), result.IsAlive,
-		result.Depth, result.RetryCount, mustJSON(result.RedirectChain),
+		result.Depth, result.RetryCount,
 	)
 	return err
 }
@@ -295,26 +240,24 @@ func (s *Store) SetArchiveURL(jobID, url, archiveURL string) error {
 // returns every crawled page for a job, ordered by depth then URL.
 func (s *Store) ListPageResults(jobID string) ([]PageResult, error) {
 	return queryRows(s.db,
-		`SELECT id, url, status_code, response_time, error_type,
-		is_alive, depth, retry_count, redirect_chain, archive_url
+		`SELECT url, status_code, response_time, error_type, is_alive, depth, archive_url
 		FROM pages WHERE job_id = UUID_TO_BIN(?)
 		ORDER BY depth, url`,
 		func(rows *sql.Rows) (PageResult, error) {
 			var r PageResult
 			var errType, archive sql.NullString
-			var chain []byte
-			if err := rows.Scan(&r.ID, &r.URL, &r.StatusCode, &r.ResponseTime, &errType, &r.IsAlive, &r.Depth, &r.RetryCount, &chain, &archive); err != nil {
+			if err := rows.Scan(&r.URL, &r.StatusCode, &r.ResponseTime, &errType, &r.IsAlive, &r.Depth, &archive); err != nil {
 				return r, err
 			}
 			r.JobID = jobID
 			r.ErrorType = errType.String
 			r.ArchiveURL = archive.String
-			_ = json.Unmarshal(chain, &r.RedirectChain)
 			return r, nil
 		}, jobID)
 }
 
-// persists one page's SEO audit, JSON-encoding the map/slice columns.
+// persists one page's SEO audit, JSON-encoding the map/slice columns and clipping text to the
+// column widths, so an oversized field can't fail the insert and wedge the crawl.
 func (s *Store) InsertSEOAudit(audit SEOAudit) error {
 	_, err := s.db.Exec(
 		`INSERT INTO seo_audits (job_id, url, title, title_length,
@@ -328,17 +271,17 @@ func (s *Store) InsertSEOAudit(audit SEOAudit) error {
 		top_keywords, primary_keyword, keyword_in_title,
 		keyword_in_h1, keyword_in_url, issues, score)
 		VALUES (UUID_TO_BIN(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		audit.JobID, audit.URL, audit.Title, audit.TitleLength,
-		audit.MetaDescription, audit.MetaDescriptionLength,
+		audit.JobID, audit.URL, clip(audit.Title, 10000), audit.TitleLength,
+		clip(audit.MetaDescription, 10000), audit.MetaDescLength,
 		audit.H1Count, audit.H2Count, audit.H3Count,
 		audit.H4Count, audit.H5Count, audit.H6Count,
 		audit.ImagesTotal, audit.ImagesWithAlt, audit.ImagesWithDims,
 		audit.ImagesLazyLoaded, audit.ImagesResponsive,
 		audit.LinksInternal, audit.LinksExternal, audit.LinksNofollow,
-		nullIfEmpty(audit.HTMLLang),
-		nullIfEmpty(audit.Canonical), mustJSON(audit.OGTags), mustJSON(audit.TwitterTags),
+		nullIfEmpty(clip(audit.HTMLLang, 20)),
+		nullIfEmpty(clip(audit.Canonical, 10000)), mustJSON(audit.OGTags), mustJSON(audit.TwitterTags),
 		audit.JSONLDCount, mustJSON(audit.JSONLDTypes), audit.HasViewport, audit.Noindex,
-		mustJSON(audit.TopKeywords), nullIfEmpty(audit.PrimaryKeyword),
+		mustJSON(audit.TopKeywords), nullIfEmpty(clip(audit.PrimaryKeyword, 100)),
 		audit.KeywordInTitle, audit.KeywordInH1, audit.KeywordInURL,
 		mustJSON(audit.Issues), audit.Score,
 	)
@@ -355,8 +298,8 @@ func (s *Store) ListSEOAudits(jobID string) ([]SEOAudit, error) {
 }
 
 // upserts a category's rollup row; the aggregator rewrites it on every tick as counts change.
-// PRIMARY KEY (job_id, category) makes this a single statement. The previous delete+insert in a
-// transaction cost four round-trips and took gap locks that would deadlock concurrent tickers.
+// PRIMARY KEY (job_id, category) makes this a single statement, with no gap locks for concurrent
+// tickers to deadlock on.
 func (s *Store) ReplaceCategoryReport(jobID string, report CategoryReport) error {
 	_, err := s.db.Exec(
 		`INSERT INTO category_reports (job_id, category, total_pages,

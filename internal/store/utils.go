@@ -57,6 +57,14 @@ func mustJSON(v any) []byte {
 	return b
 }
 
+// clip cuts s to n characters.
+func clip(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n])
+	}
+	return s
+}
+
 // maps "" to a SQL NULL so empty optional columns store as NULL, not "".
 func nullIfEmpty(s string) any {
 	if s == "" {
@@ -90,7 +98,7 @@ func scanSEOAudit(s scanner, jobID string) (SEOAudit, error) {
 	var canonical, primaryKeyword, htmlLang sql.NullString
 	var ogTags, twitterTags, jsonLDTypes, topKeywords, issues []byte
 	if err := s.Scan(&a.URL, &a.Title, &a.TitleLength,
-		&a.MetaDescription, &a.MetaDescriptionLength, &a.H1Count, &a.H2Count, &a.H3Count,
+		&a.MetaDescription, &a.MetaDescLength, &a.H1Count, &a.H2Count, &a.H3Count,
 		&a.H4Count, &a.H5Count, &a.H6Count,
 		&a.ImagesTotal, &a.ImagesWithAlt, &a.ImagesWithDims,
 		&a.ImagesLazyLoaded, &a.ImagesResponsive,

@@ -76,18 +76,14 @@ type CoverageGap struct {
 // same canonical form crawled URLs were stored under) so trailing-slash/host-case differences
 // don't masquerade as orphans or missed pages.
 func ComputeCoverageGap(sitemapURLs, crawledURLs, rottenURLs []string) CoverageGap {
-	inSitemap := make(map[string]bool, len(sitemapURLs))
-	for _, u := range sitemapURLs {
-		inSitemap[crawler.NormalizeURL(u)] = true
+	toSet := func(urls []string) map[string]bool {
+		set := make(map[string]bool, len(urls))
+		for _, u := range urls {
+			set[crawler.NormalizeURL(u)] = true
+		}
+		return set
 	}
-	crawled := make(map[string]bool, len(crawledURLs))
-	for _, u := range crawledURLs {
-		crawled[crawler.NormalizeURL(u)] = true
-	}
-	rotten := make(map[string]bool, len(rottenURLs))
-	for _, u := range rottenURLs {
-		rotten[crawler.NormalizeURL(u)] = true
-	}
+	inSitemap, crawled, rotten := toSet(sitemapURLs), toSet(crawledURLs), toSet(rottenURLs)
 
 	g := CoverageGap{Orphans: []string{}, NotCrawled: []string{}, SitemapDead: []string{}}
 	for u := range crawled {

@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 
+import { errMessage } from '../lib/format';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,9 +17,8 @@ interface Props {
   message: ReactNode;
   children?: ReactNode;
   confirmLabel: string;
-  busy?: boolean;
-  error?: string | null;
-  onConfirm: () => void;
+  // throws to show its error; closing on success is up to the caller
+  onConfirm: () => Promise<void>;
   onCancel: () => void;
 }
 
@@ -28,11 +28,24 @@ export function ConfirmDialog({
   message,
   children,
   confirmLabel,
-  busy,
-  error,
   onConfirm,
   onCancel,
 }: Props) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirm() {
+    setBusy(true);
+    setError(null);
+    try {
+      await onConfirm();
+    } catch (err) {
+      setError(errMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <AlertDialog open onOpenChange={(open) => !open && !busy && onCancel()}>
       <AlertDialogContent>
@@ -57,7 +70,7 @@ export function ConfirmDialog({
             disabled={busy}
             onClick={(e) => {
               e.preventDefault();
-              onConfirm();
+              void confirm();
             }}
           >
             {busy ? 'Deleting…' : confirmLabel}

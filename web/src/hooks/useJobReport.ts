@@ -40,7 +40,7 @@ export async function fetchTick(jobId: string, heavy: boolean): Promise<Tick> {
 }
 
 // polls a job until it finishes; `first` is the route loader's first poll
-export function useJobReport(jobId: string | undefined, first?: Promise<Tick>) {
+export function useJobReport(jobId: string, first?: Promise<Tick>) {
   const [status, setStatus] = useState<Status | null>(null);
   const [rows, setRows] = useState<PageRow[]>([]);
   const [report, setReport] = useState<Report | null>(null);
@@ -50,9 +50,6 @@ export function useJobReport(jobId: string | undefined, first?: Promise<Tick>) {
 
   // setTimeout recursion (not setInterval) so requests can't overlap
   useEffect(() => {
-    if (!jobId) {
-      return;
-    }
     // reset when switching jobs
     setStatus(null);
     setRows([]);
@@ -108,12 +105,10 @@ export function useJobReport(jobId: string | undefined, first?: Promise<Tick>) {
           setError("Can't reach LinkTrace right now. This page keeps retrying.");
         }
       }
-      if (!stop) {
-        timer = window.setTimeout(
-          poll,
-          failures ? Math.min(POLL_MS * 2 ** failures, MAX_BACKOFF_MS) : POLL_MS,
-        );
-      }
+      timer = window.setTimeout(
+        poll,
+        failures ? Math.min(POLL_MS * 2 ** failures, MAX_BACKOFF_MS) : POLL_MS,
+      );
     };
 
     void poll();

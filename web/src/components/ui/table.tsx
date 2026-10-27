@@ -1,5 +1,3 @@
-import * as React from 'react';
-
 import { cn } from '@/lib/utils';
 
 function Table({ className, ...props }: React.ComponentProps<'table'>) {
@@ -23,7 +21,7 @@ function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {
     <tr
       data-slot="table-row"
       className={cn(
-        'border-line [tbody_&]:hover:bg-sunken border-b transition-colors last:border-0',
+        '[tbody_&]:hover:bg-sunken border-b transition-colors last:border-0',
         className,
       )}
       {...props}
@@ -36,7 +34,7 @@ function TableHead({ className, ...props }: React.ComponentProps<'th'>) {
     <th
       data-slot="table-head"
       className={cn(
-        'border-line bg-sunken text-ink-3 border-b py-2.5 pr-4 text-left text-xs font-medium whitespace-nowrap',
+        'bg-sunken text-ink-3 border-b py-2.5 pr-4 text-left text-xs font-medium whitespace-nowrap',
         className,
       )}
       {...props}

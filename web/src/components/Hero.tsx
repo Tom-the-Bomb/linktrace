@@ -1,4 +1,4 @@
-import { type RefObject, type SubmitEvent, useRef, useState } from 'react';
+import { type RefObject, useRef, useState } from 'react';
 
 import { ArrowRight, Check, X } from 'lucide-react';
 
@@ -18,15 +18,13 @@ import { Kbd } from './ui/kbd';
 import { Spinner } from './ui/spinner';
 
 interface HeroProps {
-  url: string;
-  setUrl: (s: string) => void;
-  onSubmit: (e: SubmitEvent) => void;
+  onSubmit: (url: string) => void;
   submitting: boolean;
   error: string | null;
 }
 
 // landing page: the grid frame, a domain field, and a sample crawl playing out in the cells
-export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
+export function Hero({ onSubmit, submitting, error }: HeroProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   function focusField() {
@@ -39,7 +37,7 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
       <TopNav />
       <main className="frame">
         <section className="grid grid-cols-1 lg:grid-cols-12">
-          <div className="cell flex flex-col justify-between gap-8 px-5 pt-12 pb-10 sm:px-8 lg:col-span-8 lg:border-r lg:py-16">
+          <div className="gutter relative flex flex-col justify-between gap-8 pt-12 pb-10 lg:col-span-8 lg:border-r lg:py-16">
             <h1 className="tracking-display text-display sm:text-display-lg leading-[0.98] font-semibold wrap-anywhere">
               Broken links,
               <br />
@@ -47,15 +45,13 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
             </h1>
             <DomainForm
               inputRef={inputRef}
-              url={url}
-              setUrl={setUrl}
               onSubmit={onSubmit}
               submitting={submitting}
               error={error}
             />
           </div>
-          <div className="cell flex flex-col justify-between gap-8 border-t px-5 pt-10 pb-12 sm:px-8 lg:col-span-4 lg:border-t-0 lg:py-16">
-            <p className="text-ink-2 text-lead max-w-xl leading-relaxed">
+          <div className="gutter relative flex flex-col justify-between gap-8 border-t pt-10 pb-12 lg:col-span-4 lg:border-t-0 lg:py-16">
+            <p className="lead max-w-xl">
               LinkTrace crawls your site from the homepage, following every internal link. It tells
               you which links are broken and why, scores each page&rsquo;s SEO and maps the whole
               site.
@@ -64,27 +60,27 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
           </div>
         </section>
 
-        <GridRow inner={['lg:left-[33.333%]', 'lg:left-[66.666%]']}>
+        <GridRow inner={['lg:left-1/3', 'lg:left-2/3']}>
           <SampleCrawl />
         </GridRow>
 
         <Failures />
         <ReportContents />
 
-        <GridRow inner={['lg:left-[33.333%]']}>
-          <section className="flex flex-col gap-6 px-5 py-14 sm:px-8 lg:flex-row lg:items-end lg:justify-between lg:py-20">
+        <GridRow inner={['lg:left-1/3']}>
+          <section className="gutter flex flex-col gap-6 py-14 lg:flex-row lg:items-end lg:justify-between lg:py-20">
             <div>
               <h2 className="tracking-display text-closing sm:text-closing-lg leading-none font-semibold">
                 Check your site.
               </h2>
-              <p className="text-ink-2 text-lead mt-4 max-w-md leading-relaxed">
+              <p className="lead mt-4 max-w-md">
                 You don&rsquo;t need an account to run a crawl. Logging in saves each crawl to your
                 history.
               </p>
             </div>
             <Button size="xl" onClick={focusField} className="self-start lg:self-auto">
               Crawl a site
-              <ArrowRight strokeWidth={2} aria-hidden="true" />
+              <ArrowRight />
             </Button>
           </section>
         </GridRow>
@@ -95,30 +91,28 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
 
 function DomainForm({
   inputRef,
-  url,
-  setUrl,
   onSubmit,
   submitting,
   error,
-}: {
-  inputRef: RefObject<HTMLInputElement | null>;
-  url: string;
-  setUrl: (s: string) => void;
-  onSubmit: (e: SubmitEvent) => void;
-  submitting: boolean;
-  error: string | null;
-}) {
+}: HeroProps & { inputRef: RefObject<HTMLInputElement | null> }) {
+  const [url, setUrl] = useState('');
   const [focused, setFocused] = useState(false);
   // pause when focused/non-empty so the fake caret doesn't fight the real one
   const placeholder = useTypingPlaceholder(url === '' && !focused);
   useFocusShortcut(inputRef);
 
   return (
-    <form onSubmit={onSubmit} className="w-full max-w-xl">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(url);
+      }}
+      className="w-full max-w-xl"
+    >
       {/* one row down to 320px; larger text drops the button under the field */}
       <div className="flex flex-wrap gap-2">
         <InputGroup className="h-11 grow basis-44">
-          <InputGroupAddon className="pl-3 font-mono text-sm">https://</InputGroupAddon>
+          <InputGroupAddon className="pl-3 font-mono">https://</InputGroupAddon>
           {/* clips the fake placeholder to the input */}
           <div className="relative flex h-full min-w-0 flex-1">
             <InputGroupInput
@@ -135,7 +129,7 @@ function DomainForm({
               onBlur={() => setFocused(false)}
               aria-invalid={!!error}
               aria-describedby={error ? 'domain-error' : undefined}
-              className="px-0 font-mono text-sm"
+              className="px-0 font-mono"
             />
             {/* fake placeholder: animated demo domain + blinking caret */}
             {url === '' && !focused && (
@@ -221,21 +215,21 @@ const FAILURE_TYPES = [
 // the classifier's vocabulary, so visitors know what a report will say
 function Failures() {
   return (
-    <GridRow inner={['lg:left-[33.333%]', 'lg:left-[66.666%]']}>
+    <GridRow inner={['lg:left-1/3', 'lg:left-2/3']}>
       <section id="failures" className="grid scroll-mt-4 grid-cols-1 lg:grid-cols-12">
-        <div className="cell px-5 py-12 sm:px-8 lg:col-span-4 lg:border-r lg:py-16">
+        <div className="gutter relative py-12 lg:col-span-4 lg:border-r lg:py-16">
           <h2 className="section-title">Why links break</h2>
-          <p className="text-ink-2 text-lead mt-4 max-w-sm leading-relaxed">
+          <p className="lead mt-4 max-w-sm">
             LinkTrace records why each link failed, so you can tell a mistyped URL from an expired
             certificate or a server that&rsquo;s down.
           </p>
         </div>
-        <ul className="cell divide-line divide-y border-t lg:col-span-8 lg:border-t-0">
+        <ul className="relative divide-y border-t lg:col-span-8 lg:border-t-0">
           {FAILURE_TYPES.map((type) => (
             // the sentence wraps under its chip when both don't fit
             <li
               key={type}
-              className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 px-5 py-3.5 sm:px-8"
+              className="gutter flex flex-wrap items-baseline gap-x-4 gap-y-1.5 py-3.5"
             >
               <span className="w-32 shrink-0">
                 <ToneChip tone={pageStatusTone(false, type)}>{failureGroup(type)}</ToneChip>
@@ -268,11 +262,11 @@ const SAMPLE_CHECKS = [
 // the rest of a report, as labelled sample fragments
 function ReportContents() {
   return (
-    <GridRow inner={['lg:left-[33.333%]']}>
+    <GridRow inner={['lg:left-1/3']}>
       <section className="grid grid-cols-1 lg:grid-cols-12">
-        <div className="cell px-5 py-12 sm:px-8 lg:col-span-4 lg:border-r lg:py-16">
+        <div className="gutter relative py-12 lg:col-span-4 lg:border-r lg:py-16">
           <h2 className="section-title">What&rsquo;s in a report</h2>
-          <p className="text-ink-2 text-lead mt-4 max-w-sm leading-relaxed">
+          <p className="lead mt-4 max-w-sm">
             Progress updates live while the crawl runs. When it finishes, the report groups pages by
             section (the first part of the URL path, like /blog) and checks the domain&rsquo;s
             robots.txt, sitemap and HTTPS.
@@ -284,17 +278,17 @@ function ReportContents() {
             crawl found.
           </p>
         </div>
-        <div className="cell border-t lg:col-span-8 lg:border-t-0">
-          <div className="flex items-center justify-between gap-3 px-5 pt-5 sm:px-8">
+        <div className="relative border-t lg:col-span-8 lg:border-t-0">
+          <div className="gutter flex items-center justify-between gap-3 pt-5">
             <h3 className="text-sm font-medium">By section</h3>
             <Badge>Sample</Badge>
           </div>
-          <ul className="divide-line border-line mt-3 divide-y border-y">
+          <ul className="mt-3 divide-y border-y">
             {SAMPLE_SECTIONS.map((r, i) => (
               // score and chip wrap under the name when large text leaves no room
               <li
                 key={r.name}
-                className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 px-5 py-3 sm:px-8"
+                className="gutter flex flex-wrap items-center gap-x-3.5 gap-y-1.5 py-3"
               >
                 <SectionDot colour={SECTION_HEX[i]} />
                 <span className="min-w-0 grow">
@@ -314,20 +308,20 @@ function ReportContents() {
               </li>
             ))}
           </ul>
-          <div className="flex items-center justify-between gap-3 px-5 pt-6 sm:px-8">
+          <div className="gutter flex items-center justify-between gap-3 pt-6">
             <h3 className="text-sm font-medium">Site health</h3>
             <Badge>Sample</Badge>
           </div>
-          <ul className="divide-line border-line mt-3 divide-y border-t">
+          <ul className="mt-3 divide-y border-t">
             {SAMPLE_CHECKS.map((c) => (
-              <li key={c.label} className="flex items-center gap-3 px-5 py-2.5 text-sm sm:px-8">
+              <li key={c.label} className="gutter flex items-center gap-3 py-2.5 text-sm">
                 <span
                   className={`flex size-5 shrink-0 items-center justify-center rounded-full ${c.ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}
                 >
                   {c.ok ? (
-                    <Check className="size-3" strokeWidth={3} aria-hidden="true" />
+                    <Check className="size-3" strokeWidth={3} />
                   ) : (
-                    <X className="size-3" strokeWidth={3} aria-hidden="true" />
+                    <X className="size-3" strokeWidth={3} />
                   )}
                 </span>
                 {c.label}

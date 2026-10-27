@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { BROKEN_HEX, INK_HEX, LINE_STRONG_HEX, SECTION_HEX, TOOLTIP_TEXT } from '../lib/colours';
-import { nodeNote } from '../lib/graph';
+import { buildTree, nodeNote, pathFromRoot } from '../lib/graph';
 import { NodeTooltip } from './ui/NodeTooltip';
 import { ScoreScale } from './ui/ScoreScale';
 import { StatusChip } from './ui/StatusChip';
@@ -54,22 +54,7 @@ const LINKS: [number, number][] = [
   [12, 15],
 ];
 const SECTIONS = ['/blog', '/docs', '/pricing', '/about'];
-// child index -> the page it was found on
-const PARENT = new Map(LINKS.map(([from, to]) => [to, from]));
-
-// node index -> how many pages were first found on it
-const FOUND_HERE = new Map<number, number>();
-for (const [from] of LINKS) {
-  FOUND_HERE.set(from, (FOUND_HERE.get(from) ?? 0) + 1);
-}
-
-function chainTo(i: number): number[] {
-  const chain = [i];
-  for (let cur = PARENT.get(i); cur !== undefined; cur = PARENT.get(cur)) {
-    chain.unshift(cur);
-  }
-  return chain;
-}
+const TREE = buildTree(LINKS.map(([a, b]) => ({ source: NODES[a].path, target: NODES[b].path })));
 
 // when each depth appears, as a fraction of the replay
 const DEPTH_AT = [0, 0.18, 0.42];
@@ -112,9 +97,9 @@ export function SampleCrawl() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3">
-      <section className="cell lg:border-r" aria-label="Sample checked links">
+      <section className="relative lg:border-r" aria-label="Sample checked links">
         <CellHead title="Links checked" />
-        <ul className="divide-line border-line mt-3 divide-y border-y">
+        <ul className="mt-3 divide-y border-y">
           {ROWS.map((r) => (
             <li
               key={r.path}
@@ -139,7 +124,10 @@ export function SampleCrawl() {
         </p>
       </section>
 
-      <section className="cell border-t lg:border-t-0 lg:border-r" aria-label="Sample site graph">
+      <section
+        className="relative border-t lg:border-t-0 lg:border-r"
+        aria-label="Sample site graph"
+      >
         <CellHead title="Site graph" />
         <SampleGraph p={p} />
         <ul className="text-ink-3 text-code flex flex-wrap items-center gap-x-3.5 gap-y-1 px-5 pt-2 pb-4 font-mono forced-color-adjust-none sm:px-6">
@@ -156,7 +144,7 @@ export function SampleCrawl() {
         </ul>
       </section>
 
-      <section className="cell border-t lg:border-t-0" aria-label="Sample average SEO score">
+      <section className="relative border-t lg:border-t-0" aria-label="Sample average SEO score">
         <CellHead title="Average SEO score" />
         <div className="px-5 pt-4 pb-5 sm:px-6">
           <p className="flex items-baseline gap-1.5">
@@ -164,7 +152,7 @@ export function SampleCrawl() {
             <span className="text-ink-3 text-xl font-semibold">/100</span>
           </p>
           <ScoreScale score={score} />
-          <dl className="num divide-line border-line mt-6 divide-y border-y text-sm">
+          <dl className="num mt-6 divide-y border-y text-sm">
             <div className="flex justify-between py-2.5">
               <dt className="text-ink-3">Pages checked</dt>
               <dd className="text-label font-mono">{checked}</dd>
@@ -225,12 +213,10 @@ function SampleGraph({ p }: { p: number }) {
 
   const shown = (d: number) => p >= DEPTH_AT[d];
   // the hovered page's path from the homepage stays lit; everything else steps back
-  const lit = hovered === null ? null : new Set(chainTo(hovered));
+  const lit = hovered === null ? null : new Set(pathFromRoot(TREE, NODES[hovered].path));
   // every link is a parent -> child edge, so a lit child means its incoming link is on the path
-  const linkLit = (child: number) => !!lit?.has(child);
+  const linkLit = (child: number) => !!lit?.has(NODES[child].path);
   const tipNode = NODES[tip];
-  const tipParent = PARENT.get(tip);
-  const tipFound = FOUND_HERE.get(tip) ?? 0;
   return (
     <div className="relative">
       <svg
@@ -259,15 +245,15 @@ function SampleGraph({ p }: { p: number }) {
         </g>
         {NODES.map((n, i) => {
           const r = dotRadius(n.d);
-          const parent = PARENT.get(i);
+          const parent = TREE.parent.get(n.path);
           const on = shown(n.d);
-          const dim = lit && !lit.has(i);
+          const dim = lit && !lit.has(n.path);
           return (
             <g
               key={i}
               role="img"
               aria-label={`${n.path}, ${n.fail ?? '200 OK'}, ${
-                parent === undefined ? 'the homepage' : `first found on ${NODES[parent].path}`
+                parent === undefined ? 'the homepage' : `first found on ${parent}`
               }`}
               onMouseEnter={() => onHover(i)}
               className="cursor-pointer"
@@ -314,8 +300,8 @@ function SampleGraph({ p }: { p: number }) {
         detailClass={tipNode.fail ? TOOLTIP_TEXT.poor : TOOLTIP_TEXT.good}
         note={nodeNote(
           tipNode.d,
-          tipParent === undefined ? undefined : NODES[tipParent].path,
-          tipFound,
+          TREE.parent.get(tipNode.path),
+          TREE.children.get(tipNode.path)?.length ?? 0,
         )}
       />
     </div>

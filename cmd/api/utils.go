@@ -1,20 +1,21 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"log"
+	"maps"
 	"mime"
 	"net"
 	"net/http"
 	"net/netip"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Tom-the-Bomb/linktrace/internal/auth"
-	"github.com/Tom-the-Bomb/linktrace/internal/site"
 	"github.com/Tom-the-Bomb/linktrace/internal/store"
 )
 
@@ -28,6 +29,12 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // writes a JSON {"error": msg} body with the given status.
 func httpError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// logs err and writes a 500 telling the user what failed, e.g. action "start the crawl".
+func serverError(w http.ResponseWriter, action string, err error) {
+	log.Printf("[api] %s: %v", action, err)
+	httpError(w, http.StatusInternalServerError, "Couldn't "+action+". Try again in a moment.")
 }
 
 // truncates an id to its first 8 chars for logging, guarding ids shorter than that.
@@ -51,15 +58,9 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-// returns the client IP for rate limiting. Behind Caddy the socket address is always the proxy,
-// so the LAST X-Forwarded-For hop is used. Caddy appends the real peer, so a caller who sends
-// their own header gets it overwritten in that position. Taking the first would be spoofable.
-//
-// This assumes exactly one trusted proxy and that nothing reaches the API directly (in prod only
-// Caddy publishes ports). Publishing 8080, or adding a CDN in front, invalidates that: with a
-// CDN the real client moves one position further left.
-//
-// An IPv6 address is cut to its /64, since one subscriber usually holds the whole block.
+// returns the client IP for rate limiting: the X-Forwarded-For that Caddy sets to the visitor's
+// address (see trusted_proxies in the Caddyfile), else the socket peer. Assumes only Caddy can
+// reach the API. An IPv6 address is cut to its /64, since one subscriber usually holds the block.
 func clientIP(r *http.Request) string {
 	ip := r.RemoteAddr
 	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
@@ -75,8 +76,7 @@ func clientIP(r *http.Request) string {
 }
 
 // sets CORS headers for the configured frontend origin(s). origins is a comma-separated
-// allowlist (e.g. "http://localhost:5173,http://10.0.0.168:5173" for LAN mobile testing); the
-// request's Origin is echoed back only when it's on the list. Cookies require an EXACT origin
+// allowlist; the request's Origin is echoed back only when it's on the list. Cookies require an EXACT origin
 // (never "*") plus Allow-Credentials, and OPTIONS preflights short-circuit with 204.
 func corsMiddleware(origins string) func(http.Handler) http.Handler {
 	allowed := map[string]bool{}
@@ -154,7 +154,7 @@ func (s *Server) allow(key string, limit int) bool {
 func (s *Server) requireJob(w http.ResponseWriter, id string) *store.Job {
 	job, err := s.store.GetJob(id)
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "Couldn't load this crawl. Try again in a moment.")
+		serverError(w, "load this crawl", err)
 		return nil
 	}
 	if job == nil {
@@ -225,14 +225,12 @@ func isLive(job *store.Job) bool {
 func (s *Server) loadPagesAndAudits(w http.ResponseWriter, id string) (pages []store.PageResult, audits []store.SEOAudit, ok bool) {
 	pages, err := s.store.ListPageResults(id)
 	if err != nil {
-		log.Printf("loadPagesAndAudits: ListPageResults(%s): %v", id, err)
-		httpError(w, http.StatusInternalServerError, "results lookup failed")
+		serverError(w, "load this report", err)
 		return nil, nil, false
 	}
 	audits, err = s.store.ListSEOAudits(id)
 	if err != nil {
-		log.Printf("loadPagesAndAudits: ListSEOAudits(%s): %v", id, err)
-		httpError(w, http.StatusInternalServerError, "audits lookup failed")
+		serverError(w, "load this report", err)
 		return nil, nil, false
 	}
 	return pages, audits, true
@@ -245,23 +243,6 @@ func scoreByURL(audits []store.SEOAudit) map[string]int {
 		m[a.URL] = a.Score
 	}
 	return m
-}
-
-// converts site.Audit to store.SiteAudit (keeps store from importing site).
-func toStoreSiteAudit(a site.Audit) store.SiteAudit {
-	return store.SiteAudit{
-		RobotsFound:       a.RobotsFound,
-		RobotsDisallowAll: a.RobotsDisallowAll,
-		CrawlDelay:        a.CrawlDelay,
-		SitemapFound:      a.SitemapFound,
-		SitemapURL:        a.SitemapURL,
-		SitemapURLCount:   a.SitemapURLCount,
-		SitemapURLs:       a.SitemapURLs,
-		IsHTTPS:           a.IsHTTPS,
-		HTTPSRedirect:     a.HTTPSRedirect,
-		CertValid:         a.CertValid,
-		WWWCanonical:      a.WWWCanonical,
-	}
 }
 
 // builds the report header: totals + average SEO score + top recurring issue codes.
@@ -287,28 +268,11 @@ func computeOverall(pages []store.PageResult, audits []store.SEOAudit) map[strin
 		avg = scoreSum / len(audits)
 	}
 
-	// top 5 issues by frequency
-	type kv struct {
-		k string
-		v int
-	}
-	ranked := make([]kv, 0, len(issueCounts))
-	for k, v := range issueCounts {
-		ranked = append(ranked, kv{k, v})
-	}
-	sort.Slice(ranked, func(i, j int) bool {
-		if ranked[i].v != ranked[j].v {
-			return ranked[i].v > ranked[j].v
-		}
-		return ranked[i].k < ranked[j].k
+	// the five most frequent issues; [] rather than null, since the UI reads .length
+	ranked := slices.SortedFunc(maps.Keys(issueCounts), func(a, b string) int {
+		return cmp.Or(issueCounts[b]-issueCounts[a], strings.Compare(a, b))
 	})
-	top := []string{}
-	for i, r := range ranked {
-		if i >= 5 {
-			break
-		}
-		top = append(top, r.k)
-	}
+	top := append([]string{}, ranked[:min(5, len(ranked))]...)
 
 	return map[string]any{
 		"total_pages":   len(pages),

@@ -1,5 +1,3 @@
-import * as React from 'react';
-
 import { Tabs as TabsPrimitive } from 'radix-ui';
 
 import { SegmentCount, segmentItem, segmentList } from '@/components/ui/toggle-group';

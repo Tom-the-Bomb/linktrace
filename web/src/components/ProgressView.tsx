@@ -48,7 +48,7 @@ export function ProgressView({
 
   return (
     <section>
-      <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-8 pb-8 sm:px-8 sm:pt-10">
+      <div className="gutter flex flex-wrap items-start justify-between gap-3 py-8 sm:pt-10">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="page-title truncate">{hostOf(url)}</h1>
@@ -71,11 +71,7 @@ export function ProgressView({
         <div className="-mx-2 flex flex-wrap items-center gap-1">
           {isDone && onRecrawl && (
             <Button variant="ghost" size="quiet" onClick={onRecrawl} disabled={recrawling}>
-              {recrawling ? (
-                <Spinner aria-hidden="true" />
-              ) : (
-                <RotateCw strokeWidth={2} aria-hidden="true" />
-              )}
+              {recrawling ? <Spinner aria-hidden="true" /> : <RotateCw />}
               Crawl again
             </Button>
           )}
@@ -86,16 +82,12 @@ export function ProgressView({
             aria-live="polite"
             title="Anyone with the link can view this report"
           >
-            {copied ? (
-              <Check className="text-ok-fg" strokeWidth={2.25} aria-hidden="true" />
-            ) : (
-              <Link strokeWidth={2} aria-hidden="true" />
-            )}
+            {copied ? <Check className="text-ok-fg" strokeWidth={2.25} /> : <Link />}
             {copied ? 'Link copied' : 'Copy link'}
           </Button>
           <Button variant="ghost" size="quiet" asChild>
             <a href={url} target="_blank" rel="noreferrer">
-              <ExternalLink strokeWidth={2} aria-hidden="true" />
+              <ExternalLink />
               Open site
             </a>
           </Button>
@@ -106,7 +98,7 @@ export function ProgressView({
               onClick={onDelete}
               className="hover:bg-bad-bg hover:text-bad-fg"
             >
-              <Trash2 strokeWidth={2} aria-hidden="true" />
+              <Trash2 />
               Delete
             </Button>
           )}
@@ -114,7 +106,7 @@ export function ProgressView({
       </div>
 
       {shortOfDone && (
-        <div className="-mt-4 px-5 pb-8 sm:px-8">
+        <div className="gutter -mt-4 pb-8">
           <Bar discovered={discovered} healthy={healthy} rotten={rotten} />
         </div>
       )}
@@ -123,7 +115,7 @@ export function ProgressView({
       <div
         className={`panel transition-[height,opacity,display] transition-discrete duration-400 ease-in-out [interpolate-size:allow-keywords] ${isDone ? 'hidden h-0 overflow-hidden opacity-0' : ''}`}
       >
-        <div className="px-5 py-5 sm:px-8">
+        <div className="p-5 sm:px-8">
           <div className="flex items-baseline justify-between gap-4">
             <p className="text-body font-medium">
               Checking <span className="num">{checked.toLocaleString()}</span>
@@ -136,7 +128,7 @@ export function ProgressView({
             <Bar discovered={discovered} healthy={healthy} rotten={rotten} />
           </div>
         </div>
-        <dl className="border-line [&>div]:border-line grid grid-cols-2 border-t sm:grid-cols-4 [&>div]:px-5 [&>div]:py-4 sm:[&>div]:px-8 sm:[&>div:not(:last-child)]:border-r max-sm:[&>div:nth-child(-n+2)]:border-b [&>div:nth-child(odd)]:border-r">
+        <dl className="grid grid-cols-2 border-t sm:grid-cols-4 [&>div]:px-5 [&>div]:py-4 sm:[&>div]:px-8 sm:[&>div:not(:last-child)]:border-r max-sm:[&>div:nth-child(-n+2)]:border-b [&>div:nth-child(odd)]:border-r">
           <Count label="Found" value={discovered} />
           <Count
             label="Checked"
@@ -146,7 +138,7 @@ export function ProgressView({
           <Count label="Healthy" value={healthy} dot="bg-ok-dot" />
           <Count label="Broken" value={rotten} dot="bg-bad-dot" tone="text-bad-fg" />
         </dl>
-        <p className="border-line text-ink-3 text-label border-t px-5 py-3 sm:px-8">
+        <p className="text-ink-3 text-label gutter border-t py-3">
           This page updates as pages are checked, and the full report appears when the crawl
           finishes.
         </p>
@@ -189,14 +181,17 @@ function Bar({
 // growth in checked since the previous poll, for the live "+N" beside the count. Keyed on the
 // status object, which every poll replaces, so a stalled crawl drops back to no delta.
 function useCheckedDelta(status: Status | null): number {
-  const prev = useRef(0);
+  const prev = useRef<Status | null>(null);
   const [delta, setDelta] = useState(0);
   useEffect(() => {
     if (!status) {
       return;
     }
-    setDelta(isTerminalStatus(status.status) ? 0 : Math.max(0, status.checked - prev.current));
-    prev.current = status.checked;
+    // only against an earlier poll of the same running crawl, so the first one isn't "+everything"
+    const last = prev.current;
+    const live = last?.job_id === status.job_id && !isTerminalStatus(status.status);
+    setDelta(live ? Math.max(0, status.checked - last.checked) : 0);
+    prev.current = status;
   }, [status]);
   return delta;
 }
@@ -237,7 +232,7 @@ function Count({
 function ProgressSkeleton() {
   return (
     <section aria-busy="true" aria-label="Loading crawl">
-      <div className="px-5 pt-10 pb-8 sm:px-8">
+      <div className="gutter pt-10 pb-8">
         <div className="rounded-control bg-line h-10 w-64 animate-pulse" />
       </div>
       <div className="panel h-42 animate-pulse" />

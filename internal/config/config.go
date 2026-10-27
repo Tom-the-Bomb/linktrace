@@ -32,7 +32,7 @@ func Load() Config {
 		MaxPerCategory:      envInt("MAX_PER_CATEGORY", 1000),
 		RatePerMin:          envInt("RATE_PER_MIN", 300),
 		WorkerCount:         envInt("WORKER_COUNT", 100),
-		ShardCount:          envInt("SHARD_COUNT", 5),
+		ShardCount:          max(1, envInt("SHARD_COUNT", 5)),
 		FrontendOrigin:      env("FRONTEND_ORIGIN", "http://localhost:5173"),
 		CookieSecure:        envBool("COOKIE_SECURE", false),
 		AllowPrivateTargets: envBool("ALLOW_PRIVATE_TARGETS", false),

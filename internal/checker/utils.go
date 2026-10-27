@@ -135,7 +135,7 @@ func isSoft404(body []byte) bool {
 }
 
 // returns a lowercased concatenation of the text nodes inside <body>, skipping
-// non-rendered subtrees (script/style/template/noscript). ok=false if the doc can't be parsed.
+// non-rendered subtrees. ok=false if the doc can't be parsed.
 func visibleBodyText(body []byte) (string, bool) {
 	doc, err := html.Parse(bytes.NewReader(body))
 	if err != nil {

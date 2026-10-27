@@ -1,13 +1,8 @@
 import { CircleAlert, CircleCheck, CircleX } from 'lucide-react';
 
+import type { JobStatus } from '../../api';
 import type { Tone } from '../../lib/colours';
-import {
-  isTerminalStatus,
-  jobStatusLabel,
-  jobStatusTone,
-  pageStatusLabel,
-  pageStatusTone,
-} from '../../lib/status';
+import { JOB_STATUS, isTerminalStatus, pageStatusLabel, pageStatusTone } from '../../lib/status';
 import { Badge } from './badge';
 import { Spinner } from './spinner';
 
@@ -18,7 +13,7 @@ export function ToneChip({ tone, children }: { tone: Tone; children: React.React
   const Icon = TONE_ICON[tone];
   return (
     <Badge variant={tone} mono>
-      <Icon className="size-3" strokeWidth={2.5} aria-hidden="true" />
+      <Icon className="size-3" strokeWidth={2.5} />
       {children}
     </Badge>
   );
@@ -40,11 +35,12 @@ export function StatusChip({
 }
 
 // a crawl's state, led by a spinner while it's still running
-export function JobStatusChip({ status }: { status: string }) {
+export function JobStatusChip({ status }: { status: JobStatus }) {
+  const { label, tone } = JOB_STATUS[status];
   return (
-    <Badge variant={jobStatusTone(status)}>
+    <Badge variant={tone}>
       {!isTerminalStatus(status) && <Spinner className="size-3" aria-hidden="true" />}
-      {jobStatusLabel(status)}
+      {label}
     </Badge>
   );
 }

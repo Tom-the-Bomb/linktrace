@@ -32,19 +32,17 @@ const (
 )
 
 type CheckResult struct {
-	StatusCode    int
-	ResponseTime  int
-	IsAlive       bool
-	ErrorType     string
-	RedirectChain []string
-	ContentType   string
-	Body          []byte
-	FinalURL      string
-	RetryAfter    time.Duration // parsed Retry-After header on a 429 (0 if absent/unparseable)
+	StatusCode   int
+	ResponseTime int
+	IsAlive      bool
+	ErrorType    string
+	Body         []byte
+	FinalURL     string
+	RetryAfter   time.Duration // parsed Retry-After header on a 429 (0 if absent/unparseable)
 }
 
 // holds only the per-request timeout; each Check builds its own client so the
-// CheckRedirect hook can record that request's redirect chain without shared state.
+// CheckRedirect hook's loop flag isn't shared between requests.
 type Checker struct {
 	timeout time.Duration
 }
@@ -67,13 +65,11 @@ func (c *Checker) Check(rawURL string) CheckResult {
 	}
 	httpx.SetCheckerHeaders(req)
 
-	// looped is set when the hop limit is hit. ErrUseLastResponse is deliberate: returning a real
-	// error here would discard the response (and the chain) that the report wants to show.
-	var chain []string
+	// looped is set when the hop limit is hit. ErrUseLastResponse keeps the last response, where a
+	// real error would discard it.
 	var looped bool
 	client := httpx.NewClient(c.timeout, true)
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		chain = append(chain, req.URL.String())
+	client.CheckRedirect = func(_ *http.Request, via []*http.Request) error {
 		if len(via) >= maxRedirects {
 			looped = true
 			return http.ErrUseLastResponse
@@ -90,9 +86,7 @@ func (c *Checker) Check(rawURL string) CheckResult {
 	defer resp.Body.Close()
 
 	res.StatusCode = resp.StatusCode
-	res.ContentType = resp.Header.Get("Content-Type")
 	res.FinalURL = resp.Request.URL.String()
-	res.RedirectChain = chain
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 
@@ -109,7 +103,7 @@ func (c *Checker) Check(rawURL string) CheckResult {
 	case resp.StatusCode >= 400:
 		res.ErrorType = ErrHTTP4xx
 	default: // 2xx/3xx
-		isHTML := strings.Contains(res.ContentType, "text/html")
+		isHTML := strings.Contains(resp.Header.Get("Content-Type"), "text/html")
 		if isHTML && isSoft404(body) {
 			res.ErrorType = ErrSoft404
 		} else {

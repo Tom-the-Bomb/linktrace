@@ -11,12 +11,12 @@ func (c *Cache) ctx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 2*time.Second)
 }
 
-// adds delta to field of the progress hash for jobID and refreshes its TTL.
-func (c *Cache) bump(jobID, field string, delta int64) error {
+// increments field of the progress hash for jobID and refreshes its TTL.
+func (c *Cache) bump(jobID, field string) error {
 	ctx, cancel := c.ctx()
 	defer cancel()
 
-	if err := c.rdb.HIncrBy(ctx, progressKey(jobID), field, delta).Err(); err != nil {
+	if err := c.rdb.HIncrBy(ctx, progressKey(jobID), field, 1).Err(); err != nil {
 		return err
 	}
 	return c.rdb.Expire(ctx, progressKey(jobID), progressTTL).Err()

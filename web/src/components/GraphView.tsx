@@ -115,6 +115,8 @@ export const GraphView = memo(function GraphView({
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 800, height: 520 });
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  // the last hovered page, so the tooltip keeps its text while it fades out
+  const [tipId, setTipId] = useState<string | null>(null);
   // the search match Enter flew to; traced like a hover but without a tooltip
   const [jumpId, setJumpId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -180,10 +182,10 @@ export const GraphView = memo(function GraphView({
   useEffect(() => {
     setGraph((prev) => {
       const byId = new Map<string, FgNode>(prev.nodes.map((n) => [n.id, n]));
-      const parentOf = new Map((data.edges ?? []).map((e) => [e.target, e.source]));
+      const parentOf = new Map(data.edges.map((e) => [e.target, e.source]));
       let nodesChanged = false;
       const nodes = prev.nodes.slice();
-      for (const incoming of data.nodes ?? []) {
+      for (const incoming of data.nodes) {
         const existing = byId.get(incoming.id);
         if (existing) {
           existing.is_alive = incoming.is_alive;
@@ -208,7 +210,7 @@ export const GraphView = memo(function GraphView({
       const edgeKeys = new Set(prev.links.map((l) => linkKey(idOf(l.source), idOf(l.target))));
       let linksChanged = false;
       const links = prev.links.slice();
-      for (const e of data.edges ?? []) {
+      for (const e of data.edges) {
         const k = linkKey(e.source, e.target);
         if (!edgeKeys.has(k)) {
           links.push({ source: e.source, target: e.target });
@@ -346,6 +348,8 @@ export const GraphView = memo(function GraphView({
     return lit.links.has(linkKey(idOf(l.source), idOf(l.target)));
   };
   const hovered = hoveredId ? nodeById.get(hoveredId) : undefined;
+  const tip = tipId ? nodeById.get(tipId) : undefined;
+  const tipParent = tip && tree.parent.get(tip.id);
 
   return (
     <section className="panel">
@@ -378,7 +382,7 @@ export const GraphView = memo(function GraphView({
         </div>
         <InputGroup className="sm:w-72">
           <InputGroupAddon>
-            <Search aria-hidden="true" />
+            <Search />
           </InputGroupAddon>
           <InputGroupInput
             type="search"
@@ -435,6 +439,7 @@ export const GraphView = memo(function GraphView({
           onNodeHover={(node) => {
             setHoveredId(node ? (node as FgNode).id : null);
             if (node) {
+              setTipId((node as FgNode).id);
               setJumpId(null);
             }
           }}
@@ -505,15 +510,15 @@ export const GraphView = memo(function GraphView({
         <NodeTooltip
           ref={tooltipRef}
           visible={!!hovered}
-          path={hovered ? pathOf(hovered.url) : ''}
-          detail={hovered ? tooltipDetail(hovered) : ''}
-          detailClass={hovered ? TOOLTIP_CLASS[healthKey(hovered)] : ''}
+          path={tip ? pathOf(tip.url) : ''}
+          detail={tip ? tooltipDetail(tip) : ''}
+          detailClass={tip ? TOOLTIP_CLASS[healthKey(tip)] : ''}
           note={
-            hovered
+            tip
               ? nodeNote(
-                  hovered.depth,
-                  tree.parent.has(hovered.id) ? pathOf(tree.parent.get(hovered.id)!) : undefined,
-                  tree.children.get(hovered.id)?.length ?? 0,
+                  tip.depth,
+                  tipParent && pathOf(tipParent),
+                  tree.children.get(tip.id)?.length ?? 0,
                 )
               : undefined
           }
@@ -521,18 +526,18 @@ export const GraphView = memo(function GraphView({
 
         <div className="rounded-control bg-panel shadow-control absolute right-3 bottom-3 flex flex-col overflow-hidden">
           <ZoomButton label="Zoom in" onClick={() => zoomBy(1.6)}>
-            <ZoomIn className="size-4" strokeWidth={2} />
+            <ZoomIn className="size-4" />
           </ZoomButton>
           <ZoomButton label="Zoom out" onClick={() => zoomBy(1 / 1.6)}>
-            <ZoomOut className="size-4" strokeWidth={2} />
+            <ZoomOut className="size-4" />
           </ZoomButton>
           <ZoomButton label="Fit the whole site" onClick={fitView}>
-            <Maximize className="size-4" strokeWidth={2} />
+            <Maximize className="size-4" />
           </ZoomButton>
         </div>
       </div>
 
-      <footer className="border-line flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t px-5 py-3 sm:px-8">
+      <footer className="gutter flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t py-3">
         <Legend
           mode={mode}
           colourFor={colourFor}
@@ -569,7 +574,7 @@ function ZoomButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="border-line text-ink-2 hover:bg-sunken hover:text-ink flex size-8 items-center justify-center border-b transition last:border-0"
+      className="text-ink-2 hover:bg-sunken hover:text-ink flex size-8 items-center justify-center border-b transition last:border-0"
     >
       {children}
     </button>

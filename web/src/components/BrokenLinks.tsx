@@ -80,7 +80,7 @@ export function BrokenLinks({
         right={
           broken.length > 0 && (
             <Button variant="secondary" onClick={exportCsv}>
-              <Download strokeWidth={2} aria-hidden="true" />
+              <Download />
               Download CSV
             </Button>
           )
@@ -88,8 +88,8 @@ export function BrokenLinks({
       />
 
       {broken.length === 0 ? (
-        <div className="panel text-ink-2 text-body flex items-center gap-3 px-5 py-5 sm:px-8">
-          <CircleCheck className="text-ok-dot size-5 shrink-0" strokeWidth={2} aria-hidden="true" />
+        <div className="panel text-ink-2 text-body flex items-center gap-3 p-5 sm:px-8">
+          <CircleCheck className="text-ok-dot size-5 shrink-0" />
           No broken links found.
         </div>
       ) : (
@@ -114,13 +114,13 @@ export function BrokenLinks({
             </div>
           )}
 
-          <ul className="divide-line divide-y">
+          <ul className="divide-y">
             {paged.map((r) => {
               const parent = foundOn.get(r.url);
               return (
                 <li
                   key={r.url}
-                  className="hover:bg-sunken grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-1 px-5 py-3.5 transition sm:grid-cols-[minmax(0,1fr)_140px_8rem] sm:items-center sm:px-8"
+                  className="hover:bg-sunken gutter grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-1 py-3.5 transition sm:grid-cols-[minmax(0,1fr)_140px_8rem] sm:items-center"
                 >
                   <div className="min-w-0">
                     <button
@@ -131,11 +131,7 @@ export function BrokenLinks({
                       {pathOf(r.url)}
                     </button>
                     <p className="text-ink-3 text-label mt-0.5 flex min-w-0 items-center gap-1.5">
-                      <CornerDownRight
-                        className="size-3.5 shrink-0"
-                        strokeWidth={2}
-                        aria-hidden="true"
-                      />
+                      <CornerDownRight className="size-3.5 shrink-0" />
                       {parent ? (
                         <>
                           <span className="shrink-0">First found on</span>
@@ -164,7 +160,7 @@ export function BrokenLinks({
                         className="tap-area text-link-600 text-label inline-flex items-center gap-1 whitespace-nowrap underline-offset-4 hover:underline"
                       >
                         Wayback copy
-                        <ArrowUpRight className="size-3.5" strokeWidth={2} aria-hidden="true" />
+                        <ArrowUpRight className="size-3.5" />
                       </a>
                     ) : (
                       <span className="text-ink-3 text-label">No saved copy</span>

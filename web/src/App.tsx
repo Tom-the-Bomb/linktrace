@@ -1,4 +1,4 @@
-import { type ComponentType, type ReactNode } from 'react';
+import { type ComponentType } from 'react';
 
 import { Navigate, Outlet, RouterProvider, createBrowserRouter } from 'react-router-dom';
 
@@ -8,10 +8,10 @@ import { fetchTick } from './hooks/useJobReport';
 import HomePage from './pages/HomePage';
 
 // overflow-x-clip trims edge crosshairs without creating a scroll container (sticky still works)
-function Shell({ children }: { children: ReactNode }) {
+function Shell() {
   return (
     <div className="flex min-h-dvh flex-col overflow-x-clip">
-      {children}
+      <Outlet />
       <Footer />
     </div>
   );
@@ -25,28 +25,15 @@ const page = (load: () => Promise<{ default: ComponentType }>) => async () => ({
 
 const router = createBrowserRouter([
   {
-    Component: () => (
-      <Shell>
-        <Outlet />
-      </Shell>
-    ),
+    Component: Shell,
     // no footer while a page loads: one that appears later doesn't shift, one that gets pushed down does
     HydrateFallback: () => <div className="frame min-h-dvh" />,
     children: [
       { index: true, Component: HomePage },
       { path: 'auth', lazy: page(() => import('./pages/AuthPage')) },
       {
-        path: 'history',
-        lazy: async () => {
-          const { default: HistoryPage } = await import('./pages/HistoryPage');
-          return {
-            Component: () => (
-              <Protected>
-                <HistoryPage />
-              </Protected>
-            ),
-          };
-        },
+        Component: Protected,
+        children: [{ path: 'history', lazy: page(() => import('./pages/HistoryPage')) }],
       },
       {
         path: 'jobs/:jobId',

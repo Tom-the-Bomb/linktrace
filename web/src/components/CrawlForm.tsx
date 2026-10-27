@@ -1,4 +1,4 @@
-import { type SubmitEvent, useRef } from 'react';
+import { useRef, useState } from 'react';
 
 import { Globe } from 'lucide-react';
 
@@ -9,23 +9,28 @@ import { Kbd } from './ui/kbd';
 import { Spinner } from './ui/spinner';
 
 interface Props {
-  url: string;
-  setUrl: (s: string) => void;
-  onSubmit: (e: SubmitEvent) => void;
+  onSubmit: (url: string) => void;
   submitting: boolean;
   // extra controls beside submit (stop/back button)
   children?: React.ReactNode;
 }
 
 // compact launcher in the sticky header of /jobs/:id and /history
-export function CrawlForm({ url, setUrl, onSubmit, submitting, children }: Props) {
+export function CrawlForm({ onSubmit, submitting, children }: Props) {
+  const [url, setUrl] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   useFocusShortcut(inputRef);
   return (
-    <form onSubmit={onSubmit} className="flex w-full items-center gap-2 md:max-w-lg md:flex-1">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(url);
+      }}
+      className="flex w-full items-center gap-2 md:max-w-lg md:flex-1"
+    >
       <InputGroup className="flex-1">
         <InputGroupAddon>
-          <Globe strokeWidth={2} aria-hidden="true" />
+          <Globe />
         </InputGroupAddon>
         <InputGroupInput
           ref={inputRef}

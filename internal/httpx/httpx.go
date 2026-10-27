@@ -136,7 +136,7 @@ func NewClient(timeout time.Duration, followRedirects bool) *http.Client {
 	return c
 }
 
-// gETs rawURL with the bot UA and returns the body (capped at limit bytes) and status.
+// GETs rawURL with the bot UA and returns the body (capped at limit bytes) and status.
 func Fetch(ctx context.Context, client *http.Client, rawURL string, limit int64) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {

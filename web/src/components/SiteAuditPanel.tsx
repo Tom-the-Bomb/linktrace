@@ -17,10 +17,10 @@ export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO 
       <div className="panel grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <div className="p-5 sm:p-8">
           <h3 className="text-body font-semibold tracking-tight">Domain</h3>
-          <ul className="divide-line mt-2 divide-y">
-            <Check2 ok={audit.robots_found} label="robots.txt found" />
-            <Check2 ok={!audit.robots_disallow_all} label="robots.txt allows crawling" />
-            <Check2
+          <ul className="mt-2 divide-y">
+            <CheckRow ok={audit.robots_found} label="robots.txt found" />
+            <CheckRow ok={!audit.robots_disallow_all} label="robots.txt allows crawling" />
+            <CheckRow
               ok={audit.sitemap_found}
               label={
                 audit.sitemap_found
@@ -28,10 +28,10 @@ export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO 
                   : 'sitemap.xml found'
               }
             />
-            <Check2 ok={audit.is_https} label="HTTPS available" />
-            <Check2 ok={audit.https_redirect} label="HTTP redirects to HTTPS" />
-            <Check2 ok={audit.cert_valid} label="TLS certificate valid" />
-            <Check2
+            <CheckRow ok={audit.is_https} label="HTTPS available" />
+            <CheckRow ok={audit.https_redirect} label="HTTP redirects to HTTPS" />
+            <CheckRow ok={audit.cert_valid} label="TLS certificate valid" />
+            <CheckRow
               ok={audit.www_canonical === 'www' || audit.www_canonical === 'apex'}
               label={`www canonicalisation: ${audit.www_canonical}`}
             />
@@ -44,11 +44,11 @@ export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO 
         </div>
 
         {seo && seo.pages_audited > 0 && (
-          <div className="border-line bg-sunken/50 border-t p-5 sm:p-8 lg:border-t-0 lg:border-l">
+          <div className="bg-sunken/50 border-t p-5 sm:p-8 lg:border-t-0 lg:border-l">
             <h3 className="text-body font-semibold tracking-tight">
               Across <span className="num">{seo.pages_audited.toLocaleString()}</span> audited pages
             </h3>
-            <ul className="divide-line [&>li]:border-line mt-2 grid grid-cols-1 gap-x-8 divide-y sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-1 xl:grid-cols-2 sm:[&>li]:border-b">
+            <ul className="mt-2 grid grid-cols-1 gap-x-8 divide-y sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-1 xl:grid-cols-2 sm:[&>li]:border-b">
               <Stat
                 label="Duplicate title groups"
                 value={seo.duplicate_title_sets}
@@ -106,17 +106,14 @@ export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO 
   );
 }
 
-function Check2({ ok, label }: { ok: boolean; label: string }) {
+function CheckRow({ ok, label }: { ok: boolean; label: string }) {
+  const Icon = ok ? Check : X;
   return (
     <li className="flex items-center gap-3 py-2.5 text-sm">
       <span
         className={`flex size-5 shrink-0 items-center justify-center rounded-md ${ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}
       >
-        {ok ? (
-          <Check className="size-3.5" strokeWidth={3} />
-        ) : (
-          <X className="size-3.5" strokeWidth={3} />
-        )}
+        <Icon className="size-3.5" strokeWidth={3} />
       </span>
       <span>{label}</span>
       <span className="sr-only">{ok ? 'passed' : 'failed'}</span>

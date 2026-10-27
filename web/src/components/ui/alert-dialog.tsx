@@ -1,5 +1,3 @@
-import * as React from 'react';
-
 import { AlertDialog as AlertDialogPrimitive } from 'radix-ui';
 
 import { Button } from '@/components/ui/button';
@@ -42,7 +40,7 @@ function AlertDialogFooter({ className, ...props }: React.ComponentProps<'div'>)
     <div
       data-slot="alert-dialog-footer"
       className={cn(
-        'rounded-b-panel border-line bg-sunken/60 flex justify-end gap-2 border-t px-6 py-4',
+        'rounded-b-panel bg-sunken/60 flex justify-end gap-2 border-t px-6 py-4',
         className,
       )}
       {...props}

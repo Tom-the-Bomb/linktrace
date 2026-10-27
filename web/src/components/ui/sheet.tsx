@@ -1,5 +1,3 @@
-import * as React from 'react';
-
 import { Dialog as SheetPrimitive } from 'radix-ui';
 
 import { cn } from '@/lib/utils';
@@ -15,7 +13,6 @@ function SheetClose(props: React.ComponentProps<typeof SheetPrimitive.Close>) {
 // a panel that slides in from the right over a dimmed page
 function SheetContent({
   className,
-  children,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content>) {
   return (
@@ -31,9 +28,7 @@ function SheetContent({
           className,
         )}
         {...props}
-      >
-        {children}
-      </SheetPrimitive.Content>
+      />
     </SheetPrimitive.Portal>
   );
 }

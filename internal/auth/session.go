@@ -9,8 +9,7 @@ import (
 
 const CookieName = "sid"
 
-// SessionTTL is the single source of truth for session lifetime; the cookie MaxAge and the
-// Redis session TTL (cache.sessionTTL) both derive from it.
+// SessionTTL is the session lifetime: both the cookie's MaxAge and the Redis session's TTL.
 const SessionTTL = 7 * 24 * time.Hour
 
 // secureCookie is the Secure attribute on every cookie we set: off for local HTTP, on behind HTTPS.

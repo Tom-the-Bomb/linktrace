@@ -125,7 +125,7 @@ func handleMeta(a *Audit, n *html.Node) {
 //	warning = suboptimal (too-long title, missing meta desc, no canonical)
 //	info    = nice-to-have (no OG, no JSON-LD, no viewport)
 func findIssues(a *Audit, visibleWords int) []Issue {
-	var issues []Issue
+	issues := []Issue{}
 	add := func(code, msg, sev string) {
 		issues = append(issues, Issue{Code: code, Message: msg, Severity: sev})
 	}
@@ -253,19 +253,6 @@ func score(issues []Issue) int {
 		}
 	}
 	return max(0, s)
-}
-
-// countWords counts whitespace-separated tokens without allocating a slice (unlike strings.Fields).
-func countWords(s string) int {
-	n, inWord := 0, false
-	for _, r := range s {
-		if unicode.IsSpace(r) {
-			inWord = false
-		} else if !inWord {
-			inWord, n = true, n+1
-		}
-	}
-	return n
 }
 
 // lowercases s and splits it into runs of letters.

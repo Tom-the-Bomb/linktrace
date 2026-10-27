@@ -1,6 +1,4 @@
-import { useEffect } from 'react';
-
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 
 import { AuthForm } from '../components/AuthForm';
 import { SplitPage } from '../components/SplitPage';
@@ -13,11 +11,9 @@ export default function AuthPage() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
 
-  useEffect(() => {
-    if (!loading && user) {
-      navigate('/', { replace: true });
-    }
-  }, [loading, user, navigate]);
+  if (!loading && user) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <SplitPage
@@ -25,7 +21,7 @@ export default function AuthPage() {
       showAuth={false}
       aside={<AuthForm onDone={() => navigate('/')} />}
     >
-      <p className="text-ink-2 text-lead mt-4 max-w-md leading-relaxed">
+      <p className="lead mt-4 max-w-md">
         You can crawl sites without an account. Logging in saves each crawl to your history, so you
         can find its report later.
       </p>

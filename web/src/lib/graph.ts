@@ -1,4 +1,4 @@
-import type { GraphData } from '../api';
+import type { GraphEdge } from '../api';
 
 // the worker records one edge per page (where it was first found), so the edges form a tree
 export interface SiteTree {
@@ -8,10 +8,10 @@ export interface SiteTree {
   children: Map<string, string[]>;
 }
 
-export function buildTree(graph: GraphData | null): SiteTree {
+export function buildTree(edges: GraphEdge[]): SiteTree {
   const parent = new Map<string, string>();
   const children = new Map<string, string[]>();
-  for (const e of graph?.edges ?? []) {
+  for (const e of edges) {
     parent.set(e.target, e.source);
     const list = children.get(e.source);
     if (list) {

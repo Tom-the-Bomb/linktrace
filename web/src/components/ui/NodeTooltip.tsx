@@ -25,7 +25,7 @@ export function NodeTooltip({ ref, visible, path, detail, detailClass = '', note
         <span className={`num shrink-0 font-medium ${detailClass}`}>{detail}</span>
       </div>
       {note && note.length > 0 && (
-        <div className="text-code mt-0.5 font-sans leading-snug text-white/60">
+        <div className="mt-0.5 font-sans leading-snug text-white/60">
           {note.map((seg) => (
             <div key={seg}>{seg}</div>
           ))}

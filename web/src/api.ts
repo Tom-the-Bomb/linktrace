@@ -104,7 +104,7 @@ export interface Report {
   coverage_gap: CoverageGap | null;
 }
 
-// thrown on non-2xx, or with status 0 when no response arrived. carries the HTTP status so callers can branch.
+// status 0 means no response arrived
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -114,10 +114,7 @@ export class ApiError extends Error {
   }
 }
 
-// all requests go through this for the session cookie + JSON headers.
-// credentials: 'include' sends the cookie cross-origin.
-// nullOn lets a single status (e.g. 404/401) resolve to null instead of throwing,
-// for endpoints where "not found"/"not logged in" is a valid, expected state.
+// nullOn: a status that means "none" (404, 401) and resolves to null instead of throwing
 function jsonRequest<T>(path: string, init?: RequestInit): Promise<T>;
 function jsonRequest<T>(
   path: string,
@@ -134,7 +131,7 @@ async function jsonRequest<T>(
     res = await fetch(`${BASE}${path}`, {
       ...init,
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+      headers: { 'Content-Type': 'application/json' },
     });
   } catch {
     // fetch only rejects when no response arrived (offline, DNS, CORS)
@@ -162,9 +159,8 @@ async function jsonRequest<T>(
   return res.json() as Promise<T>;
 }
 
-// POST /check: start a crawl. Trims the input, prepends https:// if no scheme, and lets URL
-// convert an international domain to the ASCII form its links use (bücher.de -> xn--bcher-kva.de)
-// joined is set when the site was already being crawled and this request joined that crawl
+// defaults to https://, and URL turns an international domain into the ASCII form its links use
+// (bücher.de -> xn--bcher-kva.de). joined: the site was already being crawled, so this joined it
 export function createCheck(input: string): Promise<{ job_id: string; joined?: boolean }> {
   let url = input.trim();
   if (!/^https?:\/\//i.test(url)) {
@@ -181,28 +177,22 @@ export function createCheck(input: string): Promise<{ job_id: string; joined?: b
   });
 }
 
-// POST /check/{id}/cancel: stop a running crawl
 export function cancelCheck(id: string): Promise<{ job_id: string; status: string }> {
   return jsonRequest(`/check/${id}/cancel`, { method: 'POST' });
 }
 
-// removes a job and its data. the server tombstones it so a running crawl's
-// workers stop and queued work drains.
 export function deleteJob(id: string): Promise<{ job_id: string; status: string }> {
   return jsonRequest(`/check/${id}`, { method: 'DELETE' });
 }
 
-// GET /check/{id}: job status + live progress counts
 export function getStatus(id: string): Promise<Status> {
   return jsonRequest(`/check/${id}`);
 }
 
-// GET /check/{id}/results: per-page rows
 export function getResults(id: string): Promise<PageRow[]> {
   return jsonRequest(`/check/${id}/results`);
 }
 
-// GET /check/{id}/report: aggregated report (overall, categories, site audit, etc)
 export function getReport(id: string): Promise<Report> {
   return jsonRequest(`/check/${id}/report`);
 }
@@ -227,7 +217,6 @@ export interface GraphData {
   edges: GraphEdge[];
 }
 
-// GET /check/{id}/graph: nodes + edges for the site graph
 export function getGraph(id: string): Promise<GraphData> {
   return jsonRequest(`/check/${id}/graph`);
 }
@@ -281,7 +270,7 @@ export interface Me {
 export interface HistoryRun {
   job_id: string;
   created_at: string;
-  status: string; // pending | crawling | checking | complete | failed | stopped
+  status: JobStatus;
 }
 
 export interface HistoryEntry {
@@ -292,7 +281,6 @@ export interface HistoryEntry {
   runs: HistoryRun[]; // most recent first
 }
 
-// POST /auth/register: create an account and start a session
 export function register(username: string, password: string): Promise<Me> {
   return jsonRequest('/auth/register', {
     method: 'POST',
@@ -300,7 +288,6 @@ export function register(username: string, password: string): Promise<Me> {
   });
 }
 
-// POST /auth/login: start a session
 export function login(username: string, password: string): Promise<Me> {
   return jsonRequest('/auth/login', {
     method: 'POST',
@@ -308,13 +295,10 @@ export function login(username: string, password: string): Promise<Me> {
   });
 }
 
-// POST /auth/logout: end the session
 export function logout(): Promise<{ ok: boolean }> {
   return jsonRequest('/auth/logout', { method: 'POST' });
 }
 
-// removes the user, all their jobs (stopping running ones), and ends the
-// session. requires login.
 export function deleteAccount(): Promise<{ ok: boolean }> {
   return jsonRequest('/auth/account', { method: 'DELETE' });
 }
@@ -324,7 +308,6 @@ export function getMe(): Promise<Me | null> {
   return jsonRequest('/auth/me', undefined, 401);
 }
 
-// GET /history: the logged-in user's past crawls (auth required)
 export function getHistory(): Promise<HistoryEntry[]> {
   return jsonRequest('/history');
 }

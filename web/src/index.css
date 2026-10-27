@@ -4,9 +4,6 @@
 @import '@fontsource-variable/geist';
 @import '@fontsource-variable/geist-mono';
 
-/* light only: shadcn components' dark: variants stay inert without a .dark ancestor */
-@custom-variant dark (&:is(.dark *));
-
 @theme {
   --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, monospace;
@@ -84,28 +81,6 @@
   }
 }
 
-/* shadcn's semantic tokens, pointed at ours */
-@theme inline {
-  --color-background: var(--color-canvas);
-  --color-foreground: var(--color-ink);
-  --color-card: var(--color-panel);
-  --color-card-foreground: var(--color-ink);
-  --color-popover: var(--color-panel);
-  --color-popover-foreground: var(--color-ink);
-  --color-primary: var(--color-ink);
-  --color-primary-foreground: #ffffff;
-  --color-secondary: var(--color-sunken);
-  --color-secondary-foreground: var(--color-ink);
-  --color-muted: var(--color-sunken);
-  --color-muted-foreground: var(--color-ink-3);
-  --color-accent: var(--color-sunken);
-  --color-accent-foreground: var(--color-ink);
-  --color-destructive: var(--color-bad-fg);
-  --color-border: var(--color-line);
-  --color-input: var(--color-line);
-  --color-ring: var(--color-link-500);
-}
-
 @layer base {
   /* Tailwind 4 defaults borders to currentcolor and buttons to the arrow cursor */
   *,
@@ -122,13 +97,11 @@
 
   html {
     color-scheme: light;
-    -webkit-text-size-adjust: 100%;
   }
   body {
     background: var(--color-canvas);
     color: var(--color-ink);
     min-height: 100dvh;
-    font-optical-sizing: auto;
     caret-color: var(--color-ink);
   }
   ::selection {
@@ -184,11 +157,7 @@
 
 @utility frame {
   /* the grid frame: hairline columns with crosshairs where the lines meet */
-  @apply border-line relative mx-auto w-full max-w-300 border-x;
-}
-
-@utility cell {
-  @apply border-line relative;
+  @apply relative mx-auto w-full max-w-300 border-x;
 }
 
 @utility cross {
@@ -207,26 +176,19 @@
 
 @utility panel {
   /* a cell of the frame: white ground under a hairline, crosshairs where it meets the frame edges */
-  @apply border-line bg-panel relative border-t;
+  @apply bg-panel relative border-t;
   &::before {
     content: '';
-    @apply cross top-0;
+    @apply cross top-0 left-0;
   }
   &::after {
     content: '';
-    @apply cross top-0;
-  }
-  &::before {
-    left: 0;
-  }
-  &::after {
-    @apply cross-end;
-    left: 100%;
+    @apply cross cross-end top-0 left-full;
   }
 }
 
 @utility panel-head {
-  @apply border-line flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3.5 sm:px-8;
+  @apply gutter flex flex-wrap items-center justify-between gap-3 border-b py-3.5;
 }
 
 @utility page-title {
@@ -235,6 +197,15 @@
 
 @utility section-title {
   @apply tracking-headline sm:text-headline text-2xl leading-8 font-semibold;
+}
+
+/* the frame's horizontal content inset */
+@utility gutter {
+  @apply px-5 sm:px-8;
+}
+
+@utility lead {
+  @apply text-ink-2 text-lead leading-relaxed;
 }
 
 /* grows a small text link's hit area to at least 24px without moving the layout */

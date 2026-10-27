@@ -9,7 +9,7 @@ export function SectionHeader({
   right?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 px-5 pt-10 pb-5 sm:px-8">
+    <div className="gutter flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pt-10 pb-5">
       <div className="min-w-0">
         <h2 className="section-title">{title}</h2>
         {subtitle && <p className="text-ink-3 text-body mt-1">{subtitle}</p>}

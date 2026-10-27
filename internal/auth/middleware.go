@@ -30,29 +30,15 @@ func Optional(sessions sessionLooker) func(http.Handler) http.Handler {
 	}
 }
 
-// rejects the request with 401 unless a valid session is present. Reuses the id Optional already
-// resolved when the two are chained, so a protected route costs one session lookup, not two.
-func Require(sessions sessionLooker) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if UserID(r) != "" {
-				next.ServeHTTP(w, r)
-				return
-			}
-			cookie, err := r.Cookie(CookieName)
-			if err != nil {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
-			userID, _ := sessions.LookupSession(cookie.Value)
-			if userID == "" {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
-			r = r.WithContext(context.WithValue(r.Context(), userIDKey, userID))
-			next.ServeHTTP(w, r)
-		})
-	}
+// rejects anonymous requests with 401. Mount below Optional, which resolves the user.
+func Require(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if UserID(r) == "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // pulls the authenticated user id out of the request context, or "" if anonymous.

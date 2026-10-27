@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS jobs (
         'failed',
         'stopped'
     ) DEFAULT 'pending',
-    total_pages INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -39,13 +38,11 @@ CREATE TABLE IF NOT EXISTS pages (
     is_alive BOOLEAN,
     depth INT DEFAULT 0,
     retry_count INT DEFAULT 0,
-    redirect_chain JSON,
     archive_url TEXT,
     checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (job_id) REFERENCES jobs(id),
-    INDEX idx_job_id (job_id),
-    INDEX idx_is_alive (is_alive)
+    INDEX idx_job_id (job_id)
 );
 
 -- 1 row / healthy page: SEO breakdown
@@ -89,8 +86,7 @@ CREATE TABLE IF NOT EXISTS seo_audits (
     audited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (job_id) REFERENCES jobs(id),
-    INDEX idx_job_id (job_id),
-    INDEX idx_score (score)
+    INDEX idx_job_id (job_id)
 );
 
 -- 1 row / site: site-wide/global audits
@@ -122,8 +118,7 @@ CREATE TABLE IF NOT EXISTS links (
     target_hash CHAR(40) AS (SHA1(target_url)) STORED,
 
     PRIMARY KEY (job_id, source_hash, target_hash),
-    FOREIGN KEY (job_id) REFERENCES jobs(id),
-    INDEX idx_job (job_id)
+    FOREIGN KEY (job_id) REFERENCES jobs(id)
 );
 
 -- 1 row per (job, URL category): rolled-up rot% and avg SEO score, rewritten by the aggregator

@@ -21,7 +21,6 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
-      // always brace control-flow bodies, even single statements
       curly: ['error', 'all'],
     },
   },

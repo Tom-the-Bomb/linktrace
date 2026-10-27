@@ -102,8 +102,8 @@ export function ResultsTable({
 
   const { page, setPage, paged } = usePagination(sorted, PAGE_SIZE);
 
-  // reset to page 1 when filter/search/sort changes the result set
-  function selectFilter(f: Filter) {
+  // filter, search and sort all go back to page 1
+  function pickFilter(f: Filter) {
     setFilter(f);
     setPage(1);
   }
@@ -113,7 +113,6 @@ export function ResultsTable({
     setPage(1);
   }
 
-  // click active key flips direction; click another selects it ascending
   function pickSort(k: SortKey) {
     if (k === sortKey) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -133,7 +132,7 @@ export function ResultsTable({
         <ToggleGroup
           type="single"
           value={filter}
-          onValueChange={(v) => v && selectFilter(v as Filter)}
+          onValueChange={(v) => v && pickFilter(v as Filter)}
           aria-label="Filter pages"
         >
           {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
@@ -145,7 +144,7 @@ export function ResultsTable({
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <InputGroup className="flex-1 sm:w-56 sm:flex-none">
             <InputGroupAddon>
-              <Search aria-hidden="true" />
+              <Search />
             </InputGroupAddon>
             <InputGroupInput
               type="search"
@@ -181,7 +180,7 @@ export function ResultsTable({
             disabled={sorted.length === 0}
             title="Download the pages shown as CSV"
           >
-            <Download strokeWidth={2} aria-hidden="true" />
+            <Download />
             CSV
           </Button>
         </div>
@@ -243,7 +242,7 @@ export function ResultsTable({
                       className="tap-area text-link-600 hover:text-link-700 text-label inline-flex items-center gap-1 font-medium whitespace-nowrap hover:underline"
                     >
                       Wayback
-                      <ExternalLink className="size-3" strokeWidth={2.25} aria-hidden="true" />
+                      <ExternalLink className="size-3" strokeWidth={2.25} />
                     </a>
                   ) : (
                     <span className="text-ink-3 text-label">None</span>

@@ -118,7 +118,7 @@ func checkWWW(host string) string {
 
 	// land reports the host a form settles on, and whether it got there by redirecting. Both
 	// facts are needed: a form that redirects elsewhere is not canonical, while one that serves
-	// itself is. Collapsing them to a bare host made every apex->www site look like "both".
+	// itself is.
 	land := func(rawURL, self string) (dest string, redirected bool) {
 		resp, err := noFollow.Get(rawURL)
 		if err != nil {

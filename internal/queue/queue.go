@@ -10,6 +10,8 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+
+	"github.com/Tom-the-Bomb/linktrace/internal/store"
 )
 
 const (
@@ -40,15 +42,13 @@ type PageJob struct {
 	Site       string `json:"site,omitempty"`        // crawler.SiteKey of the seed
 }
 
-// JSON-encoded result + SEO fields avoid importing store/seo here (would cycle)
 type PageChecked struct {
-	JobID   string          `json:"job_id"`
-	URL     string          `json:"url"`
-	Depth   int             `json:"depth"`
-	IsAlive bool            `json:"is_alive"`
-	Result  json.RawMessage `json:"result"`
-	SEO     json.RawMessage `json:"seo"`
-	Links   []string        `json:"links,omitempty"` // outbound internal links discovered on this page
+	JobID   string           `json:"job_id"`
+	URL     string           `json:"url"`
+	IsAlive bool             `json:"is_alive"`
+	Result  store.PageResult `json:"result"`
+	SEO     *store.SEOAudit  `json:"seo"`             // nil unless the page is healthy HTML
+	Links   []string         `json:"links,omitempty"` // outbound internal links discovered on this page
 }
 
 type Queue struct {
@@ -59,9 +59,6 @@ type Queue struct {
 
 // dials RabbitMQ, opens a channel, and declares the topology (shards work-queue lanes).
 func New(url string, shards int) (*Queue, error) {
-	if shards < 1 {
-		shards = 1
-	}
 	conn, err := amqp.Dial(url)
 	if err != nil {
 		return nil, err
@@ -84,7 +81,7 @@ func (q *Queue) Close() error {
 	return q.conn.Close()
 }
 
-// jSON-marshals v and sends it to exchange/key as a persistent message.
+// JSON-marshals v and sends it to exchange/key as a persistent message.
 func (q *Queue) publish(exchange, key string, v any) error {
 	body, err := json.Marshal(v)
 	if err != nil {

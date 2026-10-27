@@ -1,4 +1,4 @@
-import { type SubmitEvent, useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { ChartNetwork, Table2 } from 'lucide-react';
 import { useLoaderData, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -31,10 +31,10 @@ import { isTerminalStatus } from '../lib/status';
 
 // Route /jobs/:jobId: live polling plus all report sections.
 export default function JobReportPage() {
-  const { jobId } = useParams<{ jobId: string }>();
+  const jobId = useParams().jobId!;
   const navigate = useNavigate();
   // set by useCreateCrawl when the site was already being crawled and we joined that crawl
-  const joined = (useLocation().state as { joined?: boolean } | null)?.joined ?? false;
+  const joined = (useLocation().state as { joined?: boolean } | null)?.joined;
 
   const { first } = useLoaderData() as { first: Promise<Tick> };
   const { status, setStatus, rows, report, graph, error, setError, notFound } = useJobReport(
@@ -50,10 +50,7 @@ export default function JobReportPage() {
   }, []);
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const [newUrl, setNewUrl] = useState('');
   const { submit, submitting, error: createError } = useCreateCrawl();
 
   // transient per-job page: title tracks the domain, kept out of the index
@@ -75,18 +72,15 @@ export default function JobReportPage() {
   const colourFor = useMemo(() => sectionColourMap(sections), [sections]);
 
   // where each page was first found, and the click path to it; shared by graph, list and drawer
-  const tree = useMemo(() => buildTree(graph), [graph]);
+  const tree = useMemo(() => buildTree(graph?.edges ?? []), [graph]);
   const rowsByUrl = useMemo(() => new Map(rows.map((r) => [r.url, r])), [rows]);
 
   // only whoever started the crawl can stop or delete it; everyone else gets Home
   const canManage = status?.can_manage ?? false;
   const canStop = canManage && !isDone;
 
-  // own running crawl: cancel + flip status to Back; otherwise go to hero
+  // Stop cancels the viewer's own running crawl; Home goes back to the landing page
   const onStopOrBack = async () => {
-    if (!jobId) {
-      return;
-    }
     if (!canStop) {
       navigate('/');
       return;
@@ -99,29 +93,9 @@ export default function JobReportPage() {
     }
   };
 
-  function onNewCrawl(e: SubmitEvent) {
-    e.preventDefault();
-    void submit(newUrl);
-  }
-
   async function onConfirmDelete() {
-    if (!jobId) {
-      return;
-    }
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      await deleteJob(jobId);
-      navigate('/');
-    } catch (err) {
-      setDeleteError(errMessage(err));
-    } finally {
-      setDeleting(false);
-    }
-  }
-
-  if (!jobId) {
-    return null;
+    await deleteJob(jobId);
+    navigate('/');
   }
 
   if (notFound) {
@@ -136,9 +110,7 @@ export default function JobReportPage() {
   return (
     <>
       <CompactHeader
-        url={newUrl}
-        setUrl={setNewUrl}
-        onSubmit={onNewCrawl}
+        onSubmit={submit}
         submitting={submitting}
         canStop={canStop}
         onStopOrBack={onStopOrBack}
@@ -186,11 +158,11 @@ export default function JobReportPage() {
                 right={
                   <TabsList aria-label="Explore view">
                     <TabsTrigger value="graph" count={graph?.nodes.length ?? 0} className="px-3.5">
-                      <ChartNetwork className="size-4" strokeWidth={2} aria-hidden="true" />
+                      <ChartNetwork className="size-4" />
                       Graph
                     </TabsTrigger>
                     <TabsTrigger value="table" count={rows.length} className="px-3.5">
-                      <Table2 className="size-4" strokeWidth={2} aria-hidden="true" />
+                      <Table2 className="size-4" />
                       Table
                     </TabsTrigger>
                   </TabsList>
@@ -274,13 +246,8 @@ export default function JobReportPage() {
         <ConfirmDeleteDialog
           url={status.url}
           startedAt={status.created_at}
-          busy={deleting}
-          error={deleteError}
           onConfirm={onConfirmDelete}
-          onCancel={() => {
-            setConfirmingDelete(false);
-            setDeleteError(null);
-          }}
+          onCancel={() => setConfirmingDelete(false)}
         />
       )}
     </>
