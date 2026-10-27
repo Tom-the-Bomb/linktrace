@@ -7,15 +7,21 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/checker"
 	"github.com/Tom-the-Bomb/linktrace/internal/seo"
 	"github.com/Tom-the-Bomb/linktrace/internal/store"
+	"golang.org/x/net/publicsuffix"
 )
 
-// returns the host of a raw URL, or the input unchanged if it won't parse.
-func hostOf(raw string) string {
+// returns the registrable domain a URL belongs to (example.com for www.example.com or
+// blog.example.com), so a site's subdomains share one request budget. IPs and hosts without a
+// public suffix (localhost) fall back to the hostname.
+func siteOf(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return raw
 	}
-	return u.Host
+	if d, err := publicsuffix.EffectiveTLDPlusOne(u.Hostname()); err == nil {
+		return d
+	}
+	return u.Hostname()
 }
 
 // converts a robots.txt Crawl-delay (seconds between requests) into a per-minute budget and

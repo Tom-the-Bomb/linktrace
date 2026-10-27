@@ -36,7 +36,7 @@ const (
 
 // Result-consumer concurrency. Unlike the sharded work queue, these three queues are shared by
 // every job, so draining one slower than the fetchers fill it parks a big crawl's backlog in
-// front of everyone else's results — and since the report consumer owns the progress counters,
+// front of everyone else's results, and since the report consumer owns the progress counters,
 // other users' jobs then sit at 0% until it clears. Keeping the queues near-empty is the fix.
 const (
 	reportConsumers  = 16 // DB-bound; gates progress and completion
@@ -127,7 +127,7 @@ type worker struct {
 
 // launches WorkerCount/ShardCount goroutines per shard lane, each consuming only its own
 // pages.<n> queue. A job is pinned to one lane, so a single crawl can occupy at most one lane's
-// workers — bounding it to ~1/ShardCount of the pool. Prefetch = per-lane goroutines keeps each
+// workers, which bounds it to ~1/ShardCount of the pool. Prefetch = per-lane goroutines keeps each
 // lane's broker-side backpressure matched to its workers.
 func startPageWorkers(w *worker, wg *sync.WaitGroup) ([]*amqp.Channel, error) {
 	perLane := w.cfg.WorkerCount / w.cfg.ShardCount
@@ -172,15 +172,16 @@ func (w *worker) processPage(d amqp.Delivery) {
 
 	log.Printf("[worker] crawling depth=%d %s", job.Depth, job.URL)
 
-	allowed, err := w.cache.Allow(hostOf(job.URL), effectiveRate(w.cfg.RatePerMin, job.CrawlDelay))
+	allowed, err := w.cache.Allow(siteOf(job.URL), effectiveRate(w.cfg.RatePerMin, job.CrawlDelay))
 	if err != nil {
 		log.Printf("[worker] ratelimit error: %v", err)
 	}
 	if !allowed {
-		// over budget: brief sleep prevents hot-loop nacking
+		// over the site's budget: back of the lane, not the front (where a nack would put it), so
+		// a slow site or a long Crawl-delay can't hold up other crawls. The sleep stops a hot loop.
 		log.Printf("[worker] rate-limited, requeueing %s", job.URL)
 		time.Sleep(rateLimitBackoff)
-		_ = d.Nack(false, true)
+		w.republish(d, job)
 		return
 	}
 
@@ -237,8 +238,14 @@ func (w *worker) processPage(d amqp.Delivery) {
 // failure it nacks for redelivery instead. Either way the delivery is settled.
 func (w *worker) requeue(d amqp.Delivery, job queue.PageJob) {
 	job.RetryCount++
+	w.republish(d, job)
+}
+
+// republishes job at the back of its lane and acks the current delivery; on publish failure it
+// nacks for redelivery instead.
+func (w *worker) republish(d amqp.Delivery, job queue.PageJob) {
 	if err := w.queue.PublishPageJob(job); err != nil {
-		log.Printf("[worker] requeue %s failed: %v", job.URL, err)
+		log.Printf("[worker] republish %s failed: %v", job.URL, err)
 		_ = d.Nack(false, true)
 		return
 	}
@@ -317,23 +324,21 @@ func (w *worker) enqueueLinks(job queue.PageJob, res checker.CheckResult) []stri
 	if job.MaxPages > 0 {
 		maxPages = min(maxPages, job.MaxPages)
 	}
-	seen, _ := w.cache.SeenCount(job.JobID)
 	var discovered []string
 	for _, link := range links {
-		if seen >= maxPages {
-			log.Printf("[worker] page cap hit (%d), no more URLs accepted", maxPages)
-			break
-		}
-		// before MarkSeen, so a disallowed URL never counts toward the cap
+		// before marking it seen, so a disallowed URL never counts toward the cap
 		if len(rules) > 0 && !robots.Allowed(rules, robotsPath(link)) {
 			continue
 		}
 		// dedupe on the value-agnostic key so /post?id=1 and /post?id=2 collapse to one page
-		isNew, err := w.cache.MarkSeen(job.JobID, crawler.CanonicalKey(link))
+		isNew, full, err := w.cache.MarkSeenUnder(job.JobID, crawler.CanonicalKey(link), maxPages)
+		if full {
+			log.Printf("[worker] page cap hit (%d), no more URLs accepted", maxPages)
+			break
+		}
 		if err != nil || !isNew {
 			continue
 		}
-		seen++
 
 		// per-category soft cap: increment first, then drop if it would overflow
 		if w.cfg.MaxPerCategory > 0 {
@@ -513,7 +518,13 @@ type aggregator struct {
 	cache *cache.Cache
 	mu    sync.Mutex
 	stats map[string]map[string]*catTally
+	// when each job last had a page, so finished jobs' tallies can be dropped
+	touched   map[string]time.Time
+	lastSweep time.Time
 }
+
+// a job with no pages for this long has finished (or died), so its tallies can go
+const tallyIdleTTL = time.Hour
 
 type catTally struct {
 	total      int
@@ -524,7 +535,7 @@ type catTally struct {
 
 // builds an aggregator with empty per-job category tallies.
 func newAggregator(st *store.Store, ca *cache.Cache) *aggregator {
-	return &aggregator{store: st, cache: ca, stats: map[string]map[string]*catTally{}}
+	return &aggregator{store: st, cache: ca, stats: map[string]map[string]*catTally{}, touched: map[string]time.Time{}}
 }
 
 // tallies a page into its URL category and rewrites that category's report row.
@@ -533,6 +544,7 @@ func (ag *aggregator) handle(msg queue.PageChecked) error {
 	if ag.cache.IsCancelled(msg.JobID) {
 		ag.mu.Lock()
 		delete(ag.stats, msg.JobID)
+		delete(ag.touched, msg.JobID)
 		ag.mu.Unlock()
 		return nil
 	}
@@ -545,6 +557,17 @@ func (ag *aggregator) handle(msg queue.PageChecked) error {
 	}
 
 	ag.mu.Lock()
+	now := time.Now()
+	ag.touched[msg.JobID] = now
+	if now.Sub(ag.lastSweep) > 10*time.Minute {
+		for id, t := range ag.touched {
+			if now.Sub(t) > tallyIdleTTL {
+				delete(ag.stats, id)
+				delete(ag.touched, id)
+			}
+		}
+		ag.lastSweep = now
+	}
 	if ag.stats[msg.JobID] == nil {
 		ag.stats[msg.JobID] = map[string]*catTally{}
 	}

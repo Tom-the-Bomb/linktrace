@@ -81,8 +81,8 @@ func (c *Cache) CreateSession(sid, userID string) error {
 
 // returns the user id for a session id, or "" if missing/expired.
 // redis.Nil is treated as "no session", not an error (same pattern as sql.ErrNoRows).
-// GETEX slides the expiry on every hit, so the TTL measures inactivity rather than account age —
-// an active user isn't logged out mid-session. Atomic, so it costs no extra round-trip.
+// GETEX slides the expiry on every hit, so the TTL measures inactivity rather than account age,
+// so an active user isn't logged out mid-session. Atomic, so it costs no extra round-trip.
 func (c *Cache) LookupSession(sid string) (string, error) {
 	ctx, cancel := c.ctx()
 	defer cancel()
@@ -160,6 +160,23 @@ func (c *Cache) Allow(domain string, perMinute int) (bool, error) {
 // route group plus the caller's identity, so groups don't share a budget.
 func (c *Cache) AllowRequest(key string, perMinute int) (bool, error) {
 	return c.allow(apiRateKey(key), perMinute)
+}
+
+// CountRequest counts one hit against key without checking a limit (failed logins).
+func (c *Cache) CountRequest(key string) error {
+	_, err := c.allow(apiRateKey(key), 0)
+	return err
+}
+
+// RequestCount returns key's hits in the current window.
+func (c *Cache) RequestCount(key string) (int, error) {
+	ctx, cancel := c.ctx()
+	defer cancel()
+	n, err := c.rdb.Get(ctx, apiRateKey(key)).Int()
+	if errors.Is(err, redis.Nil) {
+		return 0, nil
+	}
+	return n, err
 }
 
 // increments key's counter and reports whether it's still within budget. Fixed window, not
@@ -258,15 +275,26 @@ func (c *Cache) IncCategory(jobID, category string) (int, error) {
 }
 
 // returns how many distinct URLs have been seen for jobID.
-func (c *Cache) SeenCount(jobID string) (int, error) {
+// markSeenUnderScript adds a URL to the seen set only while the set is under the page cap, in
+// one eval, so concurrent fetchers can't each admit the remaining budget. Returns 1 when added,
+// 0 when already seen, -1 when the cap is reached.
+var markSeenUnderScript = redis.NewScript(`
+if redis.call('SCARD', KEYS[1]) >= tonumber(ARGV[2]) then
+  return -1
+end
+local added = redis.call('SADD', KEYS[1], ARGV[1])
+redis.call('EXPIRE', KEYS[1], ARGV[3])
+return added
+`)
+
+// MarkSeenUnder records url as discovered for jobID unless the crawl already holds maxPages.
+// isNew is false for a URL already seen; full is true once the cap is reached.
+func (c *Cache) MarkSeenUnder(jobID, url string, maxPages int) (isNew, full bool, err error) {
 	ctx, cancel := c.ctx()
 	defer cancel()
-
-	size, err := c.rdb.SCard(ctx, seenKey(jobID)).Result()
-	if err != nil {
-		return 0, err
-	}
-	return int(size), nil
+	n, err := markSeenUnderScript.Run(ctx, c.rdb, []string{seenKey(jobID)}, url, maxPages,
+		int(seenTTL.Seconds())).Int()
+	return n == 1, n < 0, err
 }
 
 // placeScript assigns a new job to the least-occupied shard lane and returns its index.
