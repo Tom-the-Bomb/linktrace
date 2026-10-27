@@ -11,15 +11,36 @@ import {
   getResults,
   getStatus,
 } from '../api';
-import { errMessage } from '../lib/format';
 import { isTerminalStatus } from '../lib/status';
 
 const POLL_MS = 1000;
-const HEAVY_EVERY_TICKS = 5; // ~5s between full results/report/graph refreshes
-const MAX_POLL_FAILURES = 3; // consecutive errors before giving up on live updates
+const MAX_BACKOFF_MS = 15_000;
+const QUIET_FAILURES = 3; // consecutive errors before the banner, so one blip stays silent
 
-// polls a job until it finishes: status every tick, the heavy report data every few
-export function useJobReport(jobId: string | undefined) {
+// a heavy refresh ships every row, node and edge, so bigger crawls refresh less often: 5s up to 30s
+const heavyEvery = (discovered: number) => Math.min(30, Math.max(5, Math.ceil(discovered / 200)));
+
+export interface Tick {
+  status: Status;
+  heavy?: { rows: PageRow[]; report: Report; graph: GraphData };
+}
+
+// one poll: status, then the heavy data if due or finished. Status first, so a complete crawl's data is final
+export async function fetchTick(jobId: string, heavy: boolean): Promise<Tick> {
+  const status = await getStatus(jobId);
+  if (!heavy && !isTerminalStatus(status.status)) {
+    return { status };
+  }
+  const [rows, report, graph] = await Promise.all([
+    getResults(jobId),
+    getReport(jobId),
+    getGraph(jobId),
+  ]);
+  return { status, heavy: { rows, report, graph } };
+}
+
+// polls a job until it finishes; `first` is the route loader's first poll
+export function useJobReport(jobId: string | undefined, first?: Promise<Tick>) {
   const [status, setStatus] = useState<Status | null>(null);
   const [rows, setRows] = useState<PageRow[]>([]);
   const [report, setReport] = useState<Report | null>(null);
@@ -43,35 +64,35 @@ export function useJobReport(jobId: string | undefined) {
     let stop = false;
     let timer: number | undefined;
     let tick = 0;
+    let lastHeavy = 0;
+    let discovered = 0;
     let failures = 0;
+    // used once; retries fetch fresh rather than re-read a rejected promise
+    let initial = first;
 
     const poll = async () => {
       try {
-        const s = await getStatus(jobId);
+        const request =
+          initial ?? fetchTick(jobId, tick === 0 || tick - lastHeavy >= heavyEvery(discovered));
+        initial = undefined;
+        const { status: s, heavy } = await request;
         if (stop) {
           return;
         }
         setStatus(s);
-        const done = isTerminalStatus(s.status);
-
-        // results/report/graph are unbounded — a 10k-page crawl ships every row, node and edge.
-        // Only /status is cheap enough for every tick; the rest refresh slowly, then once at the end.
-        if (done || tick % HEAVY_EVERY_TICKS === 0) {
-          const [r, rep, g] = await Promise.all([
-            getResults(jobId),
-            getReport(jobId),
-            getGraph(jobId),
-          ]);
-          if (stop) {
-            return;
-          }
-          setRows(r);
-          setReport(rep);
-          setGraph(g);
+        discovered = s.discovered;
+        if (heavy) {
+          setRows(heavy.rows);
+          setReport(heavy.report);
+          setGraph(heavy.graph);
+          lastHeavy = tick;
+        }
+        if (failures >= QUIET_FAILURES) {
+          setError(null);
         }
         failures = 0;
-        setError(null);
-        if (done) {
+        tick++;
+        if (isTerminalStatus(s.status)) {
           return;
         }
       } catch (err) {
@@ -82,15 +103,16 @@ export function useJobReport(jobId: string | undefined) {
           setNotFound(true);
           return;
         }
-        // one blip shouldn't end live updates for good; only surface a persistent failure
-        if (++failures >= MAX_POLL_FAILURES) {
-          setError(errMessage(err));
-          return;
+        // never give up: back off and retry the same step, so the page recovers after an outage
+        if (++failures >= QUIET_FAILURES) {
+          setError("Can't reach LinkTrace right now. This page keeps retrying.");
         }
       }
-      tick++;
       if (!stop) {
-        timer = window.setTimeout(poll, POLL_MS);
+        timer = window.setTimeout(
+          poll,
+          failures ? Math.min(POLL_MS * 2 ** failures, MAX_BACKOFF_MS) : POLL_MS,
+        );
       }
     };
 
@@ -99,7 +121,7 @@ export function useJobReport(jobId: string | undefined) {
       stop = true;
       window.clearTimeout(timer);
     };
-  }, [jobId]);
+  }, [jobId, first]);
 
   return { status, setStatus, rows, report, graph, error, setError, notFound };
 }

@@ -1,37 +1,78 @@
-import { Suspense, lazy } from 'react';
+import { type ComponentType, type ReactNode } from 'react';
 
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, RouterProvider, createBrowserRouter } from 'react-router-dom';
 
 import { Footer } from './components/Footer';
 import { Protected } from './components/Protected';
-import AuthPage from './pages/AuthPage';
-import HistoryPage from './pages/HistoryPage';
+import { fetchTick } from './hooks/useJobReport';
 import HomePage from './pages/HomePage';
 
-// the report page carries the graph library, so it loads only when a report is opened
-const JobReportPage = lazy(() => import('./pages/JobReportPage'));
-
 // overflow-x-clip trims edge crosshairs without creating a scroll container (sticky still works)
-export default function App() {
+function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col overflow-x-clip">
-      <Suspense fallback={<div className="flex-1" />}>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/auth" element={<AuthPage />} />
-          <Route
-            path="/history"
-            element={
-              <Protected>
-                <HistoryPage />
-              </Protected>
-            }
-          />
-          <Route path="/jobs/:jobId" element={<JobReportPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+      {children}
       <Footer />
     </div>
   );
+}
+
+// only the landing ships in the main bundle. The router loads a lazy page before rendering it, so a
+// direct visit shows no Suspense fallback, and skips the 300ms reveal throttle React puts on one
+const page = (load: () => Promise<{ default: ComponentType }>) => async () => ({
+  Component: (await load()).default,
+});
+
+const router = createBrowserRouter([
+  {
+    Component: () => (
+      <Shell>
+        <Outlet />
+      </Shell>
+    ),
+    // no footer while a page loads: one that appears later doesn't shift, one that gets pushed down does
+    HydrateFallback: () => <div className="frame min-h-dvh" />,
+    children: [
+      { index: true, Component: HomePage },
+      { path: 'auth', lazy: page(() => import('./pages/AuthPage')) },
+      {
+        path: 'history',
+        lazy: async () => {
+          const { default: HistoryPage } = await import('./pages/HistoryPage');
+          return {
+            Component: () => (
+              <Protected>
+                <HistoryPage />
+              </Protected>
+            ),
+          };
+        },
+      },
+      {
+        path: 'jobs/:jobId',
+        // starts the first poll while the page's code is still downloading
+        loader: ({ params }) => {
+          const first = fetchTick(params.jobId!, true);
+          first.catch(() => {}); // the page handles failures; this only quiets one it never reads
+          return { first };
+        },
+        lazy: page(() => import('./pages/JobReportPage')),
+      },
+      { path: '*', element: <Navigate to="/" replace /> },
+    ],
+  },
+]);
+
+// a deploy replaces the hashed chunks, so an open tab can ask for one that's gone: load the page it
+// was heading to fresh, at most once a minute so a chunk that's really missing can't cause a loop
+window.addEventListener('vite:preloadError', () => {
+  if (Date.now() - Number(sessionStorage.getItem('reloadedAt')) > 60_000) {
+    sessionStorage.setItem('reloadedAt', String(Date.now()));
+    const to = router.state.navigation.location;
+    window.location.assign(to ? to.pathname + to.search : window.location.href);
+  }
+});
+
+export default function App() {
+  return <RouterProvider router={router} />;
 }

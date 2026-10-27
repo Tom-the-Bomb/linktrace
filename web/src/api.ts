@@ -104,7 +104,7 @@ export interface Report {
   coverage_gap: CoverageGap | null;
 }
 
-// thrown on non-2xx. carries the HTTP status so callers can branch (401 vs 409).
+// thrown on non-2xx, or with status 0 when no response arrived. carries the HTTP status so callers can branch.
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -116,7 +116,7 @@ export class ApiError extends Error {
 
 // all requests go through this for the session cookie + JSON headers.
 // credentials: 'include' sends the cookie cross-origin.
-// nullOn lets a single status (e.g. 404/401) resolve to null instead of throwing —
+// nullOn lets a single status (e.g. 404/401) resolve to null instead of throwing,
 // for endpoints where "not found"/"not logged in" is a valid, expected state.
 function jsonRequest<T>(path: string, init?: RequestInit): Promise<T>;
 function jsonRequest<T>(
@@ -129,17 +129,26 @@ async function jsonRequest<T>(
   init?: RequestInit,
   nullOn?: number,
 ): Promise<T | null> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    });
+  } catch {
+    // fetch only rejects when no response arrived (offline, DNS, CORS)
+    throw new ApiError(0, "Can't reach LinkTrace. Check your connection and try again.");
+  }
   if (res.status === nullOn) {
     return null;
   }
   if (!res.ok) {
-    // prefer the server {error} message, fall back to status text
-    let msg = `${res.status} ${res.statusText || 'request failed'}`;
+    // prefer the server {error} message; a 5xx without one came from the proxy while the API is down
+    let msg =
+      res.status >= 500
+        ? "LinkTrace isn't responding right now. Try again in a moment."
+        : `${res.status} ${res.statusText || 'request failed'}`;
     try {
       const body = (await res.json()) as { error?: string };
       if (body?.error) {
@@ -153,11 +162,18 @@ async function jsonRequest<T>(
   return res.json() as Promise<T>;
 }
 
-// POST /check: start a crawl (prepends https:// if no scheme)
+// POST /check: start a crawl. Trims the input, prepends https:// if no scheme, and lets URL
+// convert an international domain to the ASCII form its links use (bücher.de -> xn--bcher-kva.de)
 // joined is set when the site was already being crawled and this request joined that crawl
-export function createCheck(url: string): Promise<{ job_id: string; joined?: boolean }> {
+export function createCheck(input: string): Promise<{ job_id: string; joined?: boolean }> {
+  let url = input.trim();
   if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`;
+  }
+  try {
+    url = new URL(url).href;
+  } catch {
+    /* malformed; the server explains what's wrong */
   }
   return jsonRequest('/check', {
     method: 'POST',
