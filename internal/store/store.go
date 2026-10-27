@@ -355,7 +355,7 @@ func (s *Store) ListSEOAudits(jobID string) ([]SEOAudit, error) {
 }
 
 // upserts a category's rollup row; the aggregator rewrites it on every tick as counts change.
-// PRIMARY KEY (job_id, category) makes this a single statement — the previous delete+insert in a
+// PRIMARY KEY (job_id, category) makes this a single statement. The previous delete+insert in a
 // transaction cost four round-trips and took gap locks that would deadlock concurrent tickers.
 func (s *Store) ReplaceCategoryReport(jobID string, report CategoryReport) error {
 	_, err := s.db.Exec(

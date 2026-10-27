@@ -62,7 +62,7 @@ func classifyNetworkError(err error) string {
 	return ErrUnknown
 }
 
-// blockScanLimit caps the body scan for block markers — challenge pages carry them near the
+// blockScanLimit caps the body scan for block markers, since challenge pages carry them near the
 // top, so there's no need to lowercase a large body.
 const blockScanLimit = 8 << 10
 

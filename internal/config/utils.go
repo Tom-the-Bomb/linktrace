@@ -10,7 +10,7 @@ import (
 
 // loadDotEnv best-effort loads KEY=VALUE lines from a .env file in the working directory into
 // the process environment, skipping any key already set (so explicit env and docker-compose
-// still win). No-op when the file is absent — prod passes env directly; dev keeps it in .env.
+// still win). No-op when the file is absent (prod passes env directly; dev keeps it in .env).
 func loadDotEnv(path string) {
 	f, err := os.Open(path)
 	if err != nil {
