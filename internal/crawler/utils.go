@@ -82,11 +82,9 @@ func canonicalize(u *url.URL, dropQuery bool) string {
 	u.Host = strings.ToLower(u.Host)
 	u.Fragment = ""
 
+	u.Path = strings.TrimRight(u.Path, "/")
 	if u.Path == "" {
 		u.Path = "/"
-	}
-	if len(u.Path) > 1 && strings.HasSuffix(u.Path, "/") {
-		u.Path = strings.TrimRight(u.Path, "/")
 	}
 
 	if dropQuery {

@@ -125,6 +125,17 @@ func (s *Server) limitPerMin(bucket string, perIP, perUser int) func(http.Handle
 	}
 }
 
+// mount below auth.Optional, which resolves the user.
+func requireUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth.UserID(r) == "" {
+			httpError(w, http.StatusUnauthorized, "Log in to continue.")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // fails open: a Redis blip shouldn't read as rate limiting (login counters fail closed).
 func (s *Server) allow(key string, limit int) bool {
 	allowed, err := s.cache.AllowRequest(key, limit)

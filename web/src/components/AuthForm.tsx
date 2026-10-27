@@ -7,7 +7,7 @@ import { Input } from './ui/input';
 import { Spinner } from './ui/spinner';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
-export function AuthForm({ onDone }: { onDone?: () => void }) {
+export function AuthForm() {
   const { login, register } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
@@ -25,7 +25,6 @@ export function AuthForm({ onDone }: { onDone?: () => void }) {
       } else {
         await login(username, password);
       }
-      onDone?.();
     } catch (err) {
       setError(errMessage(err));
     } finally {

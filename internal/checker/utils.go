@@ -3,7 +3,6 @@ package checker
 import (
 	"bytes"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"net"
 	"net/http"
@@ -41,10 +40,9 @@ func classifyNetworkError(err error) string {
 		return ErrTimeout
 	}
 
-	var certErr x509.CertificateInvalidError
-	var hostErr x509.HostnameError
+	var verifyErr *tls.CertificateVerificationError
 	var recErr tls.RecordHeaderError
-	if errors.As(err, &certErr) || errors.As(err, &hostErr) || errors.As(err, &recErr) {
+	if errors.As(err, &verifyErr) || errors.As(err, &recErr) {
 		return ErrSSL
 	}
 

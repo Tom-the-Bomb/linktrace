@@ -2,7 +2,9 @@ package site
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/xml"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -89,12 +91,13 @@ func checkHTTPS(host string) (isHTTPS, httpsRedirect, certValid bool) {
 		}
 	}
 
-	// Go verifies the cert during the handshake, so success means it's valid.
-	if resp, err := httpx.NewClient(probeTimeout, true).Get("https://" + host); err == nil {
+	resp, err := httpx.NewClient(probeTimeout, true).Get("https://" + host)
+	if err == nil {
 		defer resp.Body.Close()
-		isHTTPS = true
-		certValid = true
 	}
+	var verifyErr *tls.CertificateVerificationError
+	certValid = err == nil
+	isHTTPS = certValid || errors.As(err, &verifyErr)
 	return
 }
 

@@ -27,17 +27,6 @@ func Optional(sessions sessionLooker) func(http.Handler) http.Handler {
 	}
 }
 
-// must be mounted below Optional, which resolves the user.
-func Require(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if UserID(r) == "" {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 func UserID(r *http.Request) string {
 	if v, ok := r.Context().Value(userIDKey).(string); ok {
 		return v

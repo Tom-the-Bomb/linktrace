@@ -103,8 +103,8 @@ func main() {
 		r.Delete("/check/{id}", s.handleDelete)
 		r.Get("/check/{id}", s.handleStatus)
 
-		r.With(auth.Require).Get("/history", s.handleHistory)
-		r.With(auth.Require).Delete("/auth/account", s.handleDeleteAccount)
+		r.With(requireUser).Get("/history", s.handleHistory)
+		r.With(requireUser).Delete("/auth/account", s.handleDeleteAccount)
 	})
 
 	r.Group(func(r chi.Router) {

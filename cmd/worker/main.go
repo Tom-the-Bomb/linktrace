@@ -158,9 +158,12 @@ func (w *worker) processPage(d amqp.Delivery) {
 	log.Printf("[worker] crawling depth=%d %s", job.Depth, job.URL)
 
 	domain := domainOf(job.URL)
-	allowed, err := w.cache.Allow(domain, w.cfg.RatePerMin)
+	var allowed bool
+	var err error
 	if job.CrawlDelay > 0 {
 		allowed, err = w.cache.AllowEvery(domain, time.Duration(job.CrawlDelay)*time.Second)
+	} else {
+		allowed, err = w.cache.Allow(domain, w.cfg.RatePerMin)
 	}
 	if err != nil {
 		log.Printf("[worker] ratelimit error: %v", err)
