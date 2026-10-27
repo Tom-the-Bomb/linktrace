@@ -148,7 +148,7 @@ export function Categories({
 
         <div
           aria-hidden="true"
-          className="border-line bg-sunken/60 text-ink-3 hidden grid-cols-[14px_minmax(0,1fr)_170px_64px_118px] gap-x-4 border-b px-8 py-2 text-xs font-semibold sm:grid"
+          className="border-line bg-sunken/60 text-ink-3 hidden grid-cols-[14px_minmax(0,1fr)_170px_64px_118px] gap-x-4 border-b px-8 py-2 text-xs font-medium sm:grid"
         >
           <span />
           <span>Section</span>
@@ -157,7 +157,7 @@ export function Categories({
           <span className="text-right">Links</span>
         </div>
         {paged.length === 0 ? (
-          <p className="text-ink-3 px-6 py-10 text-center text-[15px]">
+          <p className="text-ink-3 text-body px-6 py-10 text-center">
             No sections match this filter.
           </p>
         ) : (
@@ -205,7 +205,7 @@ function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
       <SectionDot colour={colour} />
       <div className="min-w-0">
         <div className="truncate font-mono text-sm font-medium">{cat.category}</div>
-        <div className="num text-ink-3 mt-0.5 text-[13px]">
+        <div className="num text-ink-3 text-label mt-0.5">
           {cat.total_pages.toLocaleString()} {cat.total_pages === 1 ? 'page' : 'pages'}
           {/* the SEO column is hidden on mobile, so the figure rides in the meta line there */}
           <span className="sm:hidden">
@@ -215,19 +215,19 @@ function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
         </div>
       </div>
 
-      {/* rot bar is supplementary — hidden on mobile so the row never overflows */}
+      {/* the rot bar is extra, so it hides on mobile to keep the row from overflowing */}
       <div className="hidden items-center gap-2.5 sm:flex" title={`${rotPct}% broken`}>
-        <div className="bg-sunken ring-line h-1.5 flex-1 overflow-hidden rounded-full ring-1 ring-inset">
+        <div className="bg-sunken ring-line h-1.5 flex-1 overflow-hidden rounded-full ring-1 forced-color-adjust-none ring-inset">
           <div
             className={`h-full rounded-full ${style.bar}`}
             style={{ width: `${Math.max(rotPct, rotPct > 0 ? 4 : 0)}%` }}
           />
         </div>
-        <span className="num text-ink-3 w-9 text-right font-mono text-[11px]">{rotPct}%</span>
+        <span className="num text-ink-3 text-code w-9 text-right font-mono">{rotPct}%</span>
       </div>
 
       <span
-        className={`num hidden text-right font-mono text-[13px] font-medium sm:block ${scoreTextColour(cat.avg_seo_score)}`}
+        className={`num text-label hidden text-right font-mono font-medium sm:block ${scoreTextColour(cat.avg_seo_score)}`}
       >
         <span className="sr-only">SEO </span>
         {cat.avg_seo_score}

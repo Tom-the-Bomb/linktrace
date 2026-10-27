@@ -19,10 +19,10 @@ export function OverallReport({ report }: { report: Report }) {
         <div className="p-5 sm:p-8">
           <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
             <div>
-              <p className="text-ink-3 text-[13px] font-medium">Broken pages</p>
+              <p className="text-ink-3 text-label font-medium">Broken pages</p>
               <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
                 <span
-                  className={`num text-7xl font-semibold tracking-[-0.05em] ${rotten > 0 ? 'text-bad-fg' : 'text-ok-fg'}`}
+                  className={`num tracking-display text-7xl font-semibold ${rotten > 0 ? 'text-bad-fg' : 'text-ok-fg'}`}
                 >
                   {rotten.toLocaleString()}
                 </span>
@@ -31,12 +31,12 @@ export function OverallReport({ report }: { report: Report }) {
                 </span>
               </p>
               <BrokenBar pct={rottenPct} />
-              <p className="text-ink-3 mt-1.5 text-[13px]">
+              <p className="text-ink-3 text-label mt-1.5">
                 {rotten === 0 ? (
                   'No broken pages'
                 ) : (
                   <>
-                    <span className="num font-mono text-[12px]">
+                    <span className="num text-caption font-mono">
                       {rottenPct < 1 ? '<1' : rottenPct}%
                     </span>{' '}
                     of checked pages
@@ -45,11 +45,9 @@ export function OverallReport({ report }: { report: Report }) {
               </p>
             </div>
             <div>
-              <p className="text-ink-3 text-[13px] font-medium">Average SEO score</p>
+              <p className="text-ink-3 text-label font-medium">Average SEO score</p>
               <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
-                <span className="num text-7xl font-semibold tracking-[-0.05em]">
-                  {avg_seo_score}
-                </span>
+                <span className="num tracking-display text-7xl font-semibold">{avg_seo_score}</span>
                 <span className="text-ink-3 text-xl font-semibold">/100</span>
                 <Badge variant={tier.tone} className="ml-1 self-center">
                   {tier.label}
@@ -58,20 +56,20 @@ export function OverallReport({ report }: { report: Report }) {
               <ScoreScale score={avg_seo_score} />
             </div>
           </div>
-          <p className="border-line mt-6 border-t pt-5 text-[17px] leading-snug font-semibold tracking-tight">
+          <p className="border-line text-lead mt-6 border-t pt-5 leading-snug font-semibold tracking-tight">
             <span>{linkVerdict(rotten, rottenPct)}</span>{' '}
             <span className="text-ink-2 font-normal">{scoreVerdict(avg_seo_score)}</span>
           </p>
         </div>
 
         <div className="border-line bg-sunken/50 border-t p-5 sm:p-8 lg:border-t-0 lg:border-l">
-          <h3 className="text-[15px] font-bold tracking-tight">Most common SEO issues</h3>
+          <h3 className="text-body font-semibold tracking-tight">Most common SEO issues</h3>
           {top_issues.length === 0 ? (
-            <p className="text-ink-2 mt-3 text-[15px]">No recurring issues found.</p>
+            <p className="text-ink-2 text-body mt-3">No recurring issues found.</p>
           ) : (
             <ul className="divide-line mt-3 divide-y">
               {top_issues.map((iss) => (
-                <li key={iss} className="flex items-start gap-3 py-2.5 text-[15px] leading-snug">
+                <li key={iss} className="text-body flex items-start gap-3 py-2.5 leading-snug">
                   <TriangleAlert
                     className="text-warn-dot mt-0.5 size-4 shrink-0"
                     strokeWidth={2.25}
@@ -90,8 +88,14 @@ export function OverallReport({ report }: { report: Report }) {
 
 function BrokenBar({ pct: p }: { pct: number }) {
   return (
-    <div className="bg-ok-dot/80 mt-4 h-2 overflow-hidden rounded-full" aria-hidden="true">
-      <div className="bg-bad-dot h-full" style={{ width: `${p > 0 ? Math.max(p, 1.5) : 0}%` }} />
+    <div
+      className="bg-ok-dot/80 mt-4 h-2 overflow-hidden rounded-full forced-color-adjust-none"
+      aria-hidden="true"
+    >
+      <div
+        className="bg-bad-dot ease-out-expo h-full transition-[width] duration-700"
+        style={{ width: `${p > 0 ? Math.max(p, 1.5) : 0}%` }}
+      />
     </div>
   );
 }
@@ -105,10 +109,7 @@ function linkVerdict(rotten: number, rottenPct: number) {
   if (rottenPct < 1) {
     return `${pages} (under 1% of the site).`;
   }
-  if (rottenPct < 5) {
-    return `${pages} (${rottenPct}% of the site).`;
-  }
-  return `${pages} (${rottenPct}% of the site), so they're worth fixing first.`;
+  return `${pages} (${rottenPct}% of the site).`;
 }
 
 function scoreVerdict(s: number) {
@@ -116,10 +117,10 @@ function scoreVerdict(s: number) {
     return 'Most pages have the SEO basics in place.';
   }
   if (s >= 65) {
-    return 'SEO is decent, and fixing a few recurring issues would raise the score noticeably.';
+    return 'SEO is decent, and fixing a few recurring issues would raise the score.';
   }
   if (s >= 40) {
-    return 'SEO is mixed, with several pages needing work before search engines will read them well.';
+    return 'SEO is mixed, and several pages need work.';
   }
   return 'SEO is weak, since basic tags are missing from most of the site.';
 }

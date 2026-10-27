@@ -5,7 +5,7 @@ import { ArrowUpRight, CircleCheck, CornerDownRight, Download } from 'lucide-rea
 import type { PageRow } from '../api';
 import { usePagination } from '../hooks/usePagination';
 import { downloadCsv, toCsv } from '../lib/csv';
-import { FAILURE_EXPLANATION, failureGroup, pageStatusLabel } from '../lib/status';
+import { failureGroup, failureReason, pageStatusLabel } from '../lib/status';
 import { hostSlug, pathOf } from '../lib/url';
 import { SectionHeader } from './SectionHeader';
 import { Pager } from './ui/Pager';
@@ -58,7 +58,7 @@ export function BrokenLinks({
       broken.map((r) => [
         r.url,
         pageStatusLabel(false, r.status_code, r.error_type),
-        FAILURE_EXPLANATION[r.error_type] ?? '',
+        failureReason(r.error_type, r.status_code),
         foundOn.get(r.url) ?? '',
         r.depth,
         r.response_time,
@@ -75,7 +75,7 @@ export function BrokenLinks({
         subtitle={
           broken.length === 0
             ? 'Every page the crawl reached loaded correctly.'
-            : 'Each broken page is listed with the first page the crawl found it on. Start by fixing the link there, though other pages may link to it as well.'
+            : 'Each broken page is listed with the page it was first found on. Fix the link there first (other pages may link to it too).'
         }
         right={
           broken.length > 0 && (
@@ -88,7 +88,7 @@ export function BrokenLinks({
       />
 
       {broken.length === 0 ? (
-        <div className="panel text-ink-2 flex items-center gap-3 px-5 py-5 text-[15px] sm:px-8">
+        <div className="panel text-ink-2 text-body flex items-center gap-3 px-5 py-5 sm:px-8">
           <CircleCheck className="text-ok-dot size-5 shrink-0" strokeWidth={2} aria-hidden="true" />
           No broken links found.
         </div>
@@ -120,17 +120,17 @@ export function BrokenLinks({
               return (
                 <li
                   key={r.url}
-                  className="hover:bg-sunken grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-1 px-5 py-3.5 transition sm:grid-cols-[minmax(0,1fr)_140px_auto] sm:items-center sm:px-8"
+                  className="hover:bg-sunken grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-1 px-5 py-3.5 transition sm:grid-cols-[minmax(0,1fr)_140px_8rem] sm:items-center sm:px-8"
                 >
                   <div className="min-w-0">
                     <button
                       onClick={() => onSelect(r.url)}
                       title={r.url}
-                      className="block max-w-full truncate text-left font-mono text-[13px] underline-offset-4 hover:underline"
+                      className="tap-area text-label block max-w-full truncate text-left font-mono underline-offset-4 hover:underline"
                     >
                       {pathOf(r.url)}
                     </button>
-                    <p className="text-ink-3 mt-0.5 flex min-w-0 items-center gap-1.5 text-[13px]">
+                    <p className="text-ink-3 text-label mt-0.5 flex min-w-0 items-center gap-1.5">
                       <CornerDownRight
                         className="size-3.5 shrink-0"
                         strokeWidth={2}
@@ -142,7 +142,7 @@ export function BrokenLinks({
                           <button
                             onClick={() => onSelect(parent)}
                             title={parent}
-                            className="text-link-600 truncate font-mono text-[12px] underline-offset-4 hover:underline"
+                            className="tap-area text-link-600 text-caption min-w-6 truncate text-left font-mono underline-offset-4 hover:underline"
                           >
                             {pathOf(parent)}
                           </button>
@@ -161,13 +161,13 @@ export function BrokenLinks({
                         href={r.archive_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-link-600 inline-flex items-center gap-1 text-[13px] whitespace-nowrap underline-offset-4 hover:underline"
+                        className="tap-area text-link-600 text-label inline-flex items-center gap-1 whitespace-nowrap underline-offset-4 hover:underline"
                       >
                         Wayback copy
                         <ArrowUpRight className="size-3.5" strokeWidth={2} aria-hidden="true" />
                       </a>
                     ) : (
-                      <span className="text-ink-3 hidden text-[13px] sm:inline">No saved copy</span>
+                      <span className="text-ink-3 text-label">No saved copy</span>
                     )}
                   </span>
                 </li>

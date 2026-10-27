@@ -38,11 +38,11 @@ export function CrawlForm({ url, setUrl, onSubmit, submitting, children }: Props
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="Crawl another domain"
-          className="font-mono text-[13px] placeholder:font-sans placeholder:text-sm"
+          className="text-label font-mono placeholder:font-sans placeholder:text-sm"
         />
         {url === '' && (
           <InputGroupAddon align="inline-end" className="hidden sm:flex" aria-hidden="true">
-            <Kbd className="text-[10px]">/</Kbd>
+            <Kbd>/</Kbd>
           </InputGroupAddon>
         )}
       </InputGroup>

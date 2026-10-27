@@ -11,12 +11,12 @@ export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO 
     <section>
       <SectionHeader
         title="Site health"
-        subtitle="Checks on the domain itself, plus SEO totals across every audited page."
+        subtitle="Domain checks, plus SEO totals across every audited page."
       />
 
       <div className="panel grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <div className="p-5 sm:p-8">
-          <h3 className="text-[15px] font-bold tracking-tight">Domain</h3>
+          <h3 className="text-body font-semibold tracking-tight">Domain</h3>
           <ul className="divide-line mt-2 divide-y">
             <Check2 ok={audit.robots_found} label="robots.txt found" />
             <Check2 ok={!audit.robots_disallow_all} label="robots.txt allows crawling" />
@@ -37,7 +37,7 @@ export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO 
             />
             {audit.crawl_delay > 0 && (
               <DataRow label="Crawl-delay">
-                <span className="num text-ink-2 font-mono text-[13px]">{audit.crawl_delay}s</span>
+                <span className="num text-ink-2 text-label font-mono">{audit.crawl_delay}s</span>
               </DataRow>
             )}
           </ul>
@@ -45,10 +45,10 @@ export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO 
 
         {seo && seo.pages_audited > 0 && (
           <div className="border-line bg-sunken/50 border-t p-5 sm:p-8 lg:border-t-0 lg:border-l">
-            <h3 className="text-[15px] font-bold tracking-tight">
+            <h3 className="text-body font-semibold tracking-tight">
               Across <span className="num">{seo.pages_audited.toLocaleString()}</span> audited pages
             </h3>
-            <ul className="divide-line [&>li]:border-line mt-2 grid grid-cols-1 gap-x-8 divide-y sm:grid-cols-2 sm:divide-y-0 sm:[&>li]:border-b">
+            <ul className="divide-line [&>li]:border-line mt-2 grid grid-cols-1 gap-x-8 divide-y sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-1 xl:grid-cols-2 sm:[&>li]:border-b">
               <Stat
                 label="Duplicate title groups"
                 value={seo.duplicate_title_sets}
@@ -128,7 +128,7 @@ function Stat({ label, value, bad }: { label: string; value: number; bad?: boole
   return (
     <DataRow label={label}>
       <span
-        className={`num font-mono text-[13px] font-medium ${bad ? 'text-bad-fg' : 'text-ink-2'}`}
+        className={`num text-label font-mono font-medium ${bad ? 'text-bad-fg' : 'text-ink-2'}`}
       >
         {value.toLocaleString()}
       </span>
@@ -159,7 +159,7 @@ function PctStat({
   }
   return (
     <DataRow label={label}>
-      <span className="num font-mono text-[13px]">
+      <span className="num text-label font-mono">
         <span className={`font-medium ${toneColour(tone)}`}>{pct(count, total)}%</span>{' '}
         <span className="text-ink-3">
           {count.toLocaleString()}/{total.toLocaleString()}

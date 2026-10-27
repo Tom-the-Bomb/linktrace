@@ -188,7 +188,7 @@ export function ResultsTable({
       </header>
 
       {sorted.length === 0 ? (
-        <p className="text-ink-3 px-6 py-10 text-center text-[15px]">No pages match.</p>
+        <p className="text-ink-3 text-body px-6 py-10 text-center">No pages match.</p>
       ) : (
         <Table>
           <TableHeader>
@@ -216,20 +216,20 @@ export function ResultsTable({
                 <TableCell className="max-w-md pl-5 sm:pl-8">
                   <span className="flex items-center gap-2.5" title={r.url}>
                     <SectionDot colour={colourFor(sectionOf(r.url))} />
-                    <span className="truncate font-mono text-[13px]">{pathOf(r.url)}</span>
+                    <span className="text-label truncate font-mono">{pathOf(r.url)}</span>
                   </span>
                 </TableCell>
                 <TableCell>
                   <StatusChip alive={r.is_alive} code={r.status_code} error={r.error_type} />
                 </TableCell>
-                <TableCell className="num text-ink-2 text-right font-mono text-[13px]">
+                <TableCell className="num text-ink-2 text-label text-right font-mono">
                   {r.depth}
                 </TableCell>
-                <TableCell className="num text-ink-2 text-right font-mono text-[13px] whitespace-nowrap">
+                <TableCell className="num text-ink-2 text-label text-right font-mono whitespace-nowrap">
                   {r.response_time > 0 ? `${r.response_time.toLocaleString()} ms` : 'None'}
                 </TableCell>
                 <TableCell
-                  className={`num text-right font-mono text-[13px] font-medium ${scoreTextColour(r.seo_score)}`}
+                  className={`num text-label text-right font-mono font-medium ${scoreTextColour(r.seo_score)}`}
                 >
                   {r.seo_score ?? 'n/a'}
                 </TableCell>
@@ -240,13 +240,13 @@ export function ResultsTable({
                       target="_blank"
                       rel="noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="text-link-600 hover:text-link-700 inline-flex items-center gap-1 text-[13px] font-medium whitespace-nowrap hover:underline"
+                      className="tap-area text-link-600 hover:text-link-700 text-label inline-flex items-center gap-1 font-medium whitespace-nowrap hover:underline"
                     >
                       Wayback
                       <ExternalLink className="size-3" strokeWidth={2.25} aria-hidden="true" />
                     </a>
                   ) : (
-                    <span className="text-ink-3 text-[13px]">None</span>
+                    <span className="text-ink-3 text-label">None</span>
                   )}
                 </TableCell>
               </TableRow>

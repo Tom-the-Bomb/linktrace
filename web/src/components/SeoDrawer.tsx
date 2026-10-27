@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { ArrowUpRight, Check, ChevronRight, ExternalLink, X } from 'lucide-react';
 
@@ -6,7 +6,7 @@ import { type PageRow, type SEODetail, getSEODetail } from '../api';
 import { type Tone, pct, scoreTierBadge, toneColour } from '../lib/colours';
 import { errMessage } from '../lib/format';
 import { type SiteTree, depthLabel, pathFromRoot } from '../lib/graph';
-import { FAILURE_EXPLANATION } from '../lib/status';
+import { failureReason } from '../lib/status';
 import { pathOf } from '../lib/url';
 import { DataRow } from './ui/DataRow';
 import { ErrorBanner } from './ui/ErrorBanner';
@@ -19,6 +19,7 @@ import { Sheet, SheetClose, SheetContent, SheetTitle } from './ui/sheet';
 interface Props {
   jobId: string;
   url: string | null;
+  open: boolean;
   // the crawled row for this url, when the results have loaded
   row?: PageRow;
   tree: SiteTree;
@@ -28,10 +29,12 @@ interface Props {
 }
 
 // slide-in audit sheet; fetches on URL change
-export function SeoDrawer({ jobId, url, row, tree, onNavigate, onClose }: Props) {
+export function SeoDrawer({ jobId, url, open, row, tree, onNavigate, onClose }: Props) {
   const [detail, setDetail] = useState<SEODetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // there's no SheetTrigger for Radix to refocus, so closing hands focus back to whatever opened it
+  const opener = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!url) {
@@ -55,18 +58,25 @@ export function SeoDrawer({ jobId, url, row, tree, onNavigate, onClose }: Props)
   }
 
   return (
-    <Sheet open onOpenChange={(open) => !open && onClose()}>
-      <SheetContent aria-describedby={undefined}>
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent
+        aria-describedby={undefined}
+        onOpenAutoFocus={() => (opener.current = document.activeElement as HTMLElement | null)}
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+          opener.current?.focus();
+        }}
+      >
         <header className="border-line flex items-start justify-between gap-3 border-b px-5 py-4 sm:px-6">
           <div className="min-w-0">
-            <SheetTitle className="truncate text-lg font-semibold tracking-[-0.02em]">
-              Audit of <span className="font-mono text-[16px] font-medium">{pathOf(url)}</span>
+            <SheetTitle className="truncate text-lg font-semibold tracking-tight">
+              Audit of <span className="font-mono text-base font-medium">{pathOf(url)}</span>
             </SheetTitle>
             <a
               href={url}
               target="_blank"
               rel="noreferrer"
-              className="text-ink-3 hover:text-link-600 mt-0.5 flex items-center gap-1.5 font-mono text-[12px]"
+              className="text-ink-3 hover:text-link-600 text-caption mt-0.5 flex items-center gap-1.5 font-mono"
             >
               <span className="truncate">{url}</span>
               <ExternalLink className="size-3 shrink-0" strokeWidth={2.25} aria-hidden="true" />
@@ -74,13 +84,18 @@ export function SeoDrawer({ jobId, url, row, tree, onNavigate, onClose }: Props)
           </div>
           <SheetClose asChild>
             <Button variant="ghost" size="quiet" aria-label="Close audit" className="px-1.5">
-              <Kbd className="text-[10px]">esc</Kbd>
+              <Kbd className="pointer-coarse:hidden">esc</Kbd>
               <X strokeWidth={2.25} />
             </Button>
           </SheetClose>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+        <div
+          role="region"
+          aria-label="Audit details"
+          tabIndex={0}
+          className="flex-1 overflow-y-auto px-5 py-5 focus-visible:-outline-offset-2 sm:px-6"
+        >
           <PageContext url={url} row={row} tree={tree} onNavigate={onNavigate} />
           {loading && <Skeleton />}
           {error && <ErrorBanner>{error}</ErrorBanner>}
@@ -113,15 +128,15 @@ function PageContext({
       {row && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <StatusChip alive={row.is_alive} code={row.status_code} error={row.error_type} />
-          <span className="num text-ink-3 font-mono text-[12px]">
+          <span className="num text-ink-3 text-caption font-mono">
             {row.response_time > 0 ? `${row.response_time.toLocaleString()} ms` : 'No response'}
           </span>
-          <span className="text-ink-3 text-[13px]">{depthLabel(row.depth)}</span>
+          <span className="text-ink-3 text-label">{depthLabel(row.depth)}</span>
         </div>
       )}
       {row && !row.is_alive && (
-        <p className="text-ink-2 mt-3 text-[15px] leading-relaxed">
-          {FAILURE_EXPLANATION[row.error_type] ?? 'The page could not be loaded.'}
+        <p className="text-ink-2 text-body mt-3 leading-relaxed">
+          {failureReason(row.error_type, row.status_code)}
           {row.archive_url ? (
             <>
               {' '}
@@ -143,12 +158,12 @@ function PageContext({
 
       <dl className="mt-5 space-y-4 text-sm">
         <div>
-          <dt className="text-ink-3 text-[13px] font-medium">First found on</dt>
+          <dt className="text-ink-3 text-label font-medium">First found on</dt>
           <dd className="mt-1">
             {foundOn ? (
               <button
                 onClick={() => onNavigate(foundOn)}
-                className="text-link-600 font-mono text-[13px] underline-offset-4 hover:underline"
+                className="tap-area text-link-600 text-label font-mono underline-offset-4 hover:underline"
               >
                 {pathOf(foundOn)}
               </button>
@@ -156,7 +171,7 @@ function PageContext({
               <span className="text-ink-2">This is where the crawl started.</span>
             )}
             {foundOn && row && !row.is_alive && (
-              <span className="text-ink-3 mt-1 block text-[13px]">
+              <span className="text-ink-3 text-label mt-1 block">
                 Fix or remove the link on that page (other pages may link to it too).
               </span>
             )}
@@ -164,9 +179,9 @@ function PageContext({
         </div>
         {chain.length > 2 && (
           <div>
-            <dt className="text-ink-3 text-[13px] font-medium">Path from the homepage</dt>
+            <dt className="text-ink-3 text-label font-medium">Path from the homepage</dt>
             <dd className="mt-1">
-              <ol className="flex flex-wrap items-center gap-x-1 gap-y-1 font-mono text-[12px]">
+              <ol className="text-caption flex flex-wrap items-center gap-x-1 gap-y-1 font-mono">
                 {chain.map((u, i) => (
                   <li key={u} className="flex items-center gap-1">
                     {i > 0 && (
@@ -183,7 +198,7 @@ function PageContext({
                     ) : (
                       <button
                         onClick={() => onNavigate(u)}
-                        className="text-ink-2 hover:text-ink underline-offset-4 hover:underline"
+                        className="tap-area text-ink-2 hover:text-ink underline-offset-4 hover:underline"
                       >
                         {pathOf(u)}
                       </button>
@@ -196,7 +211,7 @@ function PageContext({
         )}
         {foundHere > 0 && (
           <div>
-            <dt className="text-ink-3 text-[13px] font-medium">Pages first found here</dt>
+            <dt className="text-ink-3 text-label font-medium">Pages first found here</dt>
             <dd className="num text-ink-2 mt-1">
               {foundHere.toLocaleString()} {foundHere === 1 ? 'page' : 'pages'}
             </dd>
@@ -211,7 +226,7 @@ function NoAuditState() {
   return (
     <div>
       <p className="font-semibold">No SEO audit for this page</p>
-      <p className="text-ink-2 mt-1.5 text-[15px] leading-relaxed">
+      <p className="text-ink-2 text-body mt-1.5 leading-relaxed">
         It didn&rsquo;t load as a normal HTML page, so there was nothing to audit.
       </p>
     </div>
@@ -234,13 +249,13 @@ function SeoBody({ detail }: { detail: SEODetail }) {
     <div className="space-y-7">
       <div className="border-line flex items-end justify-between border-b pb-6">
         <span>
-          <span className="text-ink-3 block text-[13px] font-medium">SEO score</span>
+          <span className="text-ink-3 text-label block font-medium">SEO score</span>
           <Badge variant={tier.tone} className="mt-1.5">
             {tier.label}
           </Badge>
         </span>
         <span className="flex items-baseline gap-1">
-          <span className="num text-5xl font-semibold tracking-[-0.05em]">{detail.score}</span>
+          <span className="num tracking-display text-5xl font-semibold">{detail.score}</span>
           <span className="text-ink-3 text-base font-semibold">/100</span>
         </span>
       </div>
@@ -249,7 +264,7 @@ function SeoBody({ detail }: { detail: SEODetail }) {
         <Section label="Issues" count={detail.issues.length}>
           <ul className="divide-line divide-y">
             {detail.issues.map((iss) => (
-              <li key={iss.code} className="flex items-start gap-3 py-2.5 text-[15px] leading-snug">
+              <li key={iss.code} className="text-body flex items-start gap-3 py-2.5 leading-snug">
                 <Badge variant={SEVERITY_TONE[iss.severity] ?? 'neutral'} className="mt-px">
                   {iss.severity}
                 </Badge>
@@ -261,14 +276,14 @@ function SeoBody({ detail }: { detail: SEODetail }) {
       )}
 
       <Section label="Title">
-        <p className="text-[17px] leading-snug font-semibold">
+        <p className="text-lead leading-snug font-semibold">
           {detail.title || <em className="text-bad-fg font-normal not-italic">Missing</em>}
         </p>
         <Meta value={`${detail.title_length} characters`} />
       </Section>
 
       <Section label="Meta description">
-        <p className="text-ink-2 text-[15px] leading-relaxed">
+        <p className="text-ink-2 text-body leading-relaxed">
           {detail.meta_description || <em className="text-bad-fg not-italic">Missing</em>}
         </p>
         <Meta value={`${detail.meta_description_length} characters`} />
@@ -346,10 +361,10 @@ function SeoBody({ detail }: { detail: SEODetail }) {
       {detail.primary_keyword && (
         <Section label="Keywords">
           <p className="flex items-baseline gap-2">
-            <span className="text-2xl font-semibold tracking-[-0.03em]">
+            <span className="tracking-headline text-2xl font-semibold">
               {detail.primary_keyword}
             </span>
-            <span className="text-ink-3 text-[13px]">primary</span>
+            <span className="text-ink-3 text-label">primary</span>
           </p>
           <div className="mt-3 flex flex-wrap gap-1.5">
             <Placement label="in title" ok={detail.keyword_in_title} />
@@ -383,10 +398,10 @@ function Section({
 }) {
   return (
     <section>
-      <h3 className="mb-2 flex items-baseline gap-2 text-[15px] font-bold tracking-tight">
+      <h3 className="text-body mb-2 flex items-baseline gap-2 font-semibold tracking-tight">
         {label}
         {count !== undefined && (
-          <span className="num text-ink-3 font-mono text-[12px] font-medium">{count}</span>
+          <span className="num text-ink-3 text-caption font-mono font-medium">{count}</span>
         )}
       </h3>
       {children}
@@ -395,7 +410,7 @@ function Section({
 }
 
 function Meta({ value }: { value: string }) {
-  return <p className="text-ink-3 mt-1.5 font-mono text-[11px]">{value}</p>;
+  return <p className="text-ink-3 text-code mt-1.5 font-mono">{value}</p>;
 }
 
 function HeadingTile({
@@ -410,8 +425,10 @@ function HeadingTile({
   const flagged = flagWhen?.(count);
   return (
     <div className={`px-2 py-2 text-center ${flagged ? 'bg-bad-bg' : ''}`}>
-      <div className="text-ink-3 font-mono text-[11px]">{label}</div>
-      <div className={`num text-lg font-bold ${flagged ? 'text-bad-fg' : ''}`}>{count}</div>
+      <div className="text-ink-3 text-code font-mono">{label}</div>
+      <div className={`num text-lg font-semibold tracking-tight ${flagged ? 'text-bad-fg' : ''}`}>
+        {count}
+      </div>
     </div>
   );
 }
@@ -440,7 +457,7 @@ function CountSignal({ label, count, total }: { label: string; count: number; to
   const tone = ratio >= 0.9 ? 'ok' : ratio >= 0.5 ? 'warn' : 'bad';
   return (
     <DataRow label={label}>
-      <span className="num font-mono text-[13px]">
+      <span className="num text-label font-mono">
         <span className={`font-medium ${toneColour(tone)}`}>{pct(count, total)}%</span>{' '}
         <span className="text-ink-3">
           {count}/{total}
@@ -454,7 +471,7 @@ function CountSignal({ label, count, total }: { label: string; count: number; to
 function RawStat({ label, value }: { label: string; value: number }) {
   return (
     <DataRow label={label}>
-      <span className="num text-ink-2 font-mono text-[13px]">{value.toLocaleString()}</span>
+      <span className="num text-ink-2 text-label font-mono">{value.toLocaleString()}</span>
     </DataRow>
   );
 }

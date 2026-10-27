@@ -45,9 +45,34 @@ export const FAILURE_EXPLANATION: Record<string, string> = {
   http_4xx: "The server says the page doesn't exist or can't be accessed (404, 403 and so on).",
   server_error: 'The server hit an error while responding (500, 502 and so on).',
   blocked:
-    'A bot check or rate limit answered instead of the page. These are marked in amber rather than red, since the page itself may be fine.',
+    'A bot check or rate limit answered instead of the page, so the page itself may be fine.',
   unknown: 'The URL could not be checked (it may be malformed, or not an http or https link).',
 };
+
+// the common HTTP errors, for one page with a known code; the group sentences above cover the rest
+const CODE_EXPLANATION: Record<number, string> = {
+  401: 'The page needs a login to view (401 Unauthorized).',
+  403: 'The server refused access to the page (403 Forbidden).',
+  404: "The server says the page doesn't exist (404 Not Found).",
+  410: 'The server says the page was removed for good (410 Gone).',
+  500: 'The server hit an error while building the page (500 Internal Server Error).',
+  502: 'A proxy in front of the site got a bad answer from it (502 Bad Gateway).',
+  503: 'The server is temporarily unavailable (503 Service Unavailable).',
+  504: 'A proxy in front of the site gave up waiting for it (504 Gateway Timeout).',
+};
+
+// one page's failure in a sentence, matching the code its status chip shows
+export function failureReason(errorType: string, code: number): string {
+  if (code && (errorType === 'http_4xx' || errorType === 'server_error')) {
+    return (
+      CODE_EXPLANATION[code] ??
+      (errorType === 'http_4xx'
+        ? `The server answered with a ${code} error, so the page can't be loaded.`
+        : `The server hit an error while responding (${code}).`)
+    );
+  }
+  return FAILURE_EXPLANATION[errorType] ?? 'The page could not be loaded.';
+}
 
 // short label for grouping broken pages by cause ("404" and "410" both group under 4xx)
 export function failureGroup(errorType: string): string {

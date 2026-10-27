@@ -6,6 +6,7 @@ import ForceGraph2D, { type ForceGraphMethods } from 'react-force-graph-2d';
 import type { GraphData, GraphNode } from '../api';
 import {
   BROKEN_HEX,
+  INK_HEX,
   NO_SCORE_HEX,
   OTHER_SECTION_HEX,
   TIER_HEX,
@@ -62,6 +63,14 @@ function healthKey(n: GraphNode): HealthKey {
   return n.seo_score === null ? 'none' : scoreTier(n.seo_score);
 }
 
+// the graph shouldn't trap page scrolling: one finger and a plain wheel scroll the page, while two
+// fingers, Ctrl/⌘ + wheel or a trackpad pinch move and zoom the graph. The lib types these
+// filters as MouseEvent, but d3-zoom hands them the raw touch or wheel event. The container's
+// touch-pan-y also overrides d3-drag's inline touch-action: none, which blocks native scrolling.
+const panFilter = (ev: MouseEvent & { touches?: TouchList }) =>
+  !ev.touches || ev.touches.length > 1;
+const zoomFilter = (ev: MouseEvent) => ev.ctrlKey || ev.metaKey;
+
 // cap zoom-to-fit so a sparse graph doesn't fill the viewport with one dot
 const MAX_ZOOM = 2.5;
 const LEGEND_SECTIONS = 8;
@@ -110,6 +119,8 @@ export const GraphView = memo(function GraphView({
   const [jumpId, setJumpId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<ColourMode>('section');
+  // on touch screens a swipe that starts on a page should scroll, not drag the page around
+  const [coarsePointer] = useState(() => window.matchMedia('(pointer: coarse)').matches);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [brokenOnly, setBrokenOnly] = useState(false);
 
@@ -148,7 +159,19 @@ export const GraphView = memo(function GraphView({
     return () => obs.disconnect();
   }, []);
 
-  // new wrapper each poll so ForceGraph2D rebuilds; inner nodes reused so layout/velocities survive
+  // pause the layout while scrolled out of view, so a big graph doesn't stall the rest of the report
+  useEffect(() => {
+    if (!containerRef.current) {
+      return;
+    }
+    const obs = new IntersectionObserver(([entry]) =>
+      entry.isIntersecting ? fgRef.current?.resumeAnimation() : fgRef.current?.pauseAnimation(),
+    );
+    obs.observe(containerRef.current);
+    return () => obs.disconnect();
+  }, []);
+
+  // nodes are reused across polls so positions and velocities survive
   const [graph, setGraph] = useState<{ nodes: FgNode[]; links: FgLink[] }>({
     nodes: [],
     links: [],
@@ -156,7 +179,8 @@ export const GraphView = memo(function GraphView({
 
   useEffect(() => {
     setGraph((prev) => {
-      const byId = new Map(prev.nodes.map((n) => [n.id, n]));
+      const byId = new Map<string, FgNode>(prev.nodes.map((n) => [n.id, n]));
+      const parentOf = new Map((data.edges ?? []).map((e) => [e.target, e.source]));
       let nodesChanged = false;
       const nodes = prev.nodes.slice();
       for (const incoming of data.nodes ?? []) {
@@ -167,7 +191,13 @@ export const GraphView = memo(function GraphView({
           existing.error_type = incoming.error_type;
           existing.seo_score = incoming.seo_score;
         } else {
-          const n = { ...incoming };
+          const n: FgNode = { ...incoming };
+          // starts beside the page it was found on, so a short reheat settles it
+          const parent = byId.get(parentOf.get(n.id) ?? '');
+          if (parent?.x !== undefined && parent.y !== undefined) {
+            n.x = parent.x + Math.random() * 10 - 5;
+            n.y = parent.y + Math.random() * 10 - 5;
+          }
           nodes.push(n);
           byId.set(n.id, n);
           nodesChanged = true;
@@ -187,8 +217,8 @@ export const GraphView = memo(function GraphView({
         }
       }
 
-      // new wrapper even with no structural change, so field updates reach the painter
-      return nodesChanged || linksChanged ? { nodes, links } : { ...prev };
+      // a new object restarts the layout, so only when pages or links were added (fields are read from the nodes)
+      return nodesChanged || linksChanged ? { nodes, links } : prev;
     });
   }, [data]);
 
@@ -257,11 +287,11 @@ export const GraphView = memo(function GraphView({
     }, ms + 50);
   };
   const fitView = () => fitTo(400, 20);
-  // fit once, when the first layout settles; never again (would yank the view mid-crawl)
-  const fittedRef = useRef(false);
+  // a full first layout, fitted once; later additions get a short reheat so slow devices don't stall
+  const [settled, setSettled] = useState(false);
   const fitOnce = () => {
-    if (!fittedRef.current) {
-      fittedRef.current = true;
+    if (!settled) {
+      setSettled(true);
       fitView();
     }
   };
@@ -335,12 +365,12 @@ export const GraphView = memo(function GraphView({
             aria-pressed={brokenOnly}
             onClick={() => setBrokenOnly((b) => !b)}
             disabled={brokenCount === 0}
-            className="h-8.5 text-[13px]"
+            className="text-label h-8.5"
           >
-            <span className="ring-bad-dot size-2.5 rounded-full ring-[1.5px] ring-offset-1 ring-offset-transparent" />
+            <span className="ring-bad-dot size-2.5 rounded-full ring-[1.5px] ring-offset-1 ring-offset-transparent forced-color-adjust-none" />
             Trace broken pages
             <span
-              className={`num font-mono text-[11px] ${brokenOnly ? 'text-white/70' : 'text-ink-3'}`}
+              className={`num text-code font-mono ${brokenOnly ? 'text-white/70' : 'text-ink-3'}`}
             >
               {brokenCount}
             </span>
@@ -359,12 +389,12 @@ export const GraphView = memo(function GraphView({
               setJumpId(null);
             }}
             onKeyDown={(e) => e.key === 'Enter' && jumpToMatch()}
-            placeholder="Find a page, then press Enter"
+            placeholder="Find a page"
           />
           {hasQuery && (
             <InputGroupAddon
               align="inline-end"
-              className="num font-mono text-[11px]"
+              className="num text-code font-mono"
               aria-live="polite"
             >
               {matches.length} found
@@ -375,9 +405,9 @@ export const GraphView = memo(function GraphView({
 
       <div
         ref={containerRef}
-        className="bg-sunken/60 relative h-[68vh] min-h-110 w-full"
+        className="bg-sunken/60 relative h-[68vh] min-h-110 w-full [&_canvas]:touch-pan-y!"
         style={{
-          backgroundImage: 'radial-gradient(#d4d4d4 1px, transparent 1px)',
+          backgroundImage: 'radial-gradient(var(--color-line-strong) 1px, transparent 1px)',
           backgroundSize: '22px 22px',
         }}
         onPointerLeave={() => setHoveredId(null)}
@@ -389,8 +419,11 @@ export const GraphView = memo(function GraphView({
           height={size.height}
           backgroundColor="rgba(0,0,0,0)"
           nodeRelSize={1}
-          cooldownTicks={120}
+          cooldownTicks={settled ? 40 : 120}
           onEngineStop={fitOnce}
+          enablePanInteraction={panFilter}
+          enableZoomInteraction={zoomFilter}
+          enableNodeDrag={!coarsePointer}
           linkDirectionalParticles={0}
           linkColor={(link) => {
             if (isLitLink(link)) {
@@ -442,7 +475,7 @@ export const GraphView = memo(function GraphView({
 
             ctx.beginPath();
             ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-            ctx.fillStyle = n.depth === 0 ? '#171717' : fillFor(n);
+            ctx.fillStyle = n.depth === 0 ? INK_HEX : fillFor(n);
             ctx.fill();
             ctx.lineWidth = 1 / scale;
             ctx.strokeStyle = '#ffffff';
@@ -460,7 +493,7 @@ export const GraphView = memo(function GraphView({
             // the focused or selected page gets an ink ring
             if (n.id === focusId || n.id === selectedUrl) {
               ctx.lineWidth = 2 / scale;
-              ctx.strokeStyle = '#171717';
+              ctx.strokeStyle = INK_HEX;
               ctx.beginPath();
               ctx.arc(n.x, n.y, r + (n.is_alive ? 3.5 : 6.5) / scale, 0, Math.PI * 2);
               ctx.stroke();
@@ -509,12 +542,12 @@ export const GraphView = memo(function GraphView({
           onToggle={toggleKey}
           onShowAll={() => setHidden(new Set())}
         />
-        <span className="text-ink-3 text-[13px] sm:hidden">
-          Tap a page to see how it was found and open its audit.
+        <span className="text-ink-3 text-label pointer-fine:hidden">
+          Tap a page to open its audit. Use two fingers to move or zoom.
         </span>
-        <span className="text-ink-3 hidden text-[13px] sm:inline">
-          Hover a page to trace how the crawl found it. You can drag pages around, and clicking one
-          opens its audit.
+        <span className="text-ink-3 text-label hidden pointer-fine:inline">
+          Hover a page to see how the crawl found it, and click it to open its audit. Pinch or
+          Ctrl+scroll to zoom.
         </span>
       </footer>
     </section>
@@ -570,7 +603,7 @@ function Legend({
         ];
   return (
     <ul
-      className="text-ink-2 flex flex-wrap items-center gap-x-1 gap-y-1 font-mono text-[11px]"
+      className="text-ink-2 text-code flex flex-wrap items-center gap-x-1 gap-y-1 font-mono forced-color-adjust-none"
       aria-label="Show or hide pages"
     >
       {items.map((it) => {
@@ -609,7 +642,7 @@ function Legend({
           <button
             type="button"
             onClick={onShowAll}
-            className="text-link-600 px-2 py-1 font-sans text-[12px] underline-offset-4 hover:underline"
+            className="text-link-600 text-caption px-2 py-1 font-sans underline-offset-4 hover:underline"
           >
             Show all
           </button>

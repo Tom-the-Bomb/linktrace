@@ -51,10 +51,11 @@ export function ProgressView({
       <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-8 pb-8 sm:px-8 sm:pt-10">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="truncate text-[28px] leading-tight font-semibold tracking-[-0.035em] sm:text-4xl sm:leading-10">
-              {hostOf(url)}
-            </h1>
-            <JobStatusChip status={state} />
+            <h1 className="page-title truncate">{hostOf(url)}</h1>
+            {/* announces the change when the crawl finishes or stops */}
+            <span role="status" className="flex">
+              <JobStatusChip status={state} />
+            </span>
           </div>
           <p className="num text-ink-3 mt-1 text-sm">
             {isDone && (
@@ -66,7 +67,8 @@ export function ProgressView({
             Started {formatDate(created_at, true)}.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-1">
+        {/* pulled out by the buttons' padding, so icons and text line up with the content edges */}
+        <div className="-mx-2 flex flex-wrap items-center gap-1">
           {isDone && onRecrawl && (
             <Button variant="ghost" size="quiet" onClick={onRecrawl} disabled={recrawling}>
               {recrawling ? (
@@ -117,37 +119,38 @@ export function ProgressView({
         </div>
       )}
 
-      {!isDone && (
-        <div className="panel">
-          <div className="px-5 py-5 sm:px-8">
-            <div className="flex items-baseline justify-between gap-4">
-              <p className="text-[15px] font-medium">
-                Checking <span className="num">{checked.toLocaleString()}</span>
-                <span className="text-ink-3"> of </span>
-                <span className="num">{discovered.toLocaleString()}</span> pages found
-              </p>
-              <span className="num text-ink-2 font-mono text-sm">{pct(checked, discovered)}%</span>
-            </div>
-            <div className="mt-3">
-              <Bar discovered={discovered} healthy={healthy} rotten={rotten} />
-            </div>
+      {/* folds away when the crawl ends (where interpolate-size isn't supported it fades, then goes) */}
+      <div
+        className={`panel transition-[height,opacity,display] transition-discrete duration-400 ease-in-out [interpolate-size:allow-keywords] ${isDone ? 'hidden h-0 overflow-hidden opacity-0' : ''}`}
+      >
+        <div className="px-5 py-5 sm:px-8">
+          <div className="flex items-baseline justify-between gap-4">
+            <p className="text-body font-medium">
+              Checking <span className="num">{checked.toLocaleString()}</span>
+              <span className="text-ink-3"> of </span>
+              <span className="num">{discovered.toLocaleString()}</span> pages found
+            </p>
+            <span className="num text-ink-2 font-mono text-sm">{pct(checked, discovered)}%</span>
           </div>
-          <dl className="border-line [&>div]:border-line grid grid-cols-2 border-t sm:grid-cols-4 [&>div]:px-5 [&>div]:py-4 sm:[&>div]:px-8 sm:[&>div:not(:last-child)]:border-r max-sm:[&>div:nth-child(-n+2)]:border-b [&>div:nth-child(odd)]:border-r">
-            <Count label="Found" value={discovered} />
-            <Count
-              label="Checked"
-              value={checked}
-              note={delta > 0 ? `+${delta.toLocaleString()}` : undefined}
-            />
-            <Count label="Healthy" value={healthy} dot="bg-ok-dot" />
-            <Count label="Broken" value={rotten} dot="bg-bad-dot" tone="text-bad-fg" />
-          </dl>
-          <p className="border-line text-ink-3 border-t px-5 py-3 text-[13px] sm:px-8">
-            This page updates by itself as pages are checked, and the full report appears once the
-            crawl finishes.
-          </p>
+          <div className="mt-3">
+            <Bar discovered={discovered} healthy={healthy} rotten={rotten} />
+          </div>
         </div>
-      )}
+        <dl className="border-line [&>div]:border-line grid grid-cols-2 border-t sm:grid-cols-4 [&>div]:px-5 [&>div]:py-4 sm:[&>div]:px-8 sm:[&>div:not(:last-child)]:border-r max-sm:[&>div:nth-child(-n+2)]:border-b [&>div:nth-child(odd)]:border-r">
+          <Count label="Found" value={discovered} />
+          <Count
+            label="Checked"
+            value={checked}
+            note={delta > 0 ? `+${delta.toLocaleString()}` : undefined}
+          />
+          <Count label="Healthy" value={healthy} dot="bg-ok-dot" />
+          <Count label="Broken" value={rotten} dot="bg-bad-dot" tone="text-bad-fg" />
+        </dl>
+        <p className="border-line text-ink-3 text-label border-t px-5 py-3 sm:px-8">
+          This page updates as pages are checked, and the full report appears when the crawl
+          finishes.
+        </p>
+      </div>
     </section>
   );
 }
@@ -164,7 +167,7 @@ function Bar({
   const seg = (n: number) => (discovered > 0 ? (n / discovered) * 100 : 0);
   return (
     <div
-      className="bg-sunken ring-line flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full ring-1 ring-inset"
+      className="bg-sunken ring-line flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full ring-1 forced-color-adjust-none ring-inset"
       role="progressbar"
       aria-valuemin={0}
       aria-valuemax={100}
@@ -172,11 +175,11 @@ function Bar({
       aria-label="Crawl progress"
     >
       <div
-        className="bg-ok-dot h-full transition-[width] duration-700"
+        className="bg-ok-dot ease-out-expo h-full transition-[width] duration-700"
         style={{ width: `${seg(healthy)}%` }}
       />
       <div
-        className="bg-bad-dot h-full transition-[width] duration-700"
+        className="bg-bad-dot ease-out-expo h-full transition-[width] duration-700"
         style={{ width: `${seg(rotten)}%` }}
       />
     </div>
@@ -213,19 +216,19 @@ function Count({
 }) {
   return (
     <div>
-      <dt className="text-ink-3 flex items-center gap-1.5 text-[13px] font-medium">
-        {dot && <span className={`size-2 rounded-full ${dot}`} />}
+      <dt className="text-ink-3 text-label flex items-center gap-1.5 font-medium">
+        {dot && <span className={`size-2 rounded-full forced-color-adjust-none ${dot}`} />}
         {label}
       </dt>
       <dd className="mt-0.5 flex items-baseline gap-2">
         {/* key on value so each change replays the tick */}
         <span
           key={value}
-          className={`num animate-tick inline-block text-[28px] font-bold tracking-[-0.03em] ${tone}`}
+          className={`num animate-tick text-headline tracking-headline inline-block font-semibold ${tone}`}
         >
           {value.toLocaleString()}
         </span>
-        {note && <span className="num text-ok-fg font-mono text-[11px] font-medium">{note}</span>}
+        {note && <span className="num text-ok-fg text-code font-mono font-medium">{note}</span>}
       </dd>
     </div>
   );

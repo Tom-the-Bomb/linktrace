@@ -1,7 +1,8 @@
 import { type SubmitEvent } from 'react';
 
-import { cn } from 'cn';
 import { ArrowLeft, Square } from 'lucide-react';
+
+import { cn } from '@/lib/utils';
 
 import { AuthBar } from './AuthBar';
 import { CrawlForm } from './CrawlForm';

@@ -1,7 +1,7 @@
-import { type SubmitEvent, useMemo, useState } from 'react';
+import { type SubmitEvent, useCallback, useMemo, useState } from 'react';
 
 import { ChartNetwork, Table2 } from 'lucide-react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLoaderData, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { cancelCheck, deleteJob } from '../api';
 import { BrokenLinks } from '../components/BrokenLinks';
@@ -22,7 +22,7 @@ import { ErrorBanner } from '../components/ui/ErrorBanner';
 import { GridRow } from '../components/ui/GridRow';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useCreateCrawl } from '../hooks/useCreateCrawl';
-import { useJobReport } from '../hooks/useJobReport';
+import { type Tick, useJobReport } from '../hooks/useJobReport';
 import { useSeo } from '../hooks/useSeo';
 import { sectionColourMap } from '../lib/colours';
 import { errMessage } from '../lib/format';
@@ -36,8 +36,18 @@ export default function JobReportPage() {
   // set by useCreateCrawl when the site was already being crawled and we joined that crawl
   const joined = (useLocation().state as { joined?: boolean } | null)?.joined ?? false;
 
-  const { status, setStatus, rows, report, graph, error, setError, notFound } = useJobReport(jobId);
+  const { first } = useLoaderData() as { first: Promise<Tick> };
+  const { status, setStatus, rows, report, graph, error, setError, notFound } = useJobReport(
+    jobId,
+    first,
+  );
+  // the audited page outlives closing, so the drawer slides out with its content
   const [drilldownUrl, setDrilldownUrl] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const openAudit = useCallback((url: string) => {
+    setDrilldownUrl(url);
+    setDrawerOpen(true);
+  }, []);
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -118,7 +128,7 @@ export default function JobReportPage() {
     return (
       <NotFound
         title="No report with this ID"
-        message="It may have been deleted, or the link is mistyped. Start a new crawl from the home page."
+        message="It may have been deleted, or the link is mistyped."
       />
     );
   }
@@ -134,7 +144,8 @@ export default function JobReportPage() {
         onStopOrBack={onStopOrBack}
       />
 
-      <main className="frame flex-1 pb-16">
+      {/* at least a screen tall, so the footer starts below the fold instead of being pushed there */}
+      <main className="frame min-h-dvh flex-1 pb-16">
         {(error ?? createError) && (
           <ErrorBanner className="mx-5 mt-6 sm:mx-8">{error ?? createError}</ErrorBanner>
         )}
@@ -148,8 +159,8 @@ export default function JobReportPage() {
 
         {joined && (
           <p className="rounded-control bg-sunken text-ink-2 ring-line mx-5 mt-6 px-4 py-3 text-sm ring-1 ring-inset sm:mx-8">
-            This site was already being crawled, so you&rsquo;ve been taken to that crawl&rsquo;s
-            live report instead of starting a second one.
+            This site was already being crawled, so you&rsquo;ve joined that crawl instead of
+            starting a new one.
           </p>
         )}
 
@@ -171,7 +182,7 @@ export default function JobReportPage() {
             <Tabs defaultValue="graph">
               <SectionHeader
                 title="All pages"
-                subtitle="Click a page to see its full SEO audit."
+                subtitle="Click a page to open its audit."
                 right={
                   <TabsList aria-label="Explore view">
                     <TabsTrigger value="graph" count={graph?.nodes.length ?? 0} className="px-3.5">
@@ -190,8 +201,8 @@ export default function JobReportPage() {
                   <GraphView
                     data={graph}
                     tree={tree}
-                    selectedUrl={drilldownUrl}
-                    onSelect={setDrilldownUrl}
+                    selectedUrl={drawerOpen ? drilldownUrl : null}
+                    onSelect={openAudit}
                     colourFor={colourFor}
                     sections={sections}
                   />
@@ -200,7 +211,7 @@ export default function JobReportPage() {
               <TabsContent value="table">
                 <ResultsTable
                   rows={rows}
-                  onSelect={setDrilldownUrl}
+                  onSelect={openAudit}
                   colourFor={colourFor}
                   siteUrl={status?.url ?? ''}
                   foundOn={tree.parent}
@@ -216,7 +227,7 @@ export default function JobReportPage() {
               rows={rows}
               foundOn={tree.parent}
               siteUrl={status?.url ?? ''}
-              onSelect={setDrilldownUrl}
+              onSelect={openAudit}
             />
           </GridRow>
         )}
@@ -252,10 +263,11 @@ export default function JobReportPage() {
       <SeoDrawer
         jobId={jobId}
         url={drilldownUrl}
+        open={drawerOpen}
         row={drilldownUrl ? rowsByUrl.get(drilldownUrl) : undefined}
         tree={tree}
         onNavigate={setDrilldownUrl}
-        onClose={() => setDrilldownUrl(null)}
+        onClose={() => setDrawerOpen(false)}
       />
 
       {confirmingDelete && status && (

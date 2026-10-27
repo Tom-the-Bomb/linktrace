@@ -12,7 +12,7 @@ export function SectionHeader({
     <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 px-5 pt-10 pb-5 sm:px-8">
       <div className="min-w-0">
         <h2 className="section-title">{title}</h2>
-        {subtitle && <p className="text-ink-3 mt-1 text-[15px]">{subtitle}</p>}
+        {subtitle && <p className="text-ink-3 text-body mt-1">{subtitle}</p>}
       </div>
       {right}
     </div>
