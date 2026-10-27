@@ -24,7 +24,7 @@ repeat for every internal link in the page. It finds:
 - MySQL stores jobs, pages, results, the site graph and users.
 - Caddy serves `web/`, proxies `/api`, and does HTTPS.
 
-Frontend: React 19 + Tailwind 4, with design tokens in `web/src/index.css`. `/jobs/<id>` receives live updates (polling) until the crawl finishes. Buttons, dialogs, menus, tabs and other primitives in `web/src/components/ui` come from [shadcn/ui](https://ui.shadcn.com) (add more with `npx shadcn add <name>`), restyled to the design tokens.
+Frontend: React 19 + Tailwind 4, with UI primitives from [shadcn/ui](https://ui.shadcn.com). `/jobs/<id>` receives live updates (polling) until the crawl finishes.
 
 ## API
 
@@ -79,21 +79,16 @@ There is a GH workflow (`.github/workflows/deploy.yml`, needs the `DROPLET_*` se
 
 ## Config
 
-Worker limits: `WORKER_COUNT` (100), `MAX_PAGES` (10000), `MAX_DEPTH` (20), `MAX_PER_CATEGORY` (1000), `RATE_PER_MIN` (300, requests per minute per target site across every crawl). `ANON_MAX_PAGES` (500) is read by the API only, which puts that lower cap on crawls started without an account.
+Worker limits: `WORKER_COUNT` (100), `MAX_PAGES` (10000), `MAX_DEPTH` (20), `MAX_PER_CATEGORY` (1000), `RATE_PER_MIN` (300 per target site). `ANON_MAX_PAGES` (500) caps crawls started without an account (api only).
 
 `SHARD_COUNT` (5) is the # of work-queue lanes so that each crawl (no matter how large) is limited to 1 lane so it doesn't block other crawls. (i.e. takes up 1/SHARD_COUNT fraction of the fetch goroutines) Set it to the same value on the api and the worker.
 
 Connections: `MYSQL_DSN`, `REDIS_ADDR`, `RABBIT_URL`, `HTTP_ADDR`, `FRONTEND_ORIGIN` (comma-separated), `COOKIE_SECURE`.
 
-`ALLOW_PRIVATE_TARGETS` (false) lets you crawl localhost and LAN sites in development. Leave it off in production: every outbound request refuses private, loopback, link-local (including cloud metadata) and other reserved addresses, and any port other than 80 and 443, which is what stops a crawl from reaching the API, Redis, RabbitMQ or the host itself.
+`ALLOW_PRIVATE_TARGETS` (false) lets you crawl localhost and LAN sites in dev. Keep it off in production, otherwise a crawl could reach the API, Redis or the host itself.
 
 Default values point at the dev containers. Production values should go in `.env.production`.
 
 ## Abuse limits
 
-- Only one crawl of a site started without an account runs at a time. Starting another joins the one already running. (Account crawls are separate, but every crawl of a site shares the same per-site request rate.)
-- Crawls started without an account are capped at `ANON_MAX_PAGES` pages. Their creator gets a random owner cookie (only its hash is stored), and only that browser can stop or delete them.
-- The checker identifies itself as `LinkTraceBot` with a link back here, and respects robots.txt `Allow`/`Disallow` rules as well as `Crawl-delay` (a group naming LinkTrace replaces the `*` group, and a robots.txt that errors blocks the crawl, as RFC 9309 specifies).
-- A crawl stays on the site it was started on: a page that redirects to another site is recorded but not expanded.
-- Every request that isn't a GET must send `Content-Type: application/json`, which forces a CORS preflight, so other sites can't start, stop or delete crawls from their visitors' browsers.
-- Every request is rate limited per IP (and per account when logged in), and report data endpoints have their own per-minute budget. Failed logins are also limited per account, both from one IP and in total, so guessing a password is slow but nobody else can lock you out.
+Crawls without an account are capped at `ANON_MAX_PAGES`, and only one can run per site at a time (starting another just joins it). The crawler identifies itself as `LinkTraceBot` and follows robots.txt, including `Crawl-delay`. Requests are rate limited per IP and per account, and so are failed logins.
