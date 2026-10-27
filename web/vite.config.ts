@@ -11,4 +11,8 @@ export default defineConfig({
     cn({ out: 'src/lib/cn-tables.ts', content: ['src/**/*.{ts,tsx}'], css: 'src/index.css' }),
   ],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+  // mirrors Caddy's /api route in prod
+  server: {
+    proxy: { '/api': { target: 'http://localhost:8080', rewrite: (p) => p.replace(/^\/api/, '') } },
+  },
 });

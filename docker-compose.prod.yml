@@ -79,7 +79,6 @@ services:
     environment:
       <<: *go-env
       HTTP_ADDR: ":8080"
-      FRONTEND_ORIGIN: "https://${DOMAIN}"
       COOKIE_SECURE: "true"
       ANON_MAX_PAGES: "${ANON_MAX_PAGES:-500}"
 
@@ -100,7 +99,6 @@ services:
       context: .
       dockerfile: Dockerfile.web
       args:
-        VITE_API_BASE: /api
         # deliberately not derived from DOMAIN, a Caddy listener spec that may be ":80"
         VITE_SITE_URL: "${VITE_SITE_URL:-https://linktrace.tomthebomb.dev}"
     container_name: linktrace-caddy

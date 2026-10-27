@@ -12,7 +12,6 @@ type Config struct {
 	RatePerMin          int // per target domain, shared by every crawl
 	WorkerCount         int
 	ShardCount          int
-	FrontendOrigin      string
 	CookieSecure        bool
 	AllowPrivateTargets bool // disables the SSRF guard; keep false in prod
 }
@@ -31,7 +30,6 @@ func Load() Config {
 		RatePerMin:          envInt("RATE_PER_MIN", 300),
 		WorkerCount:         envInt("WORKER_COUNT", 100),
 		ShardCount:          max(1, envInt("SHARD_COUNT", 5)),
-		FrontendOrigin:      env("FRONTEND_ORIGIN", "http://localhost:5173"),
 		CookieSecure:        envBool("COOKIE_SECURE", false),
 		AllowPrivateTargets: envBool("ALLOW_PRIVATE_TARGETS", false),
 	}

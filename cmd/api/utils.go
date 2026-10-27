@@ -67,34 +67,8 @@ func clientIP(r *http.Request) string {
 	return ip
 }
 
-// Credentialed CORS needs the exact origin echoed back, never "*".
-func corsMiddleware(origins string) func(http.Handler) http.Handler {
-	allowed := map[string]bool{}
-	for _, o := range strings.Split(origins, ",") {
-		if o = strings.TrimSpace(o); o != "" {
-			allowed[o] = true
-		}
-	}
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if origin := r.Header.Get("Origin"); allowed[origin] {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				w.Header().Add("Vary", "Origin")
-				w.Header().Set("Access-Control-Allow-Credentials", "true")
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-			}
-			if r.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
 // blocks CSRF: browsers can't send JSON cross-origin without a CORS preflight,
-// which only our frontend passes.
+// which this API never approves.
 func jsonOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {

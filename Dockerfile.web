@@ -5,9 +5,7 @@ COPY web/package.json web/package-lock.json ./
 RUN npm ci
 
 COPY web/ ./
-ARG VITE_API_BASE=/api
 ARG VITE_SITE_URL=https://linktrace.tomthebomb.dev
-ENV VITE_API_BASE=$VITE_API_BASE
 ENV VITE_SITE_URL=$VITE_SITE_URL
 RUN npm run build
 

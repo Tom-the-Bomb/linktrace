@@ -81,11 +81,9 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(corsMiddleware(cfg.FrontendOrigin))
 	r.Use(jsonOnly)
 	r.Use(auth.Optional(s.cache))
 
-	// corsMiddleware answers OPTIONS preflights above, so they don't consume budget
 	r.Group(func(r chi.Router) {
 		r.Use(s.limitPerMin("expensive", expensivePerMinIP, expensivePerMinUser))
 		r.Post("/check", s.handleCreate)

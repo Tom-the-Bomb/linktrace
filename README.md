@@ -57,7 +57,8 @@ Docker, Go 1.26+, Node 20+ are needed as MySQL, Redis and RabbitMQ all run in co
 cp .env.example .env
 npm --prefix web install
 
-make dev    # containers, then API :8080, worker and web :5173 in one terminal
+make dev           # containers, then API :8080, worker and web :5173 in one terminal
+make dev LAN=1     # same, but the site is also reachable from your phone on the same network
 ```
 
 ## Deploying
@@ -80,7 +81,7 @@ Worker limits: `WORKER_COUNT` (100), `MAX_PAGES` (10000), `MAX_DEPTH` (20), `MAX
 
 `SHARD_COUNT` (5) is the # of work-queue lanes so that each crawl (no matter how large) is limited to 1 lane so it doesn't block other crawls. (i.e. takes up 1/SHARD_COUNT fraction of the fetch goroutines) Set it to the same value on the api and the worker.
 
-Connections: `MYSQL_DSN`, `REDIS_ADDR`, `RABBIT_URL`, `HTTP_ADDR`, `FRONTEND_ORIGIN` (comma-separated), `COOKIE_SECURE`.
+Connections: `MYSQL_DSN`, `REDIS_ADDR`, `RABBIT_URL`, `HTTP_ADDR`, `COOKIE_SECURE`.
 
 `ALLOW_PRIVATE_TARGETS` (false) lets you crawl localhost and LAN sites in dev. Keep it off in production, otherwise a crawl could reach the API, Redis or the host itself.
 
