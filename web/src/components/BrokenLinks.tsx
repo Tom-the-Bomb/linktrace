@@ -86,7 +86,7 @@ export function BrokenLinks({
       />
 
       {broken.length === 0 ? (
-        <div className="panel text-ink-2 text-body flex items-center gap-3 p-5 sm:px-8">
+        <div className="panel text-ink-2 text-body gutter flex items-center gap-3 py-5">
           <CircleCheck className="text-ok-dot size-5 shrink-0" />
           No broken links found.
         </div>
@@ -128,7 +128,7 @@ export function BrokenLinks({
                     >
                       {pathOf(r.url)}
                     </button>
-                    <p className="text-ink-3 text-label mt-0.5 flex min-w-0 items-center gap-1.5">
+                    <p className="text-ink-3 text-label mt-0.5 flex items-center gap-1.5">
                       <CornerDownRight className="size-3.5 shrink-0" />
                       {parent ? (
                         <>

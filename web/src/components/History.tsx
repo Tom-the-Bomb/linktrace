@@ -31,34 +31,15 @@ export function History() {
       .catch((e) => setError(errMessage(e)));
   }, []);
 
-  const removeRun = (jobId: string) =>
-    setEntries((prev) =>
-      prev
-        ? prev.flatMap((e) => {
-            if (!e.runs.some((r) => r.job_id === jobId)) {
-              return [e];
-            }
-            const runs = e.runs.filter((r) => r.job_id !== jobId);
-            if (runs.length === 0) {
-              return [];
-            }
-            // runs stay newest-first, so runs[0] is the new latest
-            return [
-              {
-                ...e,
-                runs,
-                crawl_count: runs.length,
-                last_job_id: runs[0].job_id,
-                last_crawled: runs[0].created_at,
-              },
-            ];
-          })
-        : prev,
-    );
-
   async function confirmDelete(jobId: string) {
     await deleteJob(jobId);
-    removeRun(jobId);
+    setEntries(
+      (prev) =>
+        prev &&
+        prev
+          .map((e) => ({ ...e, runs: e.runs.filter((r) => r.job_id !== jobId) }))
+          .filter((e) => e.runs.length > 0),
+    );
     setPendingDelete(null);
   }
 
@@ -116,7 +97,8 @@ function HistoryRow({
   onOpen: (jobId: string) => void;
   onRequestDelete: (target: DeleteTarget) => void;
 }) {
-  const multi = entry.crawl_count > 1;
+  const latest = entry.runs[0];
+  const multi = entry.runs.length > 1;
 
   return (
     <Collapsible asChild>
@@ -149,8 +131,7 @@ function HistoryRow({
               {entry.url}
             </a>
             <p className="num text-ink-3 text-label mt-0.5">
-              {entry.crawl_count} {entry.crawl_count === 1 ? 'run' : 'runs'}, last on{' '}
-              {formatDate(entry.last_crawled)}
+              {entry.runs.length} {multi ? 'runs' : 'run'}, last on {formatDate(latest.created_at)}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -159,17 +140,17 @@ function HistoryRow({
               label={`Delete crawl of ${hostOf(entry.url)}`}
               onClick={() =>
                 onRequestDelete({
-                  jobId: entry.last_job_id,
+                  jobId: latest.job_id,
                   url: entry.url,
-                  startedAt: entry.last_crawled,
+                  startedAt: latest.created_at,
                 })
               }
             />
-            <JobStatusChip status={entry.runs[0].status} />
+            <JobStatusChip status={latest.status} />
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => onOpen(entry.last_job_id)}
+              onClick={() => onOpen(latest.job_id)}
               aria-label={`${multi ? 'Open latest report' : 'Open report'} for ${hostOf(entry.url)}`}
               className="ml-1.5 sm:ml-2 sm:px-3"
             >
@@ -221,7 +202,7 @@ function RunRow({
 }) {
   return (
     <li className="group flex items-center gap-3 py-2">
-      <span className="num text-ink-3 text-code w-8 shrink-0 font-mono">#{index}</span>
+      <span className="text-ink-3 text-code w-8 shrink-0 font-mono">#{index}</span>
       <div className="text-ink-2 text-label min-w-0 flex-1">
         {formatDate(run.created_at, true)}
         {isLatest && <span className="text-link-600 text-caption ml-2 font-semibold">latest</span>}

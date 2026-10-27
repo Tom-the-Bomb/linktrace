@@ -38,7 +38,7 @@ export default function AccountMenu({ user }: { user: Me }) {
             ref={trigger}
             variant="secondary"
             aria-label={user.username}
-            className="group gap-2 pr-2.5 pl-1.5"
+            className="group pr-2.5 pl-1.5"
           >
             <span className="bg-ink text-code flex size-6 items-center justify-center rounded-full font-semibold text-white uppercase">
               {user.username.slice(0, 1)}

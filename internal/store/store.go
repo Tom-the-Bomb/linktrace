@@ -103,10 +103,6 @@ func (s *Store) UpdateJobStatus(id, status string) error {
 
 // deletes children before the parent since the FKs don't cascade.
 func (s *Store) DeleteJob(id string) error {
-	// a malformed id would error inside UUID_TO_BIN
-	if _, err := uuid.Parse(id); err != nil {
-		return nil
-	}
 	return s.tx(func(t *sql.Tx) error {
 		stmts := []string{
 			"DELETE FROM pages WHERE job_id = UUID_TO_BIN(?)",
@@ -160,8 +156,8 @@ func (s *Store) InsertPageResult(result PageResult) error {
 }
 
 type Link struct {
-	Source string
-	Target string
+	Source string `json:"source"`
+	Target string `json:"target"`
 }
 
 // keeps one INSERT well under max_allowed_packet and the 65535-placeholder limit.

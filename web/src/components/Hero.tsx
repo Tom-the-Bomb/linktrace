@@ -36,7 +36,7 @@ export function Hero({ onSubmit, submitting, error }: HeroProps) {
       <TopNav />
       <main className="frame">
         <section className="grid grid-cols-1 lg:grid-cols-12">
-          <div className="gutter relative flex flex-col justify-between gap-8 pt-12 pb-10 lg:col-span-8 lg:border-r lg:py-16">
+          <div className="gutter flex flex-col justify-between gap-8 pt-12 pb-10 lg:col-span-8 lg:border-r lg:py-16">
             <h1 className="tracking-display text-display sm:text-display-lg leading-[0.98] font-semibold wrap-anywhere">
               Broken links,
               <br />
@@ -49,7 +49,7 @@ export function Hero({ onSubmit, submitting, error }: HeroProps) {
               error={error}
             />
           </div>
-          <div className="gutter relative flex flex-col justify-between gap-8 border-t pt-10 pb-12 lg:col-span-4 lg:border-t-0 lg:py-16">
+          <div className="gutter flex flex-col justify-between gap-8 border-t pt-10 pb-12 lg:col-span-4 lg:border-t-0 lg:py-16">
             <p className="lead max-w-xl">
               LinkTrace crawls your site from the homepage, following every internal link. It tells
               you which links are broken and why, scores each page&rsquo;s SEO and maps the whole
@@ -135,7 +135,7 @@ function DomainForm({
                 className="text-ink-3 pointer-events-none absolute inset-0 flex items-center overflow-hidden font-mono text-sm"
               >
                 {placeholder}
-                <span className="cursor-blink bg-ink ml-px inline-block h-[1.1em] w-px" />
+                <span className="animate-cursor-blink bg-ink ml-px inline-block h-[1.1em] w-px" />
               </span>
             )}
           </div>
@@ -211,14 +211,14 @@ function Failures() {
   return (
     <GridRow inner={['lg:left-1/3', 'lg:left-2/3']}>
       <section id="failures" className="grid scroll-mt-4 grid-cols-1 lg:grid-cols-12">
-        <div className="gutter relative py-12 lg:col-span-4 lg:border-r lg:py-16">
+        <div className="gutter py-12 lg:col-span-4 lg:border-r lg:py-16">
           <h2 className="section-title">Why links break</h2>
           <p className="lead mt-4 max-w-sm">
             LinkTrace records why each link failed, so you can tell a mistyped URL from an expired
             certificate or a server that&rsquo;s down.
           </p>
         </div>
-        <ul className="relative divide-y border-t lg:col-span-8 lg:border-t-0">
+        <ul className="divide-y border-t lg:col-span-8 lg:border-t-0">
           {FAILURE_TYPES.map((type) => (
             <li
               key={type}
@@ -256,7 +256,7 @@ function ReportContents() {
   return (
     <GridRow inner={['lg:left-1/3']}>
       <section className="grid grid-cols-1 lg:grid-cols-12">
-        <div className="gutter relative py-12 lg:col-span-4 lg:border-r lg:py-16">
+        <div className="gutter py-12 lg:col-span-4 lg:border-r lg:py-16">
           <h2 className="section-title">What&rsquo;s in a report</h2>
           <p className="lead mt-4 max-w-sm">
             Progress updates live while the crawl runs. When it finishes, the report groups pages by
@@ -270,7 +270,7 @@ function ReportContents() {
             crawl found.
           </p>
         </div>
-        <div className="relative border-t lg:col-span-8 lg:border-t-0">
+        <div className="border-t lg:col-span-8 lg:border-t-0">
           <div className="gutter flex items-center justify-between gap-3 pt-5">
             <h3 className="text-sm font-medium">By section</h3>
             <Badge>Sample</Badge>
@@ -288,7 +288,7 @@ function ReportContents() {
                 </span>
                 <span className="ml-auto flex flex-wrap items-center justify-end gap-x-3.5 gap-y-1.5">
                   <span
-                    className={`num text-label font-mono whitespace-nowrap ${scoreTextColour(r.seo)}`}
+                    className={`text-label font-mono whitespace-nowrap ${scoreTextColour(r.seo)}`}
                   >
                     SEO {r.seo}
                   </span>

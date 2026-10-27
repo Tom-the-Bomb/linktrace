@@ -80,7 +80,13 @@ func (c *Cache) DeleteSession(sid string) error {
 }
 
 func (c *Cache) IncDiscovered(jobID string) error {
-	return c.bump(jobID, "discovered")
+	ctx, cancel := c.ctx()
+	defer cancel()
+
+	if err := c.rdb.HIncrBy(ctx, progressKey(jobID), "discovered", 1).Err(); err != nil {
+		return err
+	}
+	return c.rdb.Expire(ctx, progressKey(jobID), progressTTL).Err()
 }
 
 // counts each page once, so a redelivered result can't push checked past discovered
@@ -158,16 +164,14 @@ func (c *Cache) allow(key string, perMinute int) (bool, error) {
 	return n <= int64(perMinute), nil
 }
 
-func (c *Cache) MarkSeen(jobID, url string) (bool, error) {
+func (c *Cache) MarkSeen(jobID, url string) error {
 	ctx, cancel := c.ctx()
 	defer cancel()
 
-	added, err := c.rdb.SAdd(ctx, seenKey(jobID), url).Result()
-	if err != nil {
-		return false, err
+	if err := c.rdb.SAdd(ctx, seenKey(jobID), url).Err(); err != nil {
+		return err
 	}
-	_ = c.rdb.Expire(ctx, seenKey(jobID), jobTTL).Err()
-	return added == 1, nil
+	return c.rdb.Expire(ctx, seenKey(jobID), jobTTL).Err()
 }
 
 func (c *Cache) Cancel(jobID string) error {

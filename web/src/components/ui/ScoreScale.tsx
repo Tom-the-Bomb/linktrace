@@ -12,7 +12,7 @@ export function ScoreScale({ score }: { score: number }) {
           style={{ left: `${clamped}%` }}
         />
       </div>
-      <div className="num text-ink-3 text-code relative mt-1.5 h-3 font-mono">
+      <div className="text-ink-3 text-code relative mt-1.5 h-3 font-mono">
         <span className="absolute left-0">0</span>
         <span className="absolute left-1/2 -translate-x-1/2">50</span>
         <span className="absolute left-[80%] -translate-x-1/2">80</span>

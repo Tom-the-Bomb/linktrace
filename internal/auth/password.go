@@ -7,7 +7,7 @@ func HashPassword(plain string) (string, error) {
 	return string(bytes), err
 }
 
-// NoUserHash is checked for unknown usernames so timing doesn't reveal which ones exist.
+// checked for unknown usernames so timing doesn't reveal which ones exist.
 var NoUserHash, _ = HashPassword("no such user")
 
 func CheckPassword(hash, plain string) bool {

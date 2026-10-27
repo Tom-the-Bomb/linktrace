@@ -10,7 +10,7 @@ export function NotFound({ title, message }: { title: string; message: string })
   return (
     <SplitPage title={title}>
       <p className="lead mt-4 max-w-md">
-        {message} <span className="num text-ink-3 font-mono text-sm">(404)</span>
+        {message} <span className="text-ink-3 font-mono text-sm">(404)</span>
       </p>
       <Button size="lg" className="mt-8" asChild>
         <Link to="/">

@@ -93,7 +93,6 @@ interface Props {
   sections: string[];
 }
 
-// edges only record where the crawler first found each page
 export const GraphView = memo(function GraphView({
   data,
   tree,
@@ -333,7 +332,6 @@ export const GraphView = memo(function GraphView({
     const l = link as FgLink;
     return lit.links.has(linkKey(idOf(l.source), idOf(l.target)));
   };
-  const hovered = hoveredId ? nodeById.get(hoveredId) : undefined;
   const tip = tipId ? nodeById.get(tipId) : undefined;
   const tipParent = tip && tree.parent.get(tip.id);
 
@@ -359,9 +357,7 @@ export const GraphView = memo(function GraphView({
           >
             <span className="ring-bad-dot size-2.5 rounded-full ring-[1.5px] ring-offset-1 ring-offset-transparent forced-color-adjust-none" />
             Trace broken pages
-            <span
-              className={`num text-code font-mono ${brokenOnly ? 'text-white/70' : 'text-ink-3'}`}
-            >
+            <span className={`text-code font-mono ${brokenOnly ? 'text-white/70' : 'text-ink-3'}`}>
               {brokenCount}
             </span>
           </Button>
@@ -382,11 +378,7 @@ export const GraphView = memo(function GraphView({
             placeholder="Find a page"
           />
           {hasQuery && (
-            <InputGroupAddon
-              align="inline-end"
-              className="num text-code font-mono"
-              aria-live="polite"
-            >
+            <InputGroupAddon align="inline-end" className="text-code font-mono" aria-live="polite">
               {matches.length} found
             </InputGroupAddon>
           )}
@@ -491,7 +483,7 @@ export const GraphView = memo(function GraphView({
         />
         <NodeTooltip
           ref={tooltipRef}
-          visible={!!hovered}
+          visible={hoveredId !== null}
           path={tip ? pathOf(tip.url) : ''}
           detail={tip ? tooltipDetail(tip) : ''}
           detailClass={tip ? TOOLTIP_CLASS[healthKey(tip)] : ''}

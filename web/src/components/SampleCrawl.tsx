@@ -93,7 +93,7 @@ export function SampleCrawl() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3">
-      <section className="relative lg:border-r" aria-label="Sample checked links">
+      <section className="lg:border-r" aria-label="Sample checked links">
         <CellHead title="Links checked" />
         <ul className="mt-3 divide-y border-y">
           {ROWS.map((r) => (
@@ -120,10 +120,7 @@ export function SampleCrawl() {
         </p>
       </section>
 
-      <section
-        className="relative border-t lg:border-t-0 lg:border-r"
-        aria-label="Sample site graph"
-      >
+      <section className="border-t lg:border-t-0 lg:border-r" aria-label="Sample site graph">
         <CellHead title="Site graph" />
         <SampleGraph p={p} />
         <ul className="text-ink-3 text-code flex flex-wrap items-center gap-x-3.5 gap-y-1 px-5 pt-2 pb-4 font-mono forced-color-adjust-none sm:px-6">
@@ -140,7 +137,7 @@ export function SampleCrawl() {
         </ul>
       </section>
 
-      <section className="relative border-t lg:border-t-0" aria-label="Sample average SEO score">
+      <section className="border-t lg:border-t-0" aria-label="Sample average SEO score">
         <CellHead title="Average SEO score" />
         <div className="px-5 pt-4 pb-5 sm:px-6">
           <p className="flex items-baseline gap-1.5">
@@ -148,7 +145,7 @@ export function SampleCrawl() {
             <span className="text-ink-3 text-xl font-semibold">/100</span>
           </p>
           <ScoreScale score={score} />
-          <dl className="num mt-6 divide-y border-y text-sm">
+          <dl className="mt-6 divide-y border-y text-sm">
             <div className="flex justify-between py-2.5">
               <dt className="text-ink-3">Pages checked</dt>
               <dd className="text-label font-mono">{checked}</dd>
@@ -256,7 +253,7 @@ function SampleGraph({ p }: { p: number }) {
                 opacity: !on ? 0 : dim ? 0.3 : 1,
                 transform: on ? 'scale(1)' : 'scale(0.4)',
                 transformOrigin: `${n.x}px ${n.y}px`,
-                transition: 'opacity 260ms ease-out, transform 420ms cubic-bezier(0.16,1,0.3,1)',
+                transition: 'opacity 260ms ease-out, transform 420ms var(--ease-out-expo)',
               }}
             >
               <circle cx={n.x} cy={n.y} r={r + 9} fill="transparent" />

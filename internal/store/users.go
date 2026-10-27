@@ -3,11 +3,9 @@ package store
 import (
 	"database/sql"
 	"errors"
-	"sort"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/google/uuid"
 )
 
 type User struct {
@@ -54,9 +52,6 @@ func (s *Store) GetUserByID(id string) (*User, error) {
 // requires the user's jobs deleted first: jobs.user_id FKs users(id) without
 // cascade.
 func (s *Store) DeleteUser(id string) error {
-	if _, err := uuid.Parse(id); err != nil {
-		return nil
-	}
 	_, err := s.db.Exec("DELETE FROM users WHERE id = UUID_TO_BIN(?)", id)
 	return err
 }
@@ -78,48 +73,37 @@ type HistoryRun struct {
 }
 
 type HistoryEntry struct {
-	URL         string       `json:"url"`
-	CrawlCount  int          `json:"crawl_count"`
-	LastJobID   string       `json:"last_job_id"`
-	LastCrawled time.Time    `json:"last_crawled"`
-	Runs        []HistoryRun `json:"runs"`
+	URL  string       `json:"url"`
+	Runs []HistoryRun `json:"runs"`
 }
 
+// newest-first rows make each url's first row its latest run, so entries come out sorted too.
 func (s *Store) ListUserHistory(userID string) ([]HistoryEntry, error) {
 	rows, err := s.db.Query(`
 		SELECT BIN_TO_UUID(id), url, status, created_at
 		FROM jobs
 		WHERE user_id = UUID_TO_BIN(?)
-		ORDER BY url, created_at DESC`, userID)
+		ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	byURL := map[string]*HistoryEntry{}
+	out := []HistoryEntry{}
+	index := map[string]int{}
 	for rows.Next() {
-		var jobID, url, status string
-		var createdAt time.Time
-		if err := rows.Scan(&jobID, &url, &status, &createdAt); err != nil {
+		var url string
+		var run HistoryRun
+		if err := rows.Scan(&run.JobID, &url, &run.Status, &run.CreatedAt); err != nil {
 			return nil, err
 		}
-		e, ok := byURL[url]
+		i, ok := index[url]
 		if !ok {
-			// rows are newest-first within each url
-			e = &HistoryEntry{URL: url, LastJobID: jobID, LastCrawled: createdAt}
-			byURL[url] = e
+			i = len(out)
+			index[url] = i
+			out = append(out, HistoryEntry{URL: url})
 		}
-		e.CrawlCount++
-		e.Runs = append(e.Runs, HistoryRun{JobID: jobID, CreatedAt: createdAt, Status: status})
+		out[i].Runs = append(out[i].Runs, run)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	out := make([]HistoryEntry, 0, len(byURL))
-	for _, e := range byURL {
-		out = append(out, *e)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].LastCrawled.After(out[j].LastCrawled) })
-	return out, nil
+	return out, rows.Err()
 }

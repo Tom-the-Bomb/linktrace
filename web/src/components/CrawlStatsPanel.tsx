@@ -21,7 +21,7 @@ export function CrawlStatsPanel({ stats }: { stats: CrawlStats }) {
       <SectionHeader title="Crawl stats" />
       <dl className="panel grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 xl:divide-x max-xl:[&>div]:border-b">
         {items.map((it) => (
-          <div key={it.label} className="p-5 sm:px-8">
+          <div key={it.label} className="gutter py-5">
             <dt className="text-ink-3 text-label font-medium">{it.label}</dt>
             <dd
               className={`num mt-1 text-xl font-semibold tracking-tight ${it.bad ? 'text-bad-fg' : ''}`}

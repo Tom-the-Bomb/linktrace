@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"cmp"
 	"log"
 	"os"
 	"strconv"
@@ -41,10 +42,7 @@ func loadDotEnv(path string) {
 }
 
 func env(key, deflt string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	return deflt
+	return cmp.Or(os.Getenv(key), deflt)
 }
 
 func envInt(key string, deflt int) int {

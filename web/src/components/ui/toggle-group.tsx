@@ -23,7 +23,7 @@ function ToggleGroup({
 
 export function SegmentCount({ count }: { count?: number }) {
   return count === undefined ? null : (
-    <span className="num text-ink-3 text-code font-mono">{count.toLocaleString()}</span>
+    <span className="text-ink-3 text-code font-mono">{count.toLocaleString()}</span>
   );
 }
 

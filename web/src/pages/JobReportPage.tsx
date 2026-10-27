@@ -72,7 +72,6 @@ function JobReport({ jobId }: { jobId: string }) {
   const colourFor = useMemo(() => sectionColourMap(sections), [sections]);
 
   const tree = useMemo(() => buildTree(graph?.edges ?? []), [graph]);
-  const rowsByUrl = useMemo(() => new Map(rows.map((r) => [r.url, r])), [rows]);
 
   const canManage = status?.can_manage ?? false;
   const canStop = canManage && !isDone;
@@ -233,7 +232,7 @@ function JobReport({ jobId }: { jobId: string }) {
         jobId={jobId}
         url={drilldownUrl}
         open={drawerOpen}
-        row={drilldownUrl ? rowsByUrl.get(drilldownUrl) : undefined}
+        row={rows.find((r) => r.url === drilldownUrl)}
         tree={tree}
         onNavigate={setDrilldownUrl}
         onClose={() => setDrawerOpen(false)}

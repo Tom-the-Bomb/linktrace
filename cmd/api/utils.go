@@ -253,10 +253,10 @@ func computeOverall(pages []store.PageResult, audits []store.SEOAudit) map[strin
 		avg = scoreSum / len(audits)
 	}
 
-	// [] not null: the UI reads .length
 	ranked := slices.SortedFunc(maps.Keys(issueCounts), func(a, b string) int {
 		return cmp.Or(issueCounts[b]-issueCounts[a], strings.Compare(a, b))
 	})
+	// [] not null: the UI reads .length
 	top := append([]string{}, ranked[:min(5, len(ranked))]...)
 
 	return map[string]any{

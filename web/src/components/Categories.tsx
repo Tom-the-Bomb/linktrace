@@ -26,16 +26,10 @@ const FILTER_LABEL: Record<Filter, string> = {
 const SORT_LABEL: Record<SortKey, string> = { pages: 'Pages', rot: 'Broken %', seo: 'SEO' };
 
 function inFilter(pattern: string, filter: Filter): boolean {
-  if (filter === 'all') {
-    return true;
+  if (filter === 'rotten') {
+    return pattern === 'mostly_rotten' || pattern === 'all_rotten';
   }
-  if (filter === 'healthy') {
-    return pattern === 'healthy';
-  }
-  if (filter === 'mixed') {
-    return pattern === 'mixed';
-  }
-  return pattern === 'mostly_rotten' || pattern === 'all_rotten';
+  return filter === 'all' || pattern === filter;
 }
 
 const SORT_VALUE: Record<SortKey, (c: CategoryReport) => number> = {
@@ -56,15 +50,11 @@ export function Categories({
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const filtered = useMemo(() => {
-    let r = categories;
-    if (filter !== 'all') {
-      r = r.filter((c) => inFilter(c.pattern, filter));
-    }
     const value = SORT_VALUE[sortKey];
-    return r.slice().sort((a, b) => {
-      const diff = value(a) - value(b);
-      return sortDir === 'asc' ? diff : -diff;
-    });
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return categories
+      .filter((c) => inFilter(c.pattern, filter))
+      .sort((a, b) => dir * (value(a) - value(b)));
   }, [categories, filter, sortKey, sortDir]);
 
   const { page, setPage, paged } = usePagination(filtered, PAGE_SIZE);
@@ -134,7 +124,7 @@ export function Categories({
 
         <div
           aria-hidden="true"
-          className="bg-sunken/60 text-ink-3 hidden grid-cols-[14px_minmax(0,1fr)_170px_64px_118px] gap-x-4 border-b px-8 py-2 text-xs font-medium sm:grid"
+          className="bg-sunken/60 text-ink-3 gutter hidden grid-cols-[14px_minmax(0,1fr)_170px_64px_118px] gap-x-4 border-b py-2 text-xs font-medium sm:grid"
         >
           <span />
           <span>Section</span>
@@ -165,13 +155,9 @@ const PATTERN: Record<string, { tone: BadgeVariant; bar: string }> = {
   mixed: { tone: 'warn', bar: 'bg-warn-dot' },
   mostly_rotten: { tone: 'bad', bar: 'bg-bad-dot' },
   all_rotten: { tone: 'bad', bar: 'bg-bad-dot' },
-  empty: { tone: 'neutral', bar: 'bg-ink-4' },
 };
 
 function linkLabel(cat: CategoryReport): string {
-  if (cat.pattern === 'empty') {
-    return 'No pages';
-  }
   if (cat.rotten_pages === 0) {
     return 'Links OK';
   }
@@ -206,11 +192,11 @@ function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
             style={{ width: `${Math.max(rotPct, rotPct > 0 ? 4 : 0)}%` }}
           />
         </div>
-        <span className="num text-ink-3 text-code w-9 text-right font-mono">{rotPct}%</span>
+        <span className="text-ink-3 text-code w-9 text-right font-mono">{rotPct}%</span>
       </div>
 
       <span
-        className={`num text-label hidden text-right font-mono font-medium sm:block ${scoreTextColour(cat.avg_seo_score)}`}
+        className={`text-label hidden text-right font-mono font-medium sm:block ${scoreTextColour(cat.avg_seo_score)}`}
       >
         <span className="sr-only">SEO </span>
         {cat.avg_seo_score}

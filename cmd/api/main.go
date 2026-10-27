@@ -233,7 +233,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[api] job %s seeding shard %d with %s", short(id), shard, seed)
 
 	// mark+count before publishing so the seed is counted exactly once
-	if _, err := s.cache.MarkSeen(id, crawler.CanonicalKey(seed)); err != nil {
+	if err := s.cache.MarkSeen(id, crawler.CanonicalKey(seed)); err != nil {
 		log.Printf("[api] MarkSeen seed: %v", err)
 	}
 	_ = s.cache.IncDiscovered(id)
@@ -245,7 +245,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	queued = true
 
-	// sitemap URLs aren't enqueued; unreached ones become coverage_gap's "missed" entries
+	// sitemap URLs aren't enqueued; unreached ones become coverage_gap's "not_crawled" entries
 	writeJSON(w, http.StatusAccepted, map[string]string{"job_id": id, "status": "crawling"})
 }
 
@@ -434,11 +434,6 @@ type graphNode struct {
 	SEOScore   *int   `json:"seo_score"`
 }
 
-type graphEdge struct {
-	Source string `json:"source"`
-	Target string `json:"target"`
-}
-
 func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if s.requireJob(w, id) == nil {
@@ -456,7 +451,7 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 	scores := scoreByURL(audits)
 	nodes := make([]graphNode, 0, len(pages))
-	urlSet := make(map[string]struct{}, len(pages))
+	crawled := make(map[string]bool, len(pages))
 	for _, p := range pages {
 		n := graphNode{
 			ID:         p.URL,
@@ -470,18 +465,14 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 			n.SEOScore = &score
 		}
 		nodes = append(nodes, n)
-		urlSet[p.URL] = struct{}{}
+		crawled[p.URL] = true
 	}
 
-	edges := make([]graphEdge, 0, len(links))
+	edges := make([]store.Link, 0, len(links))
 	for _, l := range links {
-		if _, ok := urlSet[l.Target]; !ok {
-			continue
+		if crawled[l.Source] && crawled[l.Target] {
+			edges = append(edges, l)
 		}
-		if _, ok := urlSet[l.Source]; !ok {
-			continue
-		}
-		edges = append(edges, graphEdge{Source: l.Source, Target: l.Target})
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -658,9 +649,6 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		serverError(w, "load your history", err)
 		return
-	}
-	if entries == nil {
-		entries = []store.HistoryEntry{}
 	}
 	writeJSON(w, http.StatusOK, entries)
 }

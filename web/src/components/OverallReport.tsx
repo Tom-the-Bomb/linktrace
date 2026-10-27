@@ -35,7 +35,7 @@ export function OverallReport({ report }: { report: Report }) {
                   'No broken pages'
                 ) : (
                   <>
-                    <span className="num text-caption font-mono">
+                    <span className="text-caption font-mono">
                       {rottenPct < 1 ? '<1' : rottenPct}%
                     </span>{' '}
                     of checked pages

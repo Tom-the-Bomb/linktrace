@@ -1,7 +1,5 @@
 import { ArrowLeft, Square } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
-
 import { AuthBar } from './AuthBar';
 import { CrawlForm } from './CrawlForm';
 import { Wordmark } from './Wordmark';
@@ -30,7 +28,7 @@ export function CompactHeader({ onSubmit, submitting, canStop, onStopOrBack }: C
               type="button"
               variant="secondary"
               onClick={onStopOrBack}
-              className={cn('shrink-0', canStop && 'text-bad-fg')}
+              className={canStop ? 'text-bad-fg' : undefined}
             >
               {canStop ? (
                 <>

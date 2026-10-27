@@ -67,6 +67,7 @@
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --animate-tick: tick 360ms var(--ease-out-expo);
+  --animate-cursor-blink: cursor-blink 1.06s steps(2, jump-none) infinite;
 
   @keyframes tick {
     from {
@@ -76,6 +77,16 @@
     to {
       transform: none;
       opacity: 1;
+    }
+  }
+  @keyframes cursor-blink {
+    0%,
+    49% {
+      opacity: 1;
+    }
+    50%,
+    100% {
+      opacity: 0;
     }
   }
 }
@@ -100,7 +111,6 @@
   body {
     background: var(--color-canvas);
     color: var(--color-ink);
-    min-height: 100dvh;
     caret-color: var(--color-ink);
   }
   ::selection {
@@ -125,20 +135,6 @@
   }
   p {
     text-wrap: pretty;
-  }
-
-  @keyframes cursor-blink {
-    0%,
-    49% {
-      opacity: 1;
-    }
-    50%,
-    100% {
-      opacity: 0;
-    }
-  }
-  .cursor-blink {
-    animation: cursor-blink 1.06s steps(2, jump-none) infinite;
   }
 
   @media (prefers-reduced-motion: reduce) {

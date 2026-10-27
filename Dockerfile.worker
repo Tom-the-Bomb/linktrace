@@ -7,8 +7,8 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/worker ./cmd/worker
 
-FROM alpine:3.20
-# ca-certificates is required: without it every crawled HTTPS request fails x509 verification
+FROM alpine:3.24
+# ca-certificates: the crawler makes outbound HTTPS calls
 RUN apk add --no-cache ca-certificates tini
 COPY --from=build /out/worker /usr/local/bin/worker
 ENTRYPOINT ["/sbin/tini", "--", "worker"]

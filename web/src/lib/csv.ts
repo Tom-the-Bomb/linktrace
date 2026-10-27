@@ -5,7 +5,7 @@ export function toCsv(header: string[], rows: (string | number | null)[][]): str
 
 export function downloadCsv(filename: string, csv: string) {
   // BOM so Excel reads UTF-8
-  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' });
   const href = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = href;

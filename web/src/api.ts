@@ -269,9 +269,6 @@ export interface HistoryRun {
 
 export interface HistoryEntry {
   url: string;
-  crawl_count: number;
-  last_job_id: string;
-  last_crawled: string;
   runs: HistoryRun[]; // most recent first
 }
 

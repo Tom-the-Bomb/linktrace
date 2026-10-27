@@ -36,18 +36,18 @@ func Run(rawRoot string) Audit {
 		return a
 	}
 
-	// "disallow all" means the seed itself is blocked, so blocking just the homepage counts
 	ctx, cancel := context.WithTimeout(context.Background(), fetchDeadline)
 	defer cancel()
 	robotsFile, found := fetchRobots(ctx, root)
 	a.RobotsFound, a.CrawlDelay, a.RobotsRules = found, robotsFile.CrawlDelay, robotsFile.Rules
+	// "disallow all" means the seed itself is blocked, so blocking just the homepage counts
 	a.RobotsDisallowAll = !robots.Allowed(robotsFile.Rules, root.RequestURI())
 
 	sitemapURL := root.Scheme + "://" + root.Host + "/sitemap.xml"
 	if len(robotsFile.Sitemaps) > 0 {
 		sitemapURL = robotsFile.Sitemaps[0]
 	}
-	if ok, urls := fetchSitemap(ctx, sitemapURL, 0); ok {
+	if urls, ok := fetchSitemap(ctx, sitemapURL, 0); ok {
 		a.SitemapFound, a.SitemapURL, a.SitemapURLs = true, sitemapURL, urls
 		a.SitemapURLCount = len(urls)
 	}

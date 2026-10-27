@@ -36,7 +36,7 @@ export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO 
             />
             {audit.crawl_delay > 0 && (
               <DataRow label="Crawl-delay">
-                <span className="num text-ink-2 text-label font-mono">{audit.crawl_delay}s</span>
+                <span className="text-ink-2 text-label font-mono">{audit.crawl_delay}s</span>
               </DataRow>
             )}
           </ul>
@@ -123,9 +123,7 @@ function CheckRow({ ok, label }: { ok: boolean; label: string }) {
 function Stat({ label, value, bad }: { label: string; value: number; bad?: boolean }) {
   return (
     <DataRow label={label}>
-      <span
-        className={`num text-label font-mono font-medium ${bad ? 'text-bad-fg' : 'text-ink-2'}`}
-      >
+      <span className={`text-label font-mono font-medium ${bad ? 'text-bad-fg' : 'text-ink-2'}`}>
         {value.toLocaleString()}
       </span>
     </DataRow>
@@ -155,7 +153,7 @@ function PctStat({
   }
   return (
     <DataRow label={label}>
-      <span className="num text-label font-mono">
+      <span className="text-label font-mono">
         <span className={`font-medium ${toneColour(tone)}`}>{pct(count, total)}%</span>{' '}
         <span className="text-ink-3">
           {count.toLocaleString()}/{total.toLocaleString()}

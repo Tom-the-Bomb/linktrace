@@ -43,14 +43,14 @@ type sitemapXML struct {
 	} `xml:"sitemap"`
 }
 
-func fetchSitemap(ctx context.Context, sitemapURL string, depth int) (bool, []string) {
+func fetchSitemap(ctx context.Context, sitemapURL string, depth int) ([]string, bool) {
 	body, status := get(ctx, sitemapURL)
 	if status != http.StatusOK || body == "" {
-		return false, nil
+		return nil, false
 	}
 	var doc sitemapXML
 	if err := xml.Unmarshal([]byte(body), &doc); err != nil {
-		return false, nil
+		return nil, false
 	}
 
 	var urls []string
@@ -58,27 +58,27 @@ func fetchSitemap(ctx context.Context, sitemapURL string, depth int) (bool, []st
 		if loc := strings.TrimSpace(u.Loc); isWebURL(loc) {
 			urls = append(urls, loc)
 			if len(urls) >= maxSitemapURLs {
-				return true, urls
+				return urls, true
 			}
 		}
 	}
-	if depth == 0 && len(doc.Sitemaps) > 0 {
+	if depth == 0 {
 		for _, child := range doc.Sitemaps {
 			if ctx.Err() != nil {
 				break
 			}
 			if loc := strings.TrimSpace(child.Loc); loc != "" {
-				_, more := fetchSitemap(ctx, loc, depth+1)
+				more, _ := fetchSitemap(ctx, loc, depth+1)
 				for _, u := range more {
 					urls = append(urls, u)
 					if len(urls) >= maxSitemapURLs {
-						return true, urls
+						return urls, true
 					}
 				}
 			}
 		}
 	}
-	return true, urls
+	return urls, true
 }
 
 func checkHTTPS(host string) (isHTTPS, httpsRedirect, certValid bool) {

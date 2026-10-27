@@ -220,14 +220,14 @@ export function ResultsTable({
                 <TableCell>
                   <StatusChip alive={r.is_alive} code={r.status_code} error={r.error_type} />
                 </TableCell>
-                <TableCell className="num text-ink-2 text-label text-right font-mono">
+                <TableCell className="text-ink-2 text-label text-right font-mono">
                   {r.depth}
                 </TableCell>
-                <TableCell className="num text-ink-2 text-label text-right font-mono whitespace-nowrap">
+                <TableCell className="text-ink-2 text-label text-right font-mono whitespace-nowrap">
                   {r.response_time > 0 ? `${r.response_time.toLocaleString()} ms` : 'None'}
                 </TableCell>
                 <TableCell
-                  className={`num text-label text-right font-mono font-medium ${scoreTextColour(r.seo_score)}`}
+                  className={`text-label text-right font-mono font-medium ${scoreTextColour(r.seo_score)}`}
                 >
                   {r.seo_score ?? 'n/a'}
                 </TableCell>

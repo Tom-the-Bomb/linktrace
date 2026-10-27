@@ -128,13 +128,11 @@ func startPageWorkers(w *worker, wg *sync.WaitGroup) ([]*amqp.Channel, error) {
 			return channels, err
 		}
 		for range perLane {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				for d := range deliveries {
 					w.processPage(d)
 				}
-			}()
+			})
 		}
 		channels = append(channels, ch)
 	}
@@ -340,9 +338,7 @@ func runConsumer(q *queue.Queue, queueName string, concurrency int, wg *sync.Wai
 		return nil, err
 	}
 	for range concurrency {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for d := range deliveries {
 				var msg queue.PageChecked
 				if err := json.Unmarshal(d.Body, &msg); err != nil {
@@ -357,7 +353,7 @@ func runConsumer(q *queue.Queue, queueName string, concurrency int, wg *sync.Wai
 				}
 				_ = d.Ack(false)
 			}
-		}()
+		})
 	}
 	return ch, nil
 }

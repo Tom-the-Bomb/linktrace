@@ -19,8 +19,8 @@ export function ProgressView({
 }: {
   status: Status | null;
   onDelete?: () => void;
-  onRecrawl?: () => void;
-  recrawling?: boolean;
+  onRecrawl: () => void;
+  recrawling: boolean;
 }) {
   const delta = useCheckedDelta(status);
   const [copied, setCopied] = useState(false);
@@ -67,7 +67,7 @@ export function ProgressView({
         </div>
         {/* offsets the buttons' padding so icons line up with the content edges */}
         <div className="-mx-2 flex flex-wrap items-center gap-1">
-          {isDone && onRecrawl && (
+          {isDone && (
             <Button variant="ghost" size="quiet" onClick={onRecrawl} disabled={recrawling}>
               {recrawling ? <Spinner aria-hidden="true" /> : <RotateCw />}
               Crawl again
@@ -113,20 +113,20 @@ export function ProgressView({
       <div
         className={`panel transition-[height,opacity,display] transition-discrete duration-400 ease-in-out [interpolate-size:allow-keywords] ${isDone ? 'hidden h-0 overflow-hidden opacity-0' : ''}`}
       >
-        <div className="p-5 sm:px-8">
+        <div className="gutter py-5">
           <div className="flex items-baseline justify-between gap-4">
             <p className="text-body font-medium">
               Checking <span className="num">{checked.toLocaleString()}</span>
               <span className="text-ink-3"> of </span>
               <span className="num">{discovered.toLocaleString()}</span> pages found
             </p>
-            <span className="num text-ink-2 font-mono text-sm">{pct(checked, discovered)}%</span>
+            <span className="text-ink-2 font-mono text-sm">{pct(checked, discovered)}%</span>
           </div>
           <div className="mt-3">
             <Bar discovered={discovered} healthy={healthy} rotten={rotten} />
           </div>
         </div>
-        <dl className="grid grid-cols-2 border-t sm:grid-cols-4 [&>div]:px-5 [&>div]:py-4 sm:[&>div]:px-8 sm:[&>div:not(:last-child)]:border-r max-sm:[&>div:nth-child(-n+2)]:border-b [&>div:nth-child(odd)]:border-r">
+        <dl className="[&>div]:gutter grid grid-cols-2 border-t sm:grid-cols-4 [&>div]:py-4 sm:[&>div:not(:last-child)]:border-r max-sm:[&>div:nth-child(-n+2)]:border-b [&>div:nth-child(odd)]:border-r">
           <Count label="Found" value={discovered} />
           <Count
             label="Checked"
@@ -220,7 +220,7 @@ function Count({
         >
           {value.toLocaleString()}
         </span>
-        {note && <span className="num text-ok-fg text-code font-mono font-medium">{note}</span>}
+        {note && <span className="text-ok-fg text-code font-mono font-medium">{note}</span>}
       </dd>
     </div>
   );

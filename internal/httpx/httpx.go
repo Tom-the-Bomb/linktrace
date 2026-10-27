@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"syscall"
 	"time"
 )
@@ -19,16 +20,10 @@ const (
 )
 
 // leaves Accept-Encoding unset so Go still auto-decompresses.
-var checkerHeaders = map[string]string{
-	"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-	"Accept-Language": "en-US,en;q=0.9",
-}
-
 func SetCheckerHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", checkerUserAgent)
-	for k, v := range checkerHeaders {
-		req.Header.Set(k, v)
-	}
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 }
 
 var AllowPrivateTargets bool
@@ -69,10 +64,8 @@ func CheckHost(ctx context.Context, host string) error {
 	if err != nil {
 		return err
 	}
-	for _, a := range addrs {
-		if isBlockedIP(a) {
-			return ErrBlockedTarget
-		}
+	if slices.ContainsFunc(addrs, isBlockedIP) {
+		return ErrBlockedTarget
 	}
 	return nil
 }

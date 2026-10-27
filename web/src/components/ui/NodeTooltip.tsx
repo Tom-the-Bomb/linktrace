@@ -21,7 +21,7 @@ export function NodeTooltip({ ref, visible, path, detail, detailClass = '', note
     >
       <div className="flex items-center gap-3">
         <span className="truncate">{path}</span>
-        <span className={`num shrink-0 font-medium ${detailClass}`}>{detail}</span>
+        <span className={`shrink-0 font-medium ${detailClass}`}>{detail}</span>
       </div>
       {note && note.length > 0 && (
         <div className="mt-0.5 font-sans leading-snug text-white/60">

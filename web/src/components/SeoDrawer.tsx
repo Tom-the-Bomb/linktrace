@@ -124,7 +124,7 @@ function PageContext({
       {row && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <StatusChip alive={row.is_alive} code={row.status_code} error={row.error_type} />
-          <span className="num text-ink-3 text-caption font-mono">
+          <span className="text-ink-3 text-caption font-mono">
             {row.response_time > 0 ? `${row.response_time.toLocaleString()} ms` : 'No response'}
           </span>
           <span className="text-ink-3 text-label">{depthLabel(row.depth)}</span>
@@ -391,7 +391,7 @@ function Section({
       <h3 className="text-body mb-2 flex items-baseline gap-2 font-semibold tracking-tight">
         {label}
         {count !== undefined && (
-          <span className="num text-ink-3 text-caption font-mono font-medium">{count}</span>
+          <span className="text-ink-3 text-caption font-mono font-medium">{count}</span>
         )}
       </h3>
       {children}
@@ -442,7 +442,7 @@ function CountSignal({ label, count, total }: { label: string; count: number; to
   const tone = ratio >= 0.9 ? 'ok' : ratio >= 0.5 ? 'warn' : 'bad';
   return (
     <DataRow label={label}>
-      <span className="num text-label font-mono">
+      <span className="text-label font-mono">
         <span className={`font-medium ${toneColour(tone)}`}>{pct(count, total)}%</span>{' '}
         <span className="text-ink-3">
           {count}/{total}
@@ -455,7 +455,7 @@ function CountSignal({ label, count, total }: { label: string; count: number; to
 function RawStat({ label, value }: { label: string; value: number }) {
   return (
     <DataRow label={label}>
-      <span className="num text-ink-2 text-label font-mono">{value.toLocaleString()}</span>
+      <span className="text-ink-2 text-label font-mono">{value.toLocaleString()}</span>
     </DataRow>
   );
 }

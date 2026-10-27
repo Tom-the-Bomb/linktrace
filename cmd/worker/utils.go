@@ -33,18 +33,12 @@ func categoryOf(rawURL string) string {
 	if err != nil {
 		return "/"
 	}
-	for _, seg := range strings.Split(u.Path, "/") {
-		if seg != "" {
-			return "/" + seg
-		}
-	}
-	return "/"
+	seg, _, _ := strings.Cut(strings.TrimLeft(u.Path, "/"), "/")
+	return "/" + seg
 }
 
 func classifyPattern(total, rotten int) string {
 	switch {
-	case total == 0:
-		return "empty"
 	case rotten == total:
 		return "all_rotten"
 	case rotten == 0:

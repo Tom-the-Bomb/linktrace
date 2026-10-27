@@ -70,7 +70,7 @@ function GapList({
         </Badge>
       ) : (
         <span className="flex items-center gap-2">
-          <Badge variant={tone} mono className="num">
+          <Badge variant={tone} mono>
             {urls.length.toLocaleString()}
           </Badge>
           <ChevronRight
