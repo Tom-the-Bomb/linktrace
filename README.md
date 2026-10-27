@@ -96,4 +96,4 @@ Default values point at the dev containers. Production values should go in `.env
 - The checker identifies itself as `LinkTraceBot` with a link back here, and respects robots.txt `Allow`/`Disallow` rules as well as `Crawl-delay` (a group naming LinkTrace replaces the `*` group, and a robots.txt that errors blocks the crawl, as RFC 9309 specifies).
 - A crawl stays on the site it was started on: a page that redirects to another site is recorded but not expanded.
 - Every request that isn't a GET must send `Content-Type: application/json`, which forces a CORS preflight, so other sites can't start, stop or delete crawls from their visitors' browsers.
-- Logins are rate limited per IP and per account; report data endpoints have their own per-minute budget.
+- Every request is rate limited per IP (and per account when logged in), and report data endpoints have their own per-minute budget. Failed logins are also limited per account, both from one IP and in total, so guessing a password is slow but nobody else can lock you out.

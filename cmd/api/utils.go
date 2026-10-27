@@ -6,6 +6,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/netip"
 	"sort"
 	"strings"
 	"time"
@@ -51,21 +52,26 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 }
 
 // returns the client IP for rate limiting. Behind Caddy the socket address is always the proxy,
-// so the LAST X-Forwarded-For hop is used — Caddy appends the real peer, so a caller who sends
+// so the LAST X-Forwarded-For hop is used. Caddy appends the real peer, so a caller who sends
 // their own header gets it overwritten in that position. Taking the first would be spoofable.
 //
 // This assumes exactly one trusted proxy and that nothing reaches the API directly (in prod only
 // Caddy publishes ports). Publishing 8080, or adding a CDN in front, invalidates that: with a
 // CDN the real client moves one position further left.
+//
+// An IPv6 address is cut to its /64, since one subscriber usually holds the whole block.
 func clientIP(r *http.Request) string {
+	ip := r.RemoteAddr
 	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
 		hops := strings.Split(fwd, ",")
-		return strings.TrimSpace(hops[len(hops)-1])
+		ip = strings.TrimSpace(hops[len(hops)-1])
+	} else if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		ip = host
 	}
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		return host
+	if a, err := netip.ParseAddr(ip); err == nil && a.Is6() && !a.Is4In6() {
+		return netip.PrefixFrom(a, 64).Masked().String()
 	}
-	return r.RemoteAddr
+	return ip
 }
 
 // sets CORS headers for the configured frontend origin(s). origins is a comma-separated
@@ -113,21 +119,19 @@ func jsonOnly(next http.Handler) http.Handler {
 	})
 }
 
-// limitPerMin caps requests for the routes it wraps. Logged-in callers are counted per account
-// at perUser; everyone else per client IP at perAnon. bucket namespaces the counter so route
-// groups don't share a budget. Must be mounted below auth.Optional, which resolves the identity.
-func (s *Server) limitPerMin(bucket string, perAnon, perUser int) func(http.Handler) http.Handler {
+// limitPerMin caps requests for the routes it wraps. Every caller is counted per client IP at
+// perIP, and logged-in callers per account at perUser too, so signing up for more accounts
+// doesn't add budget. bucket namespaces the counters so route groups don't share them. Must be
+// mounted below auth.Optional, which resolves the identity.
+func (s *Server) limitPerMin(bucket string, perIP, perUser int) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			key, limit := bucket+":ip:"+clientIP(r), perAnon
-			if userID := auth.UserID(r); userID != "" {
-				key, limit = bucket+":u:"+userID, perUser
+			ok := s.allow(bucket+":ip:"+clientIP(r), perIP)
+			if userID := auth.UserID(r); ok && userID != "" {
+				ok = s.allow(bucket+":u:"+userID, perUser)
 			}
-			// fail open: a Redis blip shouldn't be reported to the user as rate limiting
-			if allowed, err := s.cache.AllowRequest(key, limit); err != nil {
-				log.Printf("[api] ratelimit %s: %v", key, err)
-			} else if !allowed {
-				httpError(w, http.StatusTooManyRequests, "Too many requests. Wait a minute and try again.")
+			if !ok {
+				httpError(w, http.StatusTooManyRequests, "Too many requests. Try again in a minute.")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -135,11 +139,22 @@ func (s *Server) limitPerMin(bucket string, perAnon, perUser int) func(http.Hand
 	}
 }
 
+// counts a request against key and reports whether it's within limit. Fails open, since a Redis
+// blip shouldn't read as rate limiting (login keeps its own counters, which fail closed).
+func (s *Server) allow(key string, limit int) bool {
+	allowed, err := s.cache.AllowRequest(key, limit)
+	if err != nil {
+		log.Printf("[api] ratelimit %s: %v", key, err)
+		return true
+	}
+	return allowed
+}
+
 // returns the job by id, or writes 500/404 and returns nil.
 func (s *Server) requireJob(w http.ResponseWriter, id string) *store.Job {
 	job, err := s.store.GetJob(id)
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "lookup failed")
+		httpError(w, http.StatusInternalServerError, "Couldn't load this crawl. Try again in a moment.")
 		return nil
 	}
 	if job == nil {

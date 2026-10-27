@@ -31,13 +31,14 @@ import (
 
 const shutdownTimeout = 5 * time.Second
 
-// Per-minute request budgets, counted per account when logged in and per client IP otherwise.
-// The split is by cost to serve, not by HTTP verb — the standard bucket holds mutations too.
+// Per-minute request budgets. Every caller is counted per client IP, and logged-in callers per
+// account as well. The split is by cost to serve, not by HTTP verb (the standard bucket holds
+// mutations too).
 const (
 	// Crawl creation and auth: cheap to call, expensive to serve (thousands of outbound fetches;
 	// ~100ms of bcrypt), and reachable without an account. The only bucket that meaningfully
-	// bounds abuse.
-	expensivePerMinAnon = 10
+	// bounds abuse. The per-account cap only matters for one account used from many addresses.
+	expensivePerMinIP   = 10
 	expensivePerMinUser = 20
 	// Everything else. Deliberately roomy: one open report tab polls ~96 requests/min, and
 	// anonymous callers are keyed by IP, so an office NAT or mobile CGNAT can put many real
@@ -46,9 +47,11 @@ const (
 	// Report data (results, report, graph, SEO detail): each response can carry every row of a
 	// 10,000-page crawl. A live tab asks for ~36/min, so this leaves room for several tabs.
 	heavyPerMin = 240
-	// Login attempts per username per minute, on top of the per-IP budget, so one account can't
-	// be guessed at from many addresses.
-	loginPerMinPerAccount = 5
+	// Failed logins per minute for one account: from one address, then from all addresses. The
+	// first makes guessing slow, the second bounds guessing spread across many addresses, and
+	// neither lets someone elsewhere lock the owner out with a handful of attempts.
+	loginFailsPerIP      = 5
+	loginFailsPerAccount = 50
 )
 
 // bundles shared dependencies so handlers can reach them without globals.
@@ -95,10 +98,10 @@ func main() {
 	r.Use(jsonOnly)
 	r.Use(auth.Optional(s.cache)) // tags the request with a user id if logged in; never blocks
 
-	// Every route is rate limited. OPTIONS preflights never reach these — corsMiddleware
+	// Every route is rate limited. OPTIONS preflights never reach these: corsMiddleware
 	// short-circuits them above, so they don't consume budget.
 	r.Group(func(r chi.Router) {
-		r.Use(s.limitPerMin("expensive", expensivePerMinAnon, expensivePerMinUser))
+		r.Use(s.limitPerMin("expensive", expensivePerMinIP, expensivePerMinUser))
 		r.Post("/check", s.handleCreate)
 		r.Post("/auth/register", s.handleRegister)
 		r.Post("/auth/login", s.handleLogin)
@@ -127,7 +130,14 @@ func main() {
 		r.Get("/check/{id}/seo", s.handleSEODetail)
 	})
 
-	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r, ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{
+		Addr:              cfg.HTTPAddr,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second, // room for a 10k-page report and the 20s site audit
+		IdleTimeout:       2 * time.Minute,
+	}
 
 	go func() {
 		log.Printf("API listening on %s", cfg.HTTPAddr)
@@ -227,8 +237,12 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"job_id": id, "status": "blocked_by_robots"})
 		return
 	}
+	// without the rules the workers would ignore robots.txt, so this one can't be skipped
 	if err := s.cache.SetRobotsRules(id, audit.RobotsRules); err != nil {
 		log.Printf("[api] save robots rules: %v", err)
+		_ = s.store.UpdateJobStatus(id, "failed")
+		httpError(w, http.StatusInternalServerError, "Couldn't start the crawl. Try again in a moment.")
+		return
 	}
 
 	_ = s.store.UpdateJobStatus(id, "crawling")
@@ -266,7 +280,7 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.cache.Cancel(job.ID); err != nil {
-		httpError(w, http.StatusInternalServerError, "cancel failed")
+		httpError(w, http.StatusInternalServerError, "Couldn't stop the crawl. Try again in a moment.")
 		return
 	}
 	log.Printf("[api] job %s STOPPED by user", short(job.ID))
@@ -520,7 +534,7 @@ func (s *Server) handleSEODetail(w http.ResponseWriter, r *http.Request) {
 	}
 	audit, err := s.store.GetSEOAudit(id, pageURL)
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "lookup failed")
+		httpError(w, http.StatusInternalServerError, "Couldn't load this page's audit. Try again in a moment.")
 		return
 	}
 	if audit == nil {
@@ -550,22 +564,27 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "Passwords need at least 8 characters.")
 		return
 	}
+	// bcrypt only reads the first 72 bytes and refuses longer input
+	if len(req.Password) > 72 {
+		httpError(w, http.StatusBadRequest, "Passwords can be at most 72 characters.")
+		return
+	}
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "could not hash")
+		httpError(w, http.StatusInternalServerError, "Couldn't create your account. Try again in a moment.")
 		return
 	}
 	user := store.User{ID: uuid.NewString(), Username: username, PasswordHash: hash}
 	if err := s.store.CreateUser(user); err != nil {
 		if store.IsDuplicateUsername(err) {
-			httpError(w, http.StatusConflict, "username already taken")
+			httpError(w, http.StatusConflict, "That username is taken. Try a different one.")
 			return
 		}
-		httpError(w, http.StatusInternalServerError, "could not create user")
+		httpError(w, http.StatusInternalServerError, "Couldn't create your account. Try again in a moment.")
 		return
 	}
 	if err := s.startSession(w, user.ID); err != nil {
-		httpError(w, http.StatusInternalServerError, "session error")
+		httpError(w, http.StatusInternalServerError, "Your account was created, but logging in failed. Log in to continue.")
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"username": user.Username})
@@ -577,24 +596,42 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	user, err := s.store.GetUserByUsername(strings.TrimSpace(req.Username))
-	// keyed on the account, not the typed name, which MySQL matches case- and accent-insensitively
-	if user != nil {
-		if allowed, err := s.cache.AllowRequest("login:"+user.ID, loginPerMinPerAccount); err != nil {
-			log.Printf("[api] login ratelimit: %v", err)
-		} else if !allowed {
-			httpError(w, http.StatusTooManyRequests, "Too many login attempts for this account. Try again in a minute.")
-			return
-		}
+	name := strings.TrimSpace(req.Username)
+	user, err := s.store.GetUserByUsername(name)
+	if err != nil {
+		httpError(w, http.StatusInternalServerError, "Couldn't log you in. Try again in a moment.")
+		return
 	}
-	// Identical error whether the username is unknown or the password is wrong, so an attacker
-	// can't probe which usernames are registered.
-	if err != nil || user == nil || !auth.CheckPassword(user.PasswordHash, req.Password) {
-		httpError(w, http.StatusUnauthorized, "invalid username or password")
+
+	// Only failures count. Keyed on the account, since MySQL matches the typed name case- and
+	// accent-insensitively; unknown names are counted under the name, so a 429 doesn't reveal
+	// which accounts exist. Fails closed: without the counters, guessing would be unlimited.
+	acct := "name:" + strings.ToLower(name)
+	hash := auth.NoUserHash
+	if user != nil {
+		acct, hash = user.ID, user.PasswordHash
+	}
+	fromIP, fromAll := "loginfail:"+acct+":"+clientIP(r), "loginfail:"+acct
+	nIP, errIP := s.cache.RequestCount(fromIP)
+	nAll, errAll := s.cache.RequestCount(fromAll)
+	if errIP != nil || errAll != nil {
+		log.Printf("[api] login limit: %v %v", errIP, errAll)
+		httpError(w, http.StatusServiceUnavailable, "Couldn't log you in. Try again in a moment.")
+		return
+	}
+	if nIP >= loginFailsPerIP || nAll >= loginFailsPerAccount {
+		httpError(w, http.StatusTooManyRequests, "Too many failed attempts. Try again in a minute.")
+		return
+	}
+	// the hash is checked even for an unknown name, so both take as long as a wrong password
+	if !auth.CheckPassword(hash, req.Password) || user == nil {
+		_ = s.cache.CountRequest(fromIP)
+		_ = s.cache.CountRequest(fromAll)
+		httpError(w, http.StatusUnauthorized, "Wrong username or password.")
 		return
 	}
 	if err := s.startSession(w, user.ID); err != nil {
-		httpError(w, http.StatusInternalServerError, "session error")
+		httpError(w, http.StatusInternalServerError, "Couldn't log you in. Try again in a moment.")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"username": user.Username})
@@ -631,7 +668,7 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 
 	jobIDs, err := s.store.ListUserJobIDs(userID)
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "lookup failed")
+		httpError(w, http.StatusInternalServerError, "Couldn't delete the account. Try again in a moment.")
 		return
 	}
 	for _, id := range jobIDs {
