@@ -42,6 +42,9 @@ export const TIER_HEX: Record<ScoreTier, string> = {
 };
 
 export const BROKEN_HEX = '#e5484d';
+// ink and the strong hairline, for the graph painter and inline SVG, which can't read CSS tokens
+export const INK_HEX = '#171717';
+export const LINE_STRONG_HEX = '#d4d4d4';
 
 // value colours on the dark ink tooltip, where the tier colours above read too dark
 export const TOOLTIP_TEXT: Record<ScoreTier, string> = {
