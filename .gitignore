@@ -23,3 +23,5 @@ web/.env
 *.swp
 
 .impeccable/
+DESIGN.md
+PRODUCT.md
