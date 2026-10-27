@@ -5,7 +5,7 @@ export function isTerminalStatus(status: JobStatus | undefined): boolean {
   return status === 'complete' || status === 'failed' || status === 'stopped';
 }
 
-// checker error_type -> plain label; keys mirror internal/checker
+// keys mirror internal/checker
 const FAILURE_LABEL: Record<string, string> = {
   timeout: 'Timeout',
   dns_failure: 'DNS failure',
@@ -20,19 +20,16 @@ const FAILURE_LABEL: Record<string, string> = {
   unknown: 'Unknown',
 };
 
-// label for a page's outcome: "200 OK", "404", "DNS failure"...
 export function pageStatusLabel(alive: boolean, code: number, errorType: string): string {
   if (alive) {
     return `${code || 200} OK`;
   }
-  // an HTTP error shows its actual code ("404", "503") when there is one
   if (code && (errorType === 'http_4xx' || errorType === 'server_error')) {
     return String(code);
   }
   return FAILURE_LABEL[errorType] ?? (code ? String(code) : 'Failed');
 }
 
-// one plain sentence per checker error_type; shared by the landing page and the report
 export const FAILURE_EXPLANATION: Record<string, string> = {
   dns_failure: "The domain name doesn't point to a server (the DNS lookup failed).",
   timeout: 'The server took too long to respond.',
@@ -48,7 +45,6 @@ export const FAILURE_EXPLANATION: Record<string, string> = {
   unknown: 'The URL could not be checked (it may be malformed, or not an http or https link).',
 };
 
-// the common HTTP errors, for one page with a known code; the group sentences above cover the rest
 const CODE_EXPLANATION: Record<number, string> = {
   401: 'The page needs a login to view (401 Unauthorized).',
   403: 'The server refused access to the page (403 Forbidden).',
@@ -60,7 +56,7 @@ const CODE_EXPLANATION: Record<number, string> = {
   504: 'A proxy in front of the site gave up waiting for it (504 Gateway Timeout).',
 };
 
-// one page's failure in a sentence, matching the code its status chip shows
+// same code rule as pageStatusLabel, so the sentence matches the chip
 export function failureReason(errorType: string, code: number): string {
   if (code && (errorType === 'http_4xx' || errorType === 'server_error')) {
     return (
@@ -73,12 +69,11 @@ export function failureReason(errorType: string, code: number): string {
   return FAILURE_EXPLANATION[errorType] ?? 'The page could not be loaded.';
 }
 
-// short label for grouping broken pages by cause ("404" and "410" both group under 4xx)
 export function failureGroup(errorType: string): string {
   return FAILURE_LABEL[errorType] ?? 'Other';
 }
 
-// blocked is an anti-bot wall, not real rot, so it reads as a warning
+// blocked is a bot wall, not real rot
 export function pageStatusTone(alive: boolean, errorType: string): Tone {
   if (alive) {
     return 'ok';

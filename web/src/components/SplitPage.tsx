@@ -1,7 +1,6 @@
 import { TopNav } from './TopNav';
 import { GridRow } from './ui/GridRow';
 
-// the 8/4 page behind sign-in and not-found: a headline cell and an optional side cell
 export function SplitPage({
   title,
   aside,

@@ -6,7 +6,6 @@ import { useAuth } from '../context/AuthContext';
 import { useCreateCrawl } from '../hooks/useCreateCrawl';
 import { useSeo } from '../hooks/useSeo';
 
-// /history route; <Protected> at the route level guarantees a logged-in user here
 export default function HistoryPage() {
   useSeo({ title: 'Crawl history', path: '/history', noindex: true });
   const { user } = useAuth();
@@ -24,7 +23,7 @@ export default function HistoryPage() {
           </p>
         </div>
         <History />
-        {/* close the last cell so it doesn't float on the canvas */}
+        {/* empty row draws the last cell's bottom hairline */}
         <GridRow />
       </main>
     </>

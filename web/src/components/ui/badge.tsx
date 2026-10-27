@@ -12,7 +12,6 @@ const badgeVariants = cva(
         bad: 'bg-bad-bg text-bad-fg ring-bad-dot/25',
         neutral: 'bg-panel text-ink-2 ring-line-strong',
       },
-      // outcome codes and figures keep the mono voice
       mono: { true: 'font-mono text-code/[1.35]' },
     },
     defaultVariants: {

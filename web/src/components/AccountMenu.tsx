@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { ChevronDown, History, LogOut, Trash2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -15,19 +15,19 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 
-// the logged-in account menu; loaded on demand so anonymous visitors don't download it
+// lazy-loaded so anonymous visitors don't download it
 export default function AccountMenu({ user }: { user: Me }) {
   const { logout, deleteAccount } = useAuth();
   const navigate = useNavigate();
   const historyOpen = useLocation().pathname === '/history';
 
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
 
-  // on success user becomes null, re-rendering logged-out and unmounting the dialog
+  // flushSync commits the route before the cleared user renders, or Protected would redirect to /auth
   async function onConfirmDeleteAccount() {
     await deleteAccount();
-    setConfirmDelete(false);
-    navigate('/');
+    navigate('/', { flushSync: true });
   }
 
   return (
@@ -35,6 +35,7 @@ export default function AccountMenu({ user }: { user: Me }) {
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button
+            ref={trigger}
             variant="secondary"
             aria-label={user.username}
             className="group gap-2 pr-2.5 pl-1.5"
@@ -42,7 +43,6 @@ export default function AccountMenu({ user }: { user: Me }) {
             <span className="bg-ink text-code flex size-6 items-center justify-center rounded-full font-semibold text-white uppercase">
               {user.username.slice(0, 1)}
             </span>
-            {/* phones show just the avatar so the header fits; the label still names the account */}
             <span className="hidden max-w-36 truncate sm:block">{user.username}</span>
             <ChevronDown
               className="text-ink-3 size-3.5 transition-transform group-data-[state=open]:rotate-180"
@@ -58,7 +58,7 @@ export default function AccountMenu({ user }: { user: Me }) {
           <DropdownMenuItem
             onSelect={async () => {
               await logout();
-              navigate('/');
+              navigate('/', { flushSync: true });
             }}
           >
             <LogOut className="text-ink-3" />
@@ -85,6 +85,7 @@ export default function AccountMenu({ user }: { user: Me }) {
           confirmLabel="Delete account"
           onConfirm={onConfirmDeleteAccount}
           onCancel={() => setConfirmDelete(false)}
+          returnFocus={trigger}
         />
       )}
     </>

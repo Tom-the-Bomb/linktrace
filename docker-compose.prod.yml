@@ -1,11 +1,6 @@
-# Production stack: infra + Go services + Caddy (TLS + static frontend + API proxy).
-# Run on the droplet with:
-#     docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
-#
-# Security note: only Caddy publishes ports (80/443). MySQL/Redis/RabbitMQ and the
-# API are reachable ONLY on the internal docker network — never from the internet.
+# Only Caddy publishes ports. MySQL/Redis/RabbitMQ and the API must stay on the internal
+# docker network, never the internet.
 
-# settings the api and worker share
 x-go-service: &go-service
   restart: unless-stopped
   depends_on:
@@ -31,11 +26,9 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
-      # schema.sql only runs on a FRESH volume (first boot) — redeploying does NOT re-apply it.
-      # To apply a change to a live database:
+      # schema.sql only runs on a FRESH volume; redeploying does NOT re-apply it. To apply it live:
       #   docker exec -i linktrace-mysql mysql -ulinktrace -p"$MYSQL_PASSWORD" linktrace < schema.sql
-      # Safe to re-run (every statement is CREATE TABLE IF NOT EXISTS), but it won't alter
-      # existing tables — changed columns still need their own ALTER TABLE.
+      # It's CREATE TABLE IF NOT EXISTS, so changed columns still need their own ALTER TABLE.
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
       test:
@@ -108,8 +101,7 @@ services:
       dockerfile: Dockerfile.web
       args:
         VITE_API_BASE: /api
-        # public origin for canonical/og:url + robots/sitemap. Deliberately NOT derived from
-        # DOMAIN, which is a Caddy listener spec (e.g. ":80") and often isn't a hostname at all.
+        # deliberately not derived from DOMAIN, a Caddy listener spec that may be ":80"
         VITE_SITE_URL: "${VITE_SITE_URL:-https://linktrace.tomthebomb.dev}"
     container_name: linktrace-caddy
     restart: unless-stopped

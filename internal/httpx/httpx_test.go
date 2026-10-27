@@ -7,11 +7,11 @@ import (
 
 func TestBlockedIP(t *testing.T) {
 	blocked := []string{
-		"127.0.0.1", "10.1.2.3", "172.16.0.9", "192.168.1.1", // loopback + RFC 1918
-		"169.254.169.254",                     // cloud metadata (link-local)
-		"100.64.0.1", "0.0.0.0", "198.18.0.1", // CGNAT, "this network", benchmarking
-		"255.255.255.255", "224.0.0.1", // broadcast, multicast
-		"::1", "fe80::1", "fd00::1", "::", // IPv6 loopback, link-local, ULA, unspecified
+		"127.0.0.1", "10.1.2.3", "172.16.0.9", "192.168.1.1",
+		"169.254.169.254", // cloud metadata
+		"100.64.0.1", "0.0.0.0", "198.18.0.1",
+		"255.255.255.255", "224.0.0.1",
+		"::1", "fe80::1", "fd00::1", "::",
 		"::ffff:127.0.0.1", // IPv4-mapped loopback
 		"64:ff9b::a00:1",   // NAT64 wrapping 10.0.0.1
 	}

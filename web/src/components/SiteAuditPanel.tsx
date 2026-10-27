@@ -5,7 +5,6 @@ import { type Tone, pct, toneColour } from '../lib/colours';
 import { SectionHeader } from './SectionHeader';
 import { DataRow } from './ui/DataRow';
 
-// domain checks (robots, sitemap, https, www) + site-wide SEO roll-ups
 export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO | null }) {
   return (
     <section>

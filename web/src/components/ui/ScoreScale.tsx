@@ -1,9 +1,8 @@
-// 0-100 track split at the tier thresholds, with a marker at the score
 export function ScoreScale({ score }: { score: number }) {
   const clamped = Math.max(0, Math.min(100, score));
   return (
     <div className="mt-4 forced-color-adjust-none" aria-hidden="true">
-      {/* the 3px gaps are centred on 50 and 80, so the tier edges sit exactly over their labels */}
+      {/* 3px gaps centred on 50 and 80, so tier edges sit over their labels */}
       <div className="relative h-2">
         <span className="bg-bad-dot/80 absolute inset-y-0 right-[calc(50%+1.5px)] left-0 rounded-l-full" />
         <span className="bg-warn-dot/80 absolute inset-y-0 right-[calc(20%+1.5px)] left-[calc(50%+1.5px)]" />

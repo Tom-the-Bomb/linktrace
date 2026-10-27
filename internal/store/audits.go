@@ -7,7 +7,6 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/site"
 )
 
-// persists the one-shot domain checks. Called once per crawl at job creation.
 func (s *Store) SaveSiteAudit(jobID string, a site.Audit) error {
 	_, err := s.db.Exec(
 		`INSERT INTO site_audits (job_id, robots_found, robots_disallow_all, crawl_delay,
@@ -15,13 +14,13 @@ func (s *Store) SaveSiteAudit(jobID string, a site.Audit) error {
 		 is_https, https_redirect, cert_valid, www_canonical)
 		 VALUES (UUID_TO_BIN(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		jobID, a.RobotsFound, a.RobotsDisallowAll, a.CrawlDelay,
-		a.SitemapFound, nullIfEmpty(a.SitemapURL), a.SitemapURLCount, mustJSON(a.SitemapURLs),
+		a.SitemapFound, nullIfEmpty(clip(a.SitemapURL, 10000)), a.SitemapURLCount, mustJSON(a.SitemapURLs),
 		a.IsHTTPS, a.HTTPSRedirect, a.CertValid, a.WWWCanonical,
 	)
 	return err
 }
 
-// retrieves the one-shot domain checks. Returns (nil, nil) if absent.
+// returns (nil, nil) if absent.
 func (s *Store) GetSiteAudit(jobID string) (*site.Audit, error) {
 	var a site.Audit
 	var sitemapURL sql.NullString
@@ -54,11 +53,10 @@ type CrawlStats struct {
 	DurationSeconds int     `json:"duration_seconds"`
 }
 
-// aggregates per-page rows into the telemetry numbers. Pure SQL: nothing new stored.
 func (s *Store) GetCrawlStats(jobID string) (CrawlStats, error) {
 	var cs CrawlStats
 	var retries int
-	var avg float64 // AVG keeps decimals
+	var avg float64 // AVG returns a decimal
 	err := s.db.QueryRow(`
 		SELECT COUNT(*),
 		       COALESCE(SUM(retry_count), 0),
@@ -93,8 +91,6 @@ type SiteSEO struct {
 	MissingH1          int `json:"missing_h1"`
 }
 
-// aggregates the per-page seo_audits rows into site-wide signals.
-// Two queries: one row of counts, then a second for the duplicate-title set count.
 func (s *Store) GetSiteSEO(jobID string) (SiteSEO, error) {
 	var out SiteSEO
 	err := s.db.QueryRow(`
@@ -115,7 +111,6 @@ func (s *Store) GetSiteSEO(jobID string) (SiteSEO, error) {
 	if err != nil {
 		return out, err
 	}
-	// duplicate titles: titles that appear on more than one page
 	err = s.db.QueryRow(`
 		SELECT COUNT(*) FROM (
 		    SELECT title FROM seo_audits

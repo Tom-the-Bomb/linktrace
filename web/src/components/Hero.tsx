@@ -23,7 +23,6 @@ interface HeroProps {
   error: string | null;
 }
 
-// landing page: the grid frame, a domain field, and a sample crawl playing out in the cells
 export function Hero({ onSubmit, submitting, error }: HeroProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -113,7 +112,6 @@ function DomainForm({
       <div className="flex flex-wrap gap-2">
         <InputGroup className="h-11 grow basis-44">
           <InputGroupAddon className="pl-3 font-mono">https://</InputGroupAddon>
-          {/* clips the fake placeholder to the input */}
           <div className="relative flex h-full min-w-0 flex-1">
             <InputGroupInput
               ref={inputRef}
@@ -131,7 +129,6 @@ function DomainForm({
               aria-describedby={error ? 'domain-error' : undefined}
               className="px-0 font-mono"
             />
-            {/* fake placeholder: animated demo domain + blinking caret */}
             {url === '' && !focused && (
               <span
                 aria-hidden="true"
@@ -165,7 +162,6 @@ function DomainForm({
   );
 }
 
-// the cause labels a report uses, linking to what each one means
 function FailureBadges() {
   return (
     <div>
@@ -199,7 +195,6 @@ const BADGES = [
   'server_error',
 ].map(failureGroup);
 
-// labels, tones and sentences come from the same maps the report uses, so the two never disagree
 const FAILURE_TYPES = [
   'dns_failure',
   'timeout',
@@ -212,7 +207,6 @@ const FAILURE_TYPES = [
   'blocked',
 ];
 
-// the classifier's vocabulary, so visitors know what a report will say
 function Failures() {
   return (
     <GridRow inner={['lg:left-1/3', 'lg:left-2/3']}>
@@ -226,7 +220,6 @@ function Failures() {
         </div>
         <ul className="relative divide-y border-t lg:col-span-8 lg:border-t-0">
           {FAILURE_TYPES.map((type) => (
-            // the sentence wraps under its chip when both don't fit
             <li
               key={type}
               className="gutter flex flex-wrap items-baseline gap-x-4 gap-y-1.5 py-3.5"
@@ -259,7 +252,6 @@ const SAMPLE_CHECKS = [
   { label: 'www canonicalisation: inconsistent', ok: false },
 ];
 
-// the rest of a report, as labelled sample fragments
 function ReportContents() {
   return (
     <GridRow inner={['lg:left-1/3']}>
@@ -285,7 +277,6 @@ function ReportContents() {
           </div>
           <ul className="mt-3 divide-y border-y">
             {SAMPLE_SECTIONS.map((r, i) => (
-              // score and chip wrap under the name when large text leaves no room
               <li
                 key={r.name}
                 className="gutter flex flex-wrap items-center gap-x-3.5 gap-y-1.5 py-3"

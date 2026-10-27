@@ -91,4 +91,4 @@ Default values point at the dev containers. Production values should go in `.env
 
 ## Abuse limits
 
-Crawls without an account are capped at `ANON_MAX_PAGES`, and only one can run per site at a time (starting another just joins it). The crawler identifies itself as `LinkTraceBot` and follows robots.txt, including `Crawl-delay`. Requests are rate limited per IP and per account, and so are failed logins.
+Crawls without an account are capped at `ANON_MAX_PAGES`, and only one can run per site at a time (starting another just joins it). The crawler identifies itself as `LinkTraceBot` and follows robots.txt, including `Crawl-delay`. Requests are rate limited per IP and per account, and so are login attempts.

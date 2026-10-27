@@ -1,5 +1,3 @@
-// Typed wrappers around the LinkTrace REST API; types mirror the Go handler responses.
-
 const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080';
 
 export type JobStatus = 'pending' | 'crawling' | 'complete' | 'failed' | 'stopped';
@@ -13,7 +11,7 @@ export interface Status {
   checked: number;
   healthy: number;
   rotten: number;
-  // true for the account or browser that started the crawl; only they can stop or delete it
+  // the viewer's account or browser started the crawl
   can_manage: boolean;
 }
 
@@ -49,7 +47,6 @@ export interface CategoryReport {
 
 export interface SiteAudit {
   robots_found: boolean;
-  // set when robots.txt disallows everything; the crawl is refused before any page is fetched
   robots_disallow_all: boolean;
   crawl_delay: number;
   sitemap_found: boolean;
@@ -114,7 +111,6 @@ export class ApiError extends Error {
   }
 }
 
-// nullOn: a status that means "none" (404, 401) and resolves to null instead of throwing
 function jsonRequest<T>(path: string, init?: RequestInit): Promise<T>;
 function jsonRequest<T>(
   path: string,
@@ -134,14 +130,13 @@ async function jsonRequest<T>(
       headers: { 'Content-Type': 'application/json' },
     });
   } catch {
-    // fetch only rejects when no response arrived (offline, DNS, CORS)
     throw new ApiError(0, "Can't reach LinkTrace. Check your connection and try again.");
   }
   if (res.status === nullOn) {
     return null;
   }
   if (!res.ok) {
-    // prefer the server {error} message; a 5xx without one came from the proxy while the API is down
+    // a 5xx without {error} came from the proxy, so the API is down
     let msg =
       res.status >= 500
         ? "LinkTrace isn't responding right now. Try again in a moment."
@@ -152,15 +147,14 @@ async function jsonRequest<T>(
         msg = body.error;
       }
     } catch {
-      /* response wasn't JSON, keep the default */
+      /* not JSON */
     }
     throw new ApiError(res.status, msg);
   }
   return res.json() as Promise<T>;
 }
 
-// defaults to https://, and URL turns an international domain into the ASCII form its links use
-// (bücher.de -> xn--bcher-kva.de). joined: the site was already being crawled, so this joined it
+// URL converts an international domain to the ASCII form its links use (bücher.de -> xn--bcher-kva.de)
 export function createCheck(input: string): Promise<{ job_id: string; joined?: boolean }> {
   let url = input.trim();
   if (!/^https?:\/\//i.test(url)) {
@@ -169,7 +163,7 @@ export function createCheck(input: string): Promise<{ job_id: string; joined?: b
   try {
     url = new URL(url).href;
   } catch {
-    /* malformed; the server explains what's wrong */
+    /* malformed; the server explains */
   }
   return jsonRequest('/check', {
     method: 'POST',
@@ -177,7 +171,7 @@ export function createCheck(input: string): Promise<{ job_id: string; joined?: b
   });
 }
 
-export function cancelCheck(id: string): Promise<{ job_id: string; status: string }> {
+export function cancelCheck(id: string): Promise<{ job_id: string; status: JobStatus }> {
   return jsonRequest(`/check/${id}/cancel`, { method: 'POST' });
 }
 
@@ -258,7 +252,7 @@ export interface SEODetail {
   score: number;
 }
 
-// rotten/uncrawled pages have no audit row; return null on 404 so the drawer shows empty
+// 404 for rotten/uncrawled pages, which have no audit row
 export function getSEODetail(id: string, url: string): Promise<SEODetail | null> {
   return jsonRequest(`/check/${id}/seo?url=${encodeURIComponent(url)}`, undefined, 404);
 }
@@ -303,7 +297,6 @@ export function deleteAccount(): Promise<{ ok: boolean }> {
   return jsonRequest('/auth/account', { method: 'DELETE' });
 }
 
-// returns null when anonymous (401 isn't an error here, it's a valid state)
 export function getMe(): Promise<Me | null> {
   return jsonRequest('/auth/me', undefined, 401);
 }

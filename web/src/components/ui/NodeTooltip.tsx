@@ -6,11 +6,10 @@ interface Props {
   path: string;
   detail: string;
   detailClass?: string;
-  // optional extra lines (depth, where it was found, pages found on it), one fact per line
   note?: string[];
 }
 
-// pointer-following tooltip (path left, value right); caller writes position via the ref to avoid re-renders
+// callers position it via the ref, avoiding a re-render per pointer move
 export function NodeTooltip({ ref, visible, path, detail, detailClass = '', note }: Props) {
   return (
     <div

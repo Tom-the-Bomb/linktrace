@@ -10,7 +10,6 @@ function SheetClose(props: React.ComponentProps<typeof SheetPrimitive.Close>) {
   return <SheetPrimitive.Close data-slot="sheet-close" {...props} />;
 }
 
-// a panel that slides in from the right over a dimmed page
 function SheetContent({
   className,
   ...props

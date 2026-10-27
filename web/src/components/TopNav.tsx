@@ -5,7 +5,6 @@ import { AuthBar } from './AuthBar';
 import { Wordmark } from './Wordmark';
 import { Button } from './ui/button';
 
-// slim top bar inside the grid frame, for the landing, auth and 404 routes
 export function TopNav({ showAuth = true }: { showAuth?: boolean }) {
   const { user } = useAuth();
   return (

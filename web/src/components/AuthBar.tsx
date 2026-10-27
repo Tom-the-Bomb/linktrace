@@ -7,12 +7,11 @@ import { Button } from './ui/button';
 
 const AccountMenu = lazy(() => import('./AccountMenu'));
 
-// top-right widget: log in button when anonymous, account menu when logged in
 export function AuthBar() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
 
-  // reserves the button's footprint so the nav doesn't jump when auth resolves
+  // button-sized so the nav doesn't jump when auth resolves
   const placeholder = <span className="inline-block h-9 w-17" aria-hidden="true" />;
   if (loading) {
     return placeholder;

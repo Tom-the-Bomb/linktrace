@@ -11,7 +11,6 @@ import { JobStatusChip } from './ui/StatusChip';
 import { Button } from './ui/button';
 import { Spinner } from './ui/spinner';
 
-// run header: domain + status; the live progress panel only while the crawl runs
 export function ProgressView({
   status,
   onDelete,
@@ -20,7 +19,6 @@ export function ProgressView({
 }: {
   status: Status | null;
   onDelete?: () => void;
-  // start a fresh crawl of the same site
   onRecrawl?: () => void;
   recrawling?: boolean;
 }) {
@@ -34,7 +32,7 @@ export function ProgressView({
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      // clipboard blocked (insecure origin or denied); the address bar still has the link
+      // clipboard blocked; the address bar still has the link
     }
   }
 
@@ -43,7 +41,7 @@ export function ProgressView({
   }
   const { discovered, checked, healthy, rotten, status: state, url, created_at } = status;
   const isDone = isTerminalStatus(state);
-  // a stopped/failed crawl that never caught up keeps a thin bar so the gap stays visible
+  // keeps a bar so an unfinished crawl's gap stays visible
   const shortOfDone = isDone && checked < discovered;
 
   return (
@@ -67,7 +65,7 @@ export function ProgressView({
             Started {formatDate(created_at, true)}.
           </p>
         </div>
-        {/* pulled out by the buttons' padding, so icons and text line up with the content edges */}
+        {/* offsets the buttons' padding so icons line up with the content edges */}
         <div className="-mx-2 flex flex-wrap items-center gap-1">
           {isDone && onRecrawl && (
             <Button variant="ghost" size="quiet" onClick={onRecrawl} disabled={recrawling}>
@@ -111,7 +109,7 @@ export function ProgressView({
         </div>
       )}
 
-      {/* folds away when the crawl ends (where interpolate-size isn't supported it fades, then goes) */}
+      {/* without interpolate-size support it fades instead of folding */}
       <div
         className={`panel transition-[height,opacity,display] transition-discrete duration-400 ease-in-out [interpolate-size:allow-keywords] ${isDone ? 'hidden h-0 overflow-hidden opacity-0' : ''}`}
       >
@@ -178,8 +176,7 @@ function Bar({
   );
 }
 
-// growth in checked since the previous poll, for the live "+N" beside the count. Keyed on the
-// status object, which every poll replaces, so a stalled crawl drops back to no delta.
+// keyed on the status object, which every poll replaces, so a stalled crawl drops to 0
 function useCheckedDelta(status: Status | null): number {
   const prev = useRef<Status | null>(null);
   const [delta, setDelta] = useState(0);
@@ -187,7 +184,7 @@ function useCheckedDelta(status: Status | null): number {
     if (!status) {
       return;
     }
-    // only against an earlier poll of the same running crawl, so the first one isn't "+everything"
+    // same running crawl only, so the first poll isn't "+everything"
     const last = prev.current;
     const live = last?.job_id === status.job_id && !isTerminalStatus(status.status);
     setDelta(live ? Math.max(0, status.checked - last.checked) : 0);

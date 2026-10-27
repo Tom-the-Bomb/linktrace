@@ -8,17 +8,16 @@
   --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, monospace;
 
-  /* type roles in rem, so text follows the reader's font-size setting; leading comes from context */
-  --text-code: 0.6875rem; /* 11px */
-  --text-caption: 0.75rem; /* 12px */
-  --text-label: 0.8125rem; /* 13px */
-  --text-body: 0.9375rem; /* 15px */
-  --text-lead: 1.0625rem; /* 17px */
-  --text-headline: 1.75rem; /* 28px */
-  --text-closing: 2.5rem; /* 40px */
-  --text-display: min(2.75rem, 14vw); /* 44px; the cap keeps large text on a phone */
-  --text-closing-lg: 3.5rem; /* 56px */
-  --text-display-lg: min(4rem, 14vw); /* 64px */
+  --text-code: 0.6875rem;
+  --text-caption: 0.75rem;
+  --text-label: 0.8125rem;
+  --text-body: 0.9375rem;
+  --text-lead: 1.0625rem;
+  --text-headline: 1.75rem;
+  --text-closing: 2.5rem;
+  --text-display: min(2.75rem, 14vw); /* the vw cap keeps it on a phone at large text sizes */
+  --text-closing-lg: 3.5rem;
+  --text-display-lg: min(4rem, 14vw);
 
   --color-canvas: #fafafa;
   --color-panel: #ffffff;
@@ -90,8 +89,8 @@
   ::file-selector-button {
     border-color: var(--color-line);
   }
-  button:not(:disabled),
-  [role='button']:not(:disabled) {
+  button:not(:disabled, [aria-disabled='true']),
+  [role='button']:not(:disabled, [aria-disabled='true']) {
     cursor: pointer;
   }
 
@@ -115,7 +114,6 @@
   a {
     text-underline-offset: 3px;
   }
-  /* thin neutral scrollbars so tables and drawers don't drop OS chrome into the panel */
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--color-line-strong) transparent;
@@ -144,7 +142,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    /* spinners keep turning, as the one moving sign that something is still working */
+    /* spinners keep turning: the only sign work is still in progress */
     *:not([data-slot='spinner']),
     *::before,
     *::after {
@@ -156,12 +154,11 @@
 }
 
 @utility frame {
-  /* the grid frame: hairline columns with crosshairs where the lines meet */
   @apply relative mx-auto w-full max-w-300 border-x;
 }
 
 @utility cross {
-  /* the bars sit 5px into the box; -6px lands them on hairlines drawn just before the anchor */
+  /* bars sit 5px in; -6px lands them on hairlines drawn just before the anchor */
   @apply text-ink-4 pointer-events-none absolute z-10 size-2.75;
   transform: translate(-6px, -6px);
   background:
@@ -170,12 +167,11 @@
 }
 
 @utility cross-end {
-  /* the frame's right border sits just after the row's edge */
+  /* the right border sits just after the row's edge */
   transform: translate(-5px, -6px);
 }
 
 @utility panel {
-  /* a cell of the frame: white ground under a hairline, crosshairs where it meets the frame edges */
   @apply bg-panel relative border-t;
   &::before {
     content: '';
@@ -199,7 +195,6 @@
   @apply tracking-headline sm:text-headline text-2xl leading-8 font-semibold;
 }
 
-/* the frame's horizontal content inset */
 @utility gutter {
   @apply px-5 sm:px-8;
 }
@@ -208,7 +203,7 @@
   @apply text-ink-2 text-lead leading-relaxed;
 }
 
-/* grows a small text link's hit area to at least 24px without moving the layout */
+/* 24px hit area for small links without shifting layout */
 @utility tap-area {
   @apply -my-1 py-1;
 }
@@ -217,8 +212,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* forced colours (Windows high contrast) drop shadows and fills, so give controls and floating layers an
-   edge and mark selected or pressed items with the system highlight. Unlayered to beat outline-none */
+/* forced colours drop shadows and fills, so controls and layers get an edge and selection uses
+   Highlight. Unlayered to beat outline-none */
 @media (forced-colors: active) {
   :is(button, kbd, input:not([role='group'] input), [role='group']:has(input)) {
     outline: 1px solid;
@@ -229,7 +224,7 @@
     outline-width: 2px;
     outline-offset: 2px;
   }
-  /* a border, since Radix sets an inline outline: none on menus */
+  /* border, as Radix sets an inline outline: none on menus */
   :is([role='menu'], [role='dialog'], [role='alertdialog']) {
     border: 1px solid;
   }

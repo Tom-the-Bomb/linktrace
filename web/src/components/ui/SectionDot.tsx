@@ -1,4 +1,3 @@
-// swatch marking a site section; the same colour follows it into the graph
 export function SectionDot({ colour }: { colour: string }) {
   return (
     <span

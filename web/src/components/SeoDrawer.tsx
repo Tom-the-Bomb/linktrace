@@ -20,24 +20,21 @@ interface Props {
   jobId: string;
   url: string | null;
   open: boolean;
-  // the crawled row for this url, when the results have loaded
   row?: PageRow;
   tree: SiteTree;
-  // open another page's audit in place (found-on page, a step of the path)
   onNavigate: (url: string) => void;
   onClose: () => void;
 }
 
-// slide-in audit sheet; fetches on URL change
 export function SeoDrawer({ jobId, url, open, row, tree, onNavigate, onClose }: Props) {
   const [detail, setDetail] = useState<SEODetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  // there's no SheetTrigger for Radix to refocus, so closing hands focus back to whatever opened it
+  // no SheetTrigger for Radix to refocus, so focus is handed back to the opener
   const opener = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (!url) {
+    if (!url || !open) {
       return;
     }
     let cancelled = false;
@@ -51,7 +48,7 @@ export function SeoDrawer({ jobId, url, open, row, tree, onNavigate, onClose }: 
     return () => {
       cancelled = true;
     };
-  }, [jobId, url]);
+  }, [jobId, url, open]);
 
   if (!url) {
     return null;
@@ -107,7 +104,6 @@ export function SeoDrawer({ jobId, url, open, row, tree, onNavigate, onClose }: 
   );
 }
 
-// what happened to the page and where it sits in the site, before the SEO detail
 function PageContext({
   url,
   row,
@@ -441,7 +437,6 @@ function Signal({ label, ok }: { label: string; ok: boolean }) {
   );
 }
 
-// "NN% X/Y", colour bucketed by ratio
 function CountSignal({ label, count, total }: { label: string; count: number; total: number }) {
   const ratio = total > 0 ? count / total : 0;
   const tone = ratio >= 0.9 ? 'ok' : ratio >= 0.5 ? 'warn' : 'bad';
@@ -457,7 +452,6 @@ function CountSignal({ label, count, total }: { label: string; count: number; to
   );
 }
 
-// plain count, no ratio; for breakdowns with no "good" target
 function RawStat({ label, value }: { label: string; value: number }) {
   return (
     <DataRow label={label}>

@@ -11,11 +11,9 @@ import { Spinner } from './ui/spinner';
 interface Props {
   onSubmit: (url: string) => void;
   submitting: boolean;
-  // extra controls beside submit (stop/back button)
   children?: React.ReactNode;
 }
 
-// compact launcher in the sticky header of /jobs/:id and /history
 export function CrawlForm({ onSubmit, submitting, children }: Props) {
   const [url, setUrl] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);

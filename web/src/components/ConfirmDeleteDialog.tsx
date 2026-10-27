@@ -2,14 +2,12 @@ import { formatDate } from '../lib/format';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface Props {
-  // url + start date shown so runs are distinguishable
   url: string;
   startedAt: string;
   onConfirm: () => Promise<void>;
   onCancel: () => void;
 }
 
-// crawl delete confirmation: ConfirmDialog plus a website/started detail block
 export function ConfirmDeleteDialog({ url, startedAt, onConfirm, onCancel }: Props) {
   return (
     <ConfirmDialog

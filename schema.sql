@@ -6,11 +6,10 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 1 row / job: url + status
 CREATE TABLE IF NOT EXISTS jobs (
     id BINARY(16) PRIMARY KEY,
     user_id BINARY(16) NULL,
-    -- sha256 of an anonymous creator's owner cookie; lets them stop/delete without an account
+    -- sha256 of an anonymous creator's owner cookie
     anon_owner CHAR(64) NULL,
     url TEXT NOT NULL,
     status ENUM(
@@ -27,7 +26,6 @@ CREATE TABLE IF NOT EXISTS jobs (
     INDEX idx_user_id (user_id)
 );
 
--- 1 row per crawled page: rot or not rot
 CREATE TABLE IF NOT EXISTS pages (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     job_id BINARY(16) NOT NULL,
@@ -45,7 +43,6 @@ CREATE TABLE IF NOT EXISTS pages (
     INDEX idx_job_id (job_id)
 );
 
--- 1 row / healthy page: SEO breakdown
 CREATE TABLE IF NOT EXISTS seo_audits (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     job_id BINARY(16) NOT NULL,
@@ -89,7 +86,6 @@ CREATE TABLE IF NOT EXISTS seo_audits (
     INDEX idx_job_id (job_id)
 );
 
--- 1 row / site: site-wide/global audits
 CREATE TABLE IF NOT EXISTS site_audits (
     job_id BINARY(16) PRIMARY KEY,
     robots_found BOOLEAN DEFAULT FALSE,
@@ -108,12 +104,11 @@ CREATE TABLE IF NOT EXISTS site_audits (
     FOREIGN KEY (job_id) REFERENCES jobs(id)
 );
 
--- 1 row per discovered internal link: source page -> target page; powers the graph view
 CREATE TABLE IF NOT EXISTS links (
     job_id BINARY(16) NOT NULL,
     source_url TEXT NOT NULL,
     target_url TEXT NOT NULL,
-    -- short hashes let us index TEXT columns cheaply for de-dupe
+    -- hashes make the TEXT columns indexable for dedupe
     source_hash CHAR(40) AS (SHA1(source_url)) STORED,
     target_hash CHAR(40) AS (SHA1(target_url)) STORED,
 
@@ -121,7 +116,6 @@ CREATE TABLE IF NOT EXISTS links (
     FOREIGN KEY (job_id) REFERENCES jobs(id)
 );
 
--- 1 row per (job, URL category): rolled-up rot% and avg SEO score, rewritten by the aggregator
 CREATE TABLE IF NOT EXISTS category_reports (
     job_id BINARY(16) NOT NULL,
     category VARCHAR(255) NOT NULL,

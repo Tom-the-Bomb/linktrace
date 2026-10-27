@@ -2,9 +2,7 @@ package queue
 
 import amqp "github.com/rabbitmq/amqp091-go"
 
-// declares the exchanges, queues, and bindings. Idempotent, safe on every startup.
 func (q *Queue) declareTopology() error {
-	// dead-letter side
 	if err := q.ch.ExchangeDeclare(DeadFanout, "fanout", true, false, false, false, nil); err != nil {
 		return err
 	}
@@ -15,7 +13,6 @@ func (q *Queue) declareTopology() error {
 		return err
 	}
 
-	// one work-queue lane per shard; each dead-letters into DeadFanout on nack(requeue=false)
 	workArgs := amqp.Table{"x-dead-letter-exchange": DeadFanout}
 	for i := range q.shards {
 		if _, err := q.ch.QueueDeclare(ShardQueue(i), true, false, false, false, workArgs); err != nil {
@@ -23,7 +20,6 @@ func (q *Queue) declareTopology() error {
 		}
 	}
 
-	// results fanout + bound consumer queues
 	if err := q.ch.ExchangeDeclare(ResultsEx, "fanout", true, false, false, false, nil); err != nil {
 		return err
 	}

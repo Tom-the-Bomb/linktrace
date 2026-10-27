@@ -1,4 +1,3 @@
-// Package crawler extracts internal links from HTML and canonicalizes URLs so a page is never queued twice.
 package crawler
 
 import (
@@ -11,7 +10,6 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/htmlx"
 )
 
-// returns the canonical form of a raw URL, or the input unchanged if unparseable.
 func NormalizeURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -20,15 +18,13 @@ func NormalizeURL(raw string) string {
 	return canonicalize(u, false)
 }
 
-// SiteKey names the site a host belongs to, ignoring letter case, a trailing dot and a www.
-// prefix, so those variants count as one site.
 func SiteKey(host string) string {
 	host = strings.TrimSuffix(strings.ToLower(host), ".")
 	return strings.TrimPrefix(host, "www.")
 }
 
-// returns a URL's dedup key: the canonical form with the query dropped, so
-// /endpoint and /endpoint?a=1 collapse to one. Dedup only; the original URL is still fetched.
+// drops the query so /post?id=1 and /post?id=2 dedupe as one page; the original
+// URL is still fetched.
 func CanonicalKey(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -37,7 +33,6 @@ func CanonicalKey(raw string) string {
 	return canonicalize(u, true)
 }
 
-// returns the deduped, canonicalized, same-host links in <a href>.
 func ExtractLinks(body []byte, base *url.URL) []string {
 	doc, err := html.Parse(bytes.NewReader(body))
 	if err != nil {

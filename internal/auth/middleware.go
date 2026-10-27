@@ -1,5 +1,3 @@
-// Package auth handles password hashing, session IDs/cookies, and middleware that resolves
-// a request's authenticated user.
 package auth
 
 import (
@@ -11,12 +9,11 @@ type ctxKey string
 
 const userIDKey ctxKey = "userID"
 
-// is satisfied by *cache.Cache; defined here to avoid an import cycle.
+// avoids an import cycle with cache.
 type sessionLooker interface {
 	LookupSession(sid string) (string, error)
 }
 
-// attaches the user id to the context if a valid session is present, else anonymous.
 func Optional(sessions sessionLooker) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +27,7 @@ func Optional(sessions sessionLooker) func(http.Handler) http.Handler {
 	}
 }
 
-// rejects anonymous requests with 401. Mount below Optional, which resolves the user.
+// must be mounted below Optional, which resolves the user.
 func Require(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if UserID(r) == "" {
@@ -41,7 +38,6 @@ func Require(next http.Handler) http.Handler {
 	})
 }
 
-// pulls the authenticated user id out of the request context, or "" if anonymous.
 func UserID(r *http.Request) string {
 	if v, ok := r.Context().Value(userIDKey).(string); ok {
 		return v

@@ -1,7 +1,3 @@
-// Package store is the MySQL persistence layer: jobs, page results, SEO audits, links,
-// category reports, users, site audits, and the derived crawl-stats/site-SEO aggregates.
-// Job/page/link CRUD lives here; user and history methods are in users.go and the
-// read-only aggregates in audits.go. Row-scanning helpers and small utilities live in utils.go.
 package store
 
 import (
@@ -17,8 +13,8 @@ import (
 
 type Job struct {
 	ID        string
-	UserID    string // owner; "" for anonymous jobs
-	AnonOwner string // sha256 of the anonymous creator's owner token; "" for account jobs
+	UserID    string
+	AnonOwner string
 	URL       string
 	Status    string
 	CreatedAt time.Time
@@ -54,7 +50,6 @@ type Store struct {
 	db *sql.DB
 }
 
-// opens the MySQL pool, verifies it with a ping, and applies connection limits.
 func New(dsn string) (*Store, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
@@ -71,12 +66,10 @@ func New(dsn string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// closes the database pool.
 func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// inserts a job owned by userID, or by the anonymous token hash anonOwner when userID == "".
 func (s *Store) CreateJob(id, url, userID, anonOwner string) error {
 	_, err := s.db.Exec(
 		"INSERT INTO jobs (id, url, user_id, anon_owner, status) VALUES (UUID_TO_BIN(?), ?, UUID_TO_BIN(?), ?, 'pending')",
@@ -85,8 +78,8 @@ func (s *Store) CreateJob(id, url, userID, anonOwner string) error {
 	return err
 }
 
-// Migrate adds columns introduced after a deployment's first boot, since schema.sql only runs on
-// a fresh volume. Safe to call on every API start.
+// adds columns newer than a deployment's first boot, since schema.sql only runs on a
+// fresh volume.
 func (s *Store) Migrate() error {
 	var n int
 	if err := s.db.QueryRow(
@@ -101,24 +94,20 @@ func (s *Store) Migrate() error {
 	return err
 }
 
-// sets a job's lifecycle status (pending/crawling/complete/failed/stopped).
 func (s *Store) UpdateJobStatus(id, status string) error {
 	_, err := s.db.Exec(
-		"UPDATE jobs SET status = ? WHERE id = UUID_TO_BIN(?)", status, id,
+		"UPDATE jobs SET status = ? WHERE id = UUID_TO_BIN(?) AND status IN ('pending', 'crawling')", status, id,
 	)
 	return err
 }
 
-// removes a job and every row that references it. The child tables have
-// FK(job_id) -> jobs(id) with no ON DELETE CASCADE, so we delete children before the
-// parent, all inside one transaction so a partial failure leaves nothing orphaned.
+// deletes children before the parent since the FKs don't cascade.
 func (s *Store) DeleteJob(id string) error {
-	// A malformed id matches nothing (and would error inside UUID_TO_BIN); treat as a no-op.
+	// a malformed id would error inside UUID_TO_BIN
 	if _, err := uuid.Parse(id); err != nil {
 		return nil
 	}
 	return s.tx(func(t *sql.Tx) error {
-		// children first, parent last
 		stmts := []string{
 			"DELETE FROM pages WHERE job_id = UUID_TO_BIN(?)",
 			"DELETE FROM seo_audits WHERE job_id = UUID_TO_BIN(?)",
@@ -136,15 +125,15 @@ func (s *Store) DeleteJob(id string) error {
 	})
 }
 
-// returns the job by id, or (nil, nil) if it doesn't exist.
+// returns (nil, nil) if the job doesn't exist.
 func (s *Store) GetJob(id string) (*Job, error) {
-	// A malformed id matches nothing (and would error inside UUID_TO_BIN); treat as not-found.
+	// a malformed id would error inside UUID_TO_BIN
 	if _, err := uuid.Parse(id); err != nil {
 		return nil, nil
 	}
 
 	var j Job
-	var userID, anonOwner sql.NullString // both nullable: one or neither is set
+	var userID, anonOwner sql.NullString
 	out, err := getOne(&j, func() error {
 		return s.db.QueryRow(
 			"SELECT BIN_TO_UUID(id), BIN_TO_UUID(user_id), anon_owner, url, status, created_at FROM jobs WHERE id = UUID_TO_BIN(?)",
@@ -158,7 +147,6 @@ func (s *Store) GetJob(id string) (*Job, error) {
 	return out, nil
 }
 
-// persists one crawled page's rot record (status, timing, retries).
 func (s *Store) InsertPageResult(result PageResult) error {
 	_, err := s.db.Exec(
 		`INSERT INTO pages (job_id, url, status_code,
@@ -176,12 +164,9 @@ type Link struct {
 	Target string
 }
 
-// linkBatchSize bounds one multi-row INSERT so a link-heavy page stays well under
-// max_allowed_packet and the 65535-placeholder limit.
+// keeps one INSERT well under max_allowed_packet and the 65535-placeholder limit.
 const linkBatchSize = 200
 
-// records a page's discovered edges; INSERT IGNORE silently no-ops on duplicate (job, src, tgt).
-// Batched because a nav-heavy page carries hundreds of links and this runs on every result.
 func (s *Store) InsertLinks(jobID, source string, targets []string) error {
 	for start := 0; start < len(targets); start += linkBatchSize {
 		batch := targets[start:min(start+linkBatchSize, len(targets))]
@@ -201,7 +186,6 @@ func (s *Store) InsertLinks(jobID, source string, targets []string) error {
 	return nil
 }
 
-// returns every recorded edge for a job, for building the graph view.
 func (s *Store) ListLinks(jobID string) ([]Link, error) {
 	return queryRows(s.db,
 		"SELECT source_url, target_url FROM links WHERE job_id = UUID_TO_BIN(?)",
@@ -212,14 +196,13 @@ func (s *Store) ListLinks(jobID string) ([]Link, error) {
 		}, jobID)
 }
 
-// fetches one SEO audit row by (job, URL) for the per-page drilldown endpoint.
-// Returns (nil, nil) if there's no audit for that URL.
+// returns (nil, nil) if there's no audit for that URL.
 func (s *Store) GetSEOAudit(jobID, pageURL string) (*SEOAudit, error) {
 	var a SEOAudit
 	return getOne(&a, func() error {
 		row := s.db.QueryRow(
 			`SELECT `+seoAuditColumns+`
-			FROM seo_audits WHERE job_id = UUID_TO_BIN(?) AND url = ? LIMIT 1`,
+			FROM seo_audits WHERE job_id = UUID_TO_BIN(?) AND url = ? COLLATE utf8mb4_bin LIMIT 1`,
 			jobID, pageURL,
 		)
 		var err error
@@ -228,16 +211,14 @@ func (s *Store) GetSEOAudit(jobID, pageURL string) (*SEOAudit, error) {
 	})
 }
 
-// records the Wayback snapshot URL for a (job, page).
 func (s *Store) SetArchiveURL(jobID, url, archiveURL string) error {
 	_, err := s.db.Exec(
-		"UPDATE pages SET archive_url = ? WHERE job_id = UUID_TO_BIN(?) AND url = ?",
+		"UPDATE pages SET archive_url = ? WHERE job_id = UUID_TO_BIN(?) AND url = ? COLLATE utf8mb4_bin",
 		archiveURL, jobID, url,
 	)
 	return err
 }
 
-// returns every crawled page for a job, ordered by depth then URL.
 func (s *Store) ListPageResults(jobID string) ([]PageResult, error) {
 	return queryRows(s.db,
 		`SELECT url, status_code, response_time, error_type, is_alive, depth, archive_url
@@ -256,8 +237,8 @@ func (s *Store) ListPageResults(jobID string) ([]PageResult, error) {
 		}, jobID)
 }
 
-// persists one page's SEO audit, JSON-encoding the map/slice columns and clipping text to the
-// column widths, so an oversized field can't fail the insert and wedge the crawl.
+// clips text to the column widths so an oversized field can't fail the insert
+// and wedge the crawl.
 func (s *Store) InsertSEOAudit(audit SEOAudit) error {
 	_, err := s.db.Exec(
 		`INSERT INTO seo_audits (job_id, url, title, title_length,
@@ -288,7 +269,6 @@ func (s *Store) InsertSEOAudit(audit SEOAudit) error {
 	return err
 }
 
-// returns every SEO audit row for a job (used by the report + graph endpoints).
 func (s *Store) ListSEOAudits(jobID string) ([]SEOAudit, error) {
 	return queryRows(s.db,
 		`SELECT `+seoAuditColumns+` FROM seo_audits WHERE job_id = UUID_TO_BIN(?)`,
@@ -297,9 +277,8 @@ func (s *Store) ListSEOAudits(jobID string) ([]SEOAudit, error) {
 		}, jobID)
 }
 
-// upserts a category's rollup row; the aggregator rewrites it on every tick as counts change.
-// PRIMARY KEY (job_id, category) makes this a single statement, with no gap locks for concurrent
-// tickers to deadlock on.
+// is one upsert on PRIMARY KEY (job_id, category), leaving no gap
+// locks for concurrent tickers to deadlock on.
 func (s *Store) ReplaceCategoryReport(jobID string, report CategoryReport) error {
 	_, err := s.db.Exec(
 		`INSERT INTO category_reports (job_id, category, total_pages,
@@ -310,13 +289,12 @@ func (s *Store) ReplaceCategoryReport(jobID string, report CategoryReport) error
 			rotten_pages  = new.rotten_pages,
 			avg_seo_score = new.avg_seo_score,
 			pattern       = new.pattern`,
-		jobID, report.Category, report.TotalPages,
+		jobID, clip(report.Category, 255), report.TotalPages,
 		report.RottenPages, report.AvgSEOScore, report.Pattern,
 	)
 	return err
 }
 
-// returns the per-category rollups for a job.
 func (s *Store) ListCategoryReports(jobID string) ([]CategoryReport, error) {
 	return queryRows(s.db,
 		`SELECT category, total_pages, rotten_pages,

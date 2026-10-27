@@ -8,7 +8,7 @@ import { Spinner } from './spinner';
 
 const TONE_ICON = { ok: CircleCheck, warn: CircleAlert, bad: CircleX };
 
-// icon + word carry the meaning, colour only reinforces it
+// icon + word, so the meaning doesn't rely on colour
 export function ToneChip({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   const Icon = TONE_ICON[tone];
   return (
@@ -19,7 +19,6 @@ export function ToneChip({ tone, children }: { tone: Tone; children: React.React
   );
 }
 
-// a crawled page's outcome
 export function StatusChip({
   alive,
   code,
@@ -34,7 +33,6 @@ export function StatusChip({
   );
 }
 
-// a crawl's state, led by a spinner while it's still running
 export function JobStatusChip({ status }: { status: JobStatus }) {
   const { label, tone } = JOB_STATUS[status];
   return (

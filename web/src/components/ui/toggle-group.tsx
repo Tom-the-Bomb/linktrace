@@ -2,11 +2,11 @@ import { ToggleGroup as ToggleGroupPrimitive } from 'radix-ui';
 
 import { cn } from '@/lib/utils';
 
-// the segmented-control look, shared with tabs.tsx (selected = toggle "on" or tab "active")
+// covers both tabs (data-active) and toggles (data-state=on)
 export const segmentList =
   'inline-flex max-w-full flex-wrap rounded-control bg-sunken p-0.75 ring-1 ring-line ring-inset';
 export const segmentItem =
-  'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-[4px] px-3 py-1 text-label font-medium whitespace-nowrap text-ink-3 transition hover:text-ink focus-visible:outline-offset-0 data-active:bg-panel data-active:text-ink data-active:shadow-segment data-[state=on]:bg-panel data-[state=on]:text-ink data-[state=on]:shadow-segment [&_svg]:shrink-0';
+  'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-sm px-3 py-1 text-label font-medium whitespace-nowrap text-ink-3 transition hover:text-ink focus-visible:outline-offset-0 data-active:bg-panel data-active:text-ink data-active:shadow-segment data-[state=on]:bg-panel data-[state=on]:text-ink data-[state=on]:shadow-segment [&_svg]:shrink-0';
 
 function ToggleGroup({
   className,

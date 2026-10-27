@@ -24,7 +24,6 @@ type SortDir = 'asc' | 'desc';
 const PAGE_SIZE = 20;
 const FILTER_LABEL: Record<Filter, string> = { all: 'All', healthy: 'Healthy', rotten: 'Broken' };
 
-// every crawled page; row click opens the SEO drawer
 export function ResultsTable({
   rows,
   onSelect,
@@ -36,7 +35,6 @@ export function ResultsTable({
   onSelect: (url: string) => void;
   colourFor: (section: string) => string;
   siteUrl: string;
-  // url -> page it was first found on, for the export
   foundOn: Map<string, string>;
 }) {
   const [filter, setFilter] = useState<Filter>('all');
@@ -67,7 +65,7 @@ export function ResultsTable({
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...filtered].sort((a, b) => {
       if (sortKey === 'seo') {
-        // no-score pages always sink to the bottom, regardless of direction
+        // no-score pages sink to the bottom in either direction
         if (a.seo_score === null) {
           return b.seo_score === null ? 0 : 1;
         }
@@ -83,7 +81,6 @@ export function ResultsTable({
     });
   }, [filtered, sortKey, sortDir]);
 
-  // exports what the filters and search currently show, in the current sort order
   function exportCsv() {
     const csv = toCsv(
       ['url', 'status', 'seo_score', 'depth', 'response_ms', 'first_found_on', 'wayback_copy'],
@@ -102,7 +99,6 @@ export function ResultsTable({
 
   const { page, setPage, paged } = usePagination(sorted, PAGE_SIZE);
 
-  // filter, search and sort all go back to page 1
   function pickFilter(f: Filter) {
     setFilter(f);
     setPage(1);
@@ -118,7 +114,7 @@ export function ResultsTable({
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortKey(k);
-      // response is sorted to find slow pages, so it starts slowest-first
+      // response starts slowest-first, to find slow pages
       setSortDir(k === 'response' ? 'desc' : 'asc');
     }
     setPage(1);
@@ -205,9 +201,12 @@ export function ResultsTable({
               <TableRow
                 key={r.url}
                 onClick={() => onSelect(r.url)}
-                onKeyDown={(e) =>
-                  (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onSelect(r.url))
-                }
+                onKeyDown={(e) => {
+                  if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    onSelect(r.url);
+                  }
+                }}
                 tabIndex={0}
                 aria-label={`Open audit for ${r.url}`}
                 className="focus-visible:bg-sunken cursor-pointer focus-visible:outline-hidden"

@@ -12,7 +12,6 @@ function CollapsibleTrigger(
   return <CollapsiblePrimitive.CollapsibleTrigger data-slot="collapsible-trigger" {...props} />;
 }
 
-// opens and closes with its height, so the content visibly comes out of its row
 function CollapsibleContent({
   className,
   ...props

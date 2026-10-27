@@ -1,4 +1,3 @@
-// ISO timestamp -> localized date (+ time if withTime); '-' if empty, raw string if unparseable.
 export function formatDate(iso: string, withTime = false): string {
   if (!iso) {
     return '-';

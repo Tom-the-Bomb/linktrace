@@ -1,7 +1,5 @@
-// a full-width row of the grid frame: top hairline with crosshairs where it meets the frame edges
 export function GridRow({
   children,
-  // extra crosshair x-positions (e.g. 'lg:left-7/12') where an inner column line meets this row
   inner = [],
 }: {
   children?: React.ReactNode;

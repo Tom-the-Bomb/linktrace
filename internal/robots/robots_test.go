@@ -15,7 +15,7 @@ func TestAllowed(t *testing.T) {
 		"/about":              true,
 		"/private":            false,
 		"/private/notes":      false,
-		"/private/press/2024": true, // longer Allow beats the shorter Disallow
+		"/private/press/2024": true,
 		"/files/report.pdf":   false,
 		"/files/report.pdf?x": true, // '$' pins the end, so a query string escapes it
 		"/search?q=go":        false,

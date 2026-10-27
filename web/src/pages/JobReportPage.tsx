@@ -29,11 +29,13 @@ import { errMessage } from '../lib/format';
 import { buildTree } from '../lib/graph';
 import { isTerminalStatus } from '../lib/status';
 
-// Route /jobs/:jobId: live polling plus all report sections.
 export default function JobReportPage() {
   const jobId = useParams().jobId!;
+  return <JobReport key={jobId} jobId={jobId} />;
+}
+
+function JobReport({ jobId }: { jobId: string }) {
   const navigate = useNavigate();
-  // set by useCreateCrawl when the site was already being crawled and we joined that crawl
   const joined = (useLocation().state as { joined?: boolean } | null)?.joined;
 
   const { first } = useLoaderData() as { first: Promise<Tick> };
@@ -41,7 +43,7 @@ export default function JobReportPage() {
     jobId,
     first,
   );
-  // the audited page outlives closing, so the drawer slides out with its content
+  // separate from drawerOpen so the drawer keeps its content while sliding out
   const [drilldownUrl, setDrilldownUrl] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const openAudit = useCallback((url: string) => {
@@ -53,7 +55,6 @@ export default function JobReportPage() {
 
   const { submit, submitting, error: createError } = useCreateCrawl();
 
-  // transient per-job page: title tracks the domain, kept out of the index
   useSeo({
     title: status?.url ? `Report for ${status.url}` : 'Crawl report',
     path: `/jobs/${jobId}`,
@@ -62,7 +63,6 @@ export default function JobReportPage() {
 
   const isDone = isTerminalStatus(status?.status);
 
-  // one colour per section, shared by the section list, graph and table
   const categories = report?.categories;
   const sections = useMemo(
     () =>
@@ -71,23 +71,20 @@ export default function JobReportPage() {
   );
   const colourFor = useMemo(() => sectionColourMap(sections), [sections]);
 
-  // where each page was first found, and the click path to it; shared by graph, list and drawer
   const tree = useMemo(() => buildTree(graph?.edges ?? []), [graph]);
   const rowsByUrl = useMemo(() => new Map(rows.map((r) => [r.url, r])), [rows]);
 
-  // only whoever started the crawl can stop or delete it; everyone else gets Home
   const canManage = status?.can_manage ?? false;
   const canStop = canManage && !isDone;
 
-  // Stop cancels the viewer's own running crawl; Home goes back to the landing page
   const onStopOrBack = async () => {
     if (!canStop) {
       navigate('/');
       return;
     }
     try {
-      await cancelCheck(jobId);
-      setStatus((s) => (s ? { ...s, status: 'stopped' } : s));
+      const { status } = await cancelCheck(jobId);
+      setStatus((s) => (s ? { ...s, status } : s));
     } catch (err) {
       setError(errMessage(err));
     }
@@ -116,13 +113,12 @@ export default function JobReportPage() {
         onStopOrBack={onStopOrBack}
       />
 
-      {/* at least a screen tall, so the footer starts below the fold instead of being pushed there */}
+      {/* min-h-dvh: the footer starts below the fold rather than being pushed there */}
       <main className="frame min-h-dvh flex-1 pb-16">
         {(error ?? createError) && (
           <ErrorBanner className="mx-5 mt-6 sm:mx-8">{error ?? createError}</ErrorBanner>
         )}
 
-        {/* the API refuses these jobs up front; without this the page is just a bare Failed badge */}
         {status?.status === 'failed' && report?.site_audit?.robots_disallow_all && (
           <ErrorBanner className="mx-5 mt-6 sm:mx-8">
             This site&rsquo;s robots.txt disallows crawling, so no pages were checked.
@@ -168,7 +164,8 @@ export default function JobReportPage() {
                   </TabsList>
                 }
               />
-              <TabsContent value="graph">
+              {/* kept mounted so switching tabs doesn't throw away the layout, zoom and filters */}
+              <TabsContent value="graph" forceMount className="data-[state=inactive]:hidden">
                 {graph && (
                   <GraphView
                     data={graph}
@@ -228,7 +225,7 @@ export default function JobReportPage() {
           </GridRow>
         )}
 
-        {/* close the last cell so it doesn't float on the canvas */}
+        {/* empty row draws the last cell's bottom hairline */}
         {report && <GridRow />}
       </main>
 

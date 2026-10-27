@@ -1,24 +1,25 @@
-import { type ComponentType } from 'react';
+import { type ComponentType, type ReactNode } from 'react';
 
 import { Navigate, Outlet, RouterProvider, createBrowserRouter } from 'react-router-dom';
 
 import { Footer } from './components/Footer';
 import { Protected } from './components/Protected';
+import { SplitPage } from './components/SplitPage';
+import { Button } from './components/ui/button';
 import { fetchTick } from './hooks/useJobReport';
 import HomePage from './pages/HomePage';
 
-// overflow-x-clip trims edge crosshairs without creating a scroll container (sticky still works)
-function Shell() {
+// trims edge crosshairs; clip, not hidden, keeps sticky working
+function Shell({ children = <Outlet /> }: { children?: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col overflow-x-clip">
-      <Outlet />
+      {children}
       <Footer />
     </div>
   );
 }
 
-// only the landing ships in the main bundle. The router loads a lazy page before rendering it, so a
-// direct visit shows no Suspense fallback, and skips the 300ms reveal throttle React puts on one
+// router lazy, not React.lazy: no Suspense fallback or its 300ms reveal throttle on a direct visit
 const page = (load: () => Promise<{ default: ComponentType }>) => async () => ({
   Component: (await load()).default,
 });
@@ -26,8 +27,18 @@ const page = (load: () => Promise<{ default: ComponentType }>) => async () => ({
 const router = createBrowserRouter([
   {
     Component: Shell,
-    // no footer while a page loads: one that appears later doesn't shift, one that gets pushed down does
+    // no footer: one appearing later doesn't shift layout, one pushed down does
     HydrateFallback: () => <div className="frame min-h-dvh" />,
+    ErrorBoundary: () => (
+      <Shell>
+        <SplitPage title="Something went wrong">
+          <p className="lead mt-4 max-w-md">Reload the page to try again.</p>
+          <Button size="lg" className="mt-8" onClick={() => window.location.reload()}>
+            Reload
+          </Button>
+        </SplitPage>
+      </Shell>
+    ),
     children: [
       { index: true, Component: HomePage },
       { path: 'auth', lazy: page(() => import('./pages/AuthPage')) },
@@ -37,12 +48,14 @@ const router = createBrowserRouter([
       },
       {
         path: 'jobs/:jobId',
-        // starts the first poll while the page's code is still downloading
+        // first poll runs while the page chunk downloads
         loader: ({ params }) => {
           const first = fetchTick(params.jobId!, true);
-          first.catch(() => {}); // the page handles failures; this only quiets one it never reads
+          first.catch(() => {}); // no unhandled rejection if the page never reads it
           return { first };
         },
+        shouldRevalidate: ({ currentParams, nextParams }) =>
+          currentParams.jobId !== nextParams.jobId,
         lazy: page(() => import('./pages/JobReportPage')),
       },
       { path: '*', element: <Navigate to="/" replace /> },
@@ -50,8 +63,7 @@ const router = createBrowserRouter([
   },
 ]);
 
-// a deploy replaces the hashed chunks, so an open tab can ask for one that's gone: load the page it
-// was heading to fresh, at most once a minute so a chunk that's really missing can't cause a loop
+// a deploy removes old hashed chunks: reload the target page, at most once a minute to avoid a loop
 window.addEventListener('vite:preloadError', () => {
   if (Date.now() - Number(sessionStorage.getItem('reloadedAt')) > 60_000) {
     sessionStorage.setItem('reloadedAt', String(Date.now()));

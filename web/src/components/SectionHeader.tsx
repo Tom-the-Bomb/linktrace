@@ -1,4 +1,3 @@
-// report section heading; `right` holds controls and wraps under the title on narrow screens
 export function SectionHeader({
   title,
   subtitle,

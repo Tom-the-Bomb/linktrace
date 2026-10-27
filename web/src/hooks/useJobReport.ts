@@ -15,9 +15,9 @@ import { isTerminalStatus } from '../lib/status';
 
 const POLL_MS = 1000;
 const MAX_BACKOFF_MS = 15_000;
-const QUIET_FAILURES = 3; // consecutive errors before the banner, so one blip stays silent
+const QUIET_FAILURES = 3;
 
-// a heavy refresh ships every row, node and edge, so bigger crawls refresh less often: 5s up to 30s
+// heavy refreshes ship every row, node and edge, so bigger crawls get them less often (5s to 30s)
 const heavyEvery = (discovered: number) => Math.min(30, Math.max(5, Math.ceil(discovered / 200)));
 
 export interface Tick {
@@ -25,7 +25,7 @@ export interface Tick {
   heavy?: { rows: PageRow[]; report: Report; graph: GraphData };
 }
 
-// one poll: status, then the heavy data if due or finished. Status first, so a complete crawl's data is final
+// status first, so a complete crawl's heavy data is final
 export async function fetchTick(jobId: string, heavy: boolean): Promise<Tick> {
   const status = await getStatus(jobId);
   if (!heavy && !isTerminalStatus(status.status)) {
@@ -39,7 +39,6 @@ export async function fetchTick(jobId: string, heavy: boolean): Promise<Tick> {
   return { status, heavy: { rows, report, graph } };
 }
 
-// polls a job until it finishes; `first` is the route loader's first poll
 export function useJobReport(jobId: string, first?: Promise<Tick>) {
   const [status, setStatus] = useState<Status | null>(null);
   const [rows, setRows] = useState<PageRow[]>([]);
@@ -48,23 +47,15 @@ export function useJobReport(jobId: string, first?: Promise<Tick>) {
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
 
-  // setTimeout recursion (not setInterval) so requests can't overlap
+  // setTimeout, not setInterval, so requests can't overlap
   useEffect(() => {
-    // reset when switching jobs
-    setStatus(null);
-    setRows([]);
-    setReport(null);
-    setGraph(null);
-    setError(null);
-    setNotFound(false);
-
     let stop = false;
     let timer: number | undefined;
     let tick = 0;
     let lastHeavy = 0;
     let discovered = 0;
     let failures = 0;
-    // used once; retries fetch fresh rather than re-read a rejected promise
+    // used once, so retries don't re-await a rejected promise
     let initial = first;
 
     const poll = async () => {
@@ -76,7 +67,10 @@ export function useJobReport(jobId: string, first?: Promise<Tick>) {
         if (stop) {
           return;
         }
-        setStatus(s);
+        // a poll that left before Stop landed mustn't flip the crawl back to running
+        setStatus((prev) =>
+          prev && isTerminalStatus(prev.status) && !isTerminalStatus(s.status) ? prev : s,
+        );
         discovered = s.discovered;
         if (heavy) {
           setRows(heavy.rows);
@@ -100,7 +94,6 @@ export function useJobReport(jobId: string, first?: Promise<Tick>) {
           setNotFound(true);
           return;
         }
-        // never give up: back off and retry the same step, so the page recovers after an outage
         if (++failures >= QUIET_FAILURES) {
           setError("Can't reach LinkTrace right now. This page keeps retrying.");
         }

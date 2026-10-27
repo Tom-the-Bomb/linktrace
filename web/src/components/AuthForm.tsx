@@ -7,7 +7,6 @@ import { Input } from './ui/input';
 import { Spinner } from './ui/spinner';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
-// login/register form; a segmented toggle switches mode over the same two inputs
 export function AuthForm({ onDone }: { onDone?: () => void }) {
   const { login, register } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');

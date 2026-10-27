@@ -3,7 +3,6 @@ import { type VariantProps, cva } from 'class-variance-authority';
 import { fieldStyle } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
-// a field with icons, prefixes or counts beside the input; clicking an addon focuses the input
 function InputGroup({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div

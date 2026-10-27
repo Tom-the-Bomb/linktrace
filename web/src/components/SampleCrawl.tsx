@@ -8,7 +8,6 @@ import { StatusChip } from './ui/StatusChip';
 import { Badge } from './ui/badge';
 import { Spinner } from './ui/spinner';
 
-// illustrative crawl of example.com; every cell is labelled as sample in the UI
 const ROWS = [
   { path: '/blog/launch-day', alive: false, code: 200, error: 'soft_404', at: 0.3 },
   { path: '/docs/v1/install', alive: false, code: 404, error: 'http_4xx', at: 0.45 },
@@ -17,7 +16,7 @@ const ROWS = [
   { path: '/blog', alive: true, code: 200, error: '', at: 0.9 },
 ];
 
-// s = section index (-1 = homepage), d = link depth from the homepage; `fail` matches a ROWS entry
+// s: section index (-1 = homepage), d: link depth; `fail` matches a ROWS entry
 const NODES: { x: number; y: number; s: number; d: number; path: string; fail?: string }[] = [
   { x: 200, y: 150, s: -1, d: 0, path: '/' },
   { x: 110, y: 85, s: 0, d: 1, path: '/blog' },
@@ -56,7 +55,6 @@ const LINKS: [number, number][] = [
 const SECTIONS = ['/blog', '/docs', '/pricing', '/about'];
 const TREE = buildTree(LINKS.map(([a, b]) => ({ source: NODES[a].path, target: NODES[b].path })));
 
-// when each depth appears, as a fraction of the replay
 const DEPTH_AT = [0, 0.18, 0.42];
 const RING_AT = 0.86;
 const SCORE = 64;
@@ -65,7 +63,6 @@ const DELAY_MS = 500;
 
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
-// 0 -> 1 over one replay; reduced motion starts at the end state
 function useReplay(): number {
   const [reduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [p, setP] = useState(reduced ? 1 : 0);
@@ -88,7 +85,6 @@ function useReplay(): number {
   return p;
 }
 
-// the landing's three-cell demonstration: broken links | site graph | average SEO score
 export function SampleCrawl() {
   const p = useReplay();
   const checked = Math.round(easeOut(p) * 240);
@@ -178,13 +174,12 @@ function CellHead({ title }: { title: string }) {
 }
 
 const dotRadius = (d: number) => (d === 0 ? 7 : d === 1 ? 5 : 3.6);
-// the hover ring sits outside the broken ring when there is one
+// clears the broken ring when there is one
 const hoverRingRadius = (i: number) => dotRadius(NODES[i].d) + (NODES[i].fail ? 7.5 : 4);
 
-// the report graph's tooltip, opening away from the centre so it never covers the traced path
 function SampleGraph({ p }: { p: number }) {
   const [hovered, setHovered] = useState<number | null>(null);
-  // last page hovered, so the tooltip keeps its text while it fades out
+  // last hovered page, so the tooltip keeps its text while fading out
   const [tip, setTip] = useState(0);
   const svgRef = useRef<SVGSVGElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
@@ -195,6 +190,7 @@ function SampleGraph({ p }: { p: number }) {
     }
   };
 
+  // opens away from the centre so it never covers the traced path
   useLayoutEffect(() => {
     const svg = svgRef.current;
     const el = tipRef.current;
@@ -212,9 +208,8 @@ function SampleGraph({ p }: { p: number }) {
   }, [hovered]);
 
   const shown = (d: number) => p >= DEPTH_AT[d];
-  // the hovered page's path from the homepage stays lit; everything else steps back
   const lit = hovered === null ? null : new Set(pathFromRoot(TREE, NODES[hovered].path));
-  // every link is a parent -> child edge, so a lit child means its incoming link is on the path
+  // links are parent -> child, so a lit child means its incoming link is lit
   const linkLit = (child: number) => !!lit?.has(NODES[child].path);
   const tipNode = NODES[tip];
   return (
@@ -264,7 +259,6 @@ function SampleGraph({ p }: { p: number }) {
                 transition: 'opacity 260ms ease-out, transform 420ms cubic-bezier(0.16,1,0.3,1)',
               }}
             >
-              {/* generous invisible hit area around small dots */}
               <circle cx={n.x} cy={n.y} r={r + 9} fill="transparent" />
               {n.fail && (
                 <circle

@@ -1,6 +1,5 @@
 name: Deploy
 
-# Redeploy to the DigitalOcean droplet: SSH in, pull, rebuild the prod stack.
 on:
   push:
     branches: [main]

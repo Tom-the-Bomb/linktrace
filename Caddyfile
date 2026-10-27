@@ -1,4 +1,3 @@
-# Global options. ACME_EMAIL is where Let's Encrypt sends cert-expiry notices.
 {
 	email {$ACME_EMAIL}
 	# a TLS terminator in front (DOMAIN=":80") connects from a private address. Trusting those
@@ -9,8 +8,6 @@
 	}
 }
 
-# DOMAIN is injected by docker-compose (e.g. linktrace.example.com).
-# Caddy automatically obtains + renews an HTTPS certificate for it.
 {$DOMAIN} {
 	encode gzip zstd
 
@@ -25,8 +22,6 @@
 		-Server
 	}
 
-	# API: strip the /api prefix, then forward to the Go service.
-	# /api/check  ->  api:8080/check
 	handle_path /api/* {
 		reverse_proxy api:8080 {
 			# the API rate limits by this address
@@ -34,13 +29,10 @@
 		}
 	}
 
-	# Frontend: serve the built SPA. try_files falls back to index.html so
-	# client-side routes (react-router) work on hard refresh / deep links.
 	handle {
 		root * /srv
-		# build files carry a content hash, so they can be cached for good; everything else
-		# (the HTML above all) revalidates, so a deploy shows up at once instead of pointing
-		# a cached page at chunks that no longer exist
+		# hashed build files cache forever; the rest (notably HTML) revalidates so a deploy never
+		# points a cached page at chunks that no longer exist
 		@hashed path /assets/*
 		header @hashed Cache-Control "public, max-age=31536000, immutable"
 		header ?Cache-Control "no-cache"

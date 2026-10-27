@@ -9,7 +9,6 @@ interface Props {
   onPage: (page: number) => void;
 }
 
-// list footer with the shown range and previous / next; nothing when one page holds everything
 export function Pager({ page, total, size, onPage }: Props) {
   const pageCount = Math.ceil(total / size);
   if (pageCount <= 1) {
@@ -26,10 +25,10 @@ export function Pager({ page, total, size, onPage }: Props) {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => onPage(page - 1)}
-          disabled={page <= 1}
+          onClick={() => page > 1 && onPage(page - 1)}
+          aria-disabled={page <= 1}
           aria-label="Previous page"
-          className="disabled:opacity-30"
+          className="aria-disabled:pointer-events-none aria-disabled:opacity-30"
         >
           <ChevronLeft strokeWidth={2.25} />
         </Button>
@@ -39,10 +38,10 @@ export function Pager({ page, total, size, onPage }: Props) {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => onPage(page + 1)}
-          disabled={page >= pageCount}
+          onClick={() => page < pageCount && onPage(page + 1)}
+          aria-disabled={page >= pageCount}
           aria-label="Next page"
-          className="disabled:opacity-30"
+          className="aria-disabled:pointer-events-none aria-disabled:opacity-30"
         >
           <ChevronRight strokeWidth={2.25} />
         </Button>

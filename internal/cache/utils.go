@@ -6,12 +6,10 @@ import (
 	"time"
 )
 
-// returns the standard 2s request context for cache operations.
 func (c *Cache) ctx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 2*time.Second)
 }
 
-// increments field of the progress hash for jobID and refreshes its TTL.
 func (c *Cache) bump(jobID, field string) error {
 	ctx, cancel := c.ctx()
 	defer cancel()
@@ -22,9 +20,10 @@ func (c *Cache) bump(jobID, field string) error {
 	return c.rdb.Expire(ctx, progressKey(jobID), progressTTL).Err()
 }
 
-// redis key builders, namespaced by job / domain / session id
 func progressKey(id string) string      { return "progress:" + id }
 func seenKey(id string) string          { return "seen:" + id }
+func checkedKey(id string) string       { return "checked:" + id }
+func gapKey(domain string) string       { return "ratelimit:gap:" + domain }
 func ratelimitKey(domain string) string { return "ratelimit:" + domain }
 func apiRateKey(key string) string      { return "apirate:" + key }
 func catCountKey(jobID string) string   { return "catcount:" + jobID }

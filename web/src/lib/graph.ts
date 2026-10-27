@@ -1,10 +1,8 @@
 import type { GraphEdge } from '../api';
 
-// the worker records one edge per page (where it was first found), so the edges form a tree
+// the worker records one edge per page (where first found), so edges form a tree
 export interface SiteTree {
-  // url -> the page it was first found on
   parent: Map<string, string>;
-  // url -> pages first found on it
   children: Map<string, string[]>;
 }
 
@@ -23,7 +21,7 @@ export function buildTree(edges: GraphEdge[]): SiteTree {
   return { parent, children };
 }
 
-// homepage-first chain of urls ending at `url`; the includes check stops a malformed cycle
+// the includes check stops a malformed cycle
 export function pathFromRoot(tree: SiteTree, url: string): string[] {
   const chain = [url];
   for (let p = tree.parent.get(url); p && !chain.includes(p); p = tree.parent.get(p)) {
@@ -32,14 +30,12 @@ export function pathFromRoot(tree: SiteTree, url: string): string[] {
   return chain.reverse();
 }
 
-// "Homepage", or how many clicks from it a page sits
 export function depthLabel(depth: number): string {
   return depth === 0
     ? 'Homepage'
     : `${depth} ${depth === 1 ? 'click' : 'clicks'} from the homepage`;
 }
 
-// tooltip lines for a page: its depth, where it was first found, how many pages were found on it
 export function nodeNote(depth: number, foundOn: string | undefined, found: number): string[] {
   return [
     depthLabel(depth),

@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom';
 import { createCheck } from '../api';
 import { errMessage } from '../lib/format';
 
-// submit a URL, create a job, navigate to its report; shared by all new-crawl forms
 export function useCreateCrawl() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);

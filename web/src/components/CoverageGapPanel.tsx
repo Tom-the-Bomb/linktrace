@@ -5,10 +5,8 @@ import { SectionHeader } from './SectionHeader';
 import { Badge } from './ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 
-// max URLs listed before collapsing into a "...and N more" line
 const CAP = 50;
 
-// sitemap vs crawled diff; always renders all three rows (empty ones read as clear)
 export function CoverageGapPanel({ gap }: { gap: CoverageGap }) {
   const total = gap.orphans.length + gap.not_crawled.length + gap.sitemap_dead.length;
 

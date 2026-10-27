@@ -1,6 +1,3 @@
-// Package httpx centralizes the HTTP client construction and the fetch-with-cap pattern shared
-// by the site, archive, and checker packages. Every outbound request goes through one guarded
-// transport that refuses private and internal addresses.
 package httpx
 
 import (
@@ -14,21 +11,19 @@ import (
 	"time"
 )
 
-// Both identify LinkTrace so site owners can see who's crawling and block it in robots.txt. The
-// checker's keeps the "Mozilla/5.0 (compatible; ...)" shape, which fewer hosts reject outright.
+// The checker's UA keeps the "Mozilla/5.0 (compatible; ...)" shape, which fewer hosts reject
+// outright.
 const (
 	userAgent        = "LinkTraceBot/1.0 (+https://linktrace.tomthebomb.dev)"
 	checkerUserAgent = "Mozilla/5.0 (compatible; LinkTraceBot/1.0; +https://linktrace.tomthebomb.dev)"
 )
 
-// checkerHeaders accompany checkerUserAgent so content negotiation returns the HTML a visitor
-// would get. Accept-Encoding is left unset so Go still auto-decompresses.
+// leaves Accept-Encoding unset so Go still auto-decompresses.
 var checkerHeaders = map[string]string{
 	"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 	"Accept-Language": "en-US,en;q=0.9",
 }
 
-// SetCheckerHeaders applies the per-page liveness check's identity and Accept headers.
 func SetCheckerHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", checkerUserAgent)
 	for k, v := range checkerHeaders {
@@ -36,14 +31,11 @@ func SetCheckerHeaders(req *http.Request) {
 	}
 }
 
-// AllowPrivateTargets disables the guard below for local development; set once at startup.
 var AllowPrivateTargets bool
 
-// ErrBlockedTarget is returned when a connection would reach a private address or a non-web port.
 var ErrBlockedTarget = errors.New("target is a private address or not a web port")
 
-// ranges netip's helpers don't cover: "this network", CGNAT, IETF protocol assignments,
-// benchmarking, reserved/broadcast, IPv4-compatible IPv6, and NAT64 (which can embed a private IPv4)
+// covers ranges netip's helpers miss; NAT64 can embed a private IPv4.
 var extraBlocked = []netip.Prefix{
 	netip.MustParsePrefix("0.0.0.0/8"),
 	netip.MustParsePrefix("100.64.0.0/10"),
@@ -68,8 +60,7 @@ func isBlockedIP(ip netip.Addr) bool {
 	return false
 }
 
-// CheckHost resolves host and fails if any address it resolves to is blocked. Used to reject a
-// crawl up front with a clear error; the dialer below is what actually enforces the rule.
+// only gives a clear error up front; the dialer is what enforces the rule.
 func CheckHost(ctx context.Context, host string) error {
 	if AllowPrivateTargets {
 		return nil
@@ -86,9 +77,8 @@ func CheckHost(ctx context.Context, host string) error {
 	return nil
 }
 
-// the check runs on the address actually being dialled, after DNS, so redirects to internal
-// hosts and DNS rebinding are caught too. Only web ports are allowed, so reports can't be used
-// to probe other services on a public host.
+// checks the address actually dialled, after DNS, so redirects to internal hosts and
+// DNS rebinding are caught too. Web ports only, so reports can't probe other services.
 var dialer = &net.Dialer{
 	Timeout:   10 * time.Second,
 	KeepAlive: 30 * time.Second,
@@ -114,9 +104,8 @@ var dialer = &net.Dialer{
 	},
 }
 
-// transport is shared by every client: the default transport's settings with the guarded dialer.
-// Proxy is nil on purpose: an environment proxy would make the dialer see the proxy's address
-// instead of the target's.
+// transport's Proxy is nil on purpose: an environment proxy would make the dialer see the
+// proxy's address instead of the target's.
 var transport = func() *http.Transport {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.Proxy = nil
@@ -126,8 +115,6 @@ var transport = func() *http.Transport {
 	return t
 }()
 
-// returns a client with the given timeout. When followRedirects is false it surfaces
-// the 3xx response (with its Location) instead of following it.
 func NewClient(timeout time.Duration, followRedirects bool) *http.Client {
 	c := &http.Client{Timeout: timeout, Transport: transport}
 	if !followRedirects {
@@ -136,7 +123,6 @@ func NewClient(timeout time.Duration, followRedirects bool) *http.Client {
 	return c
 }
 
-// GETs rawURL with the bot UA and returns the body (capped at limit bytes) and status.
 func Fetch(ctx context.Context, client *http.Client, rawURL string, limit int64) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {

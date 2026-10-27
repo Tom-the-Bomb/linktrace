@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, type RefObject, useState } from 'react';
 
 import { errMessage } from '../lib/format';
 import {
@@ -17,12 +17,13 @@ interface Props {
   message: ReactNode;
   children?: ReactNode;
   confirmLabel: string;
-  // throws to show its error; closing on success is up to the caller
+  // throw to show an error; the caller closes on success
   onConfirm: () => Promise<void>;
   onCancel: () => void;
+  // for dialogs opened from a menu item, which is gone by the time the dialog closes
+  returnFocus?: RefObject<HTMLElement | null>;
 }
 
-// destructive confirm; Esc cancels unless busy, and focus starts on Cancel
 export function ConfirmDialog({
   title,
   message,
@@ -30,6 +31,7 @@ export function ConfirmDialog({
   confirmLabel,
   onConfirm,
   onCancel,
+  returnFocus,
 }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +50,14 @@ export function ConfirmDialog({
 
   return (
     <AlertDialog open onOpenChange={(open) => !open && !busy && onCancel()}>
-      <AlertDialogContent>
+      <AlertDialogContent
+        onCloseAutoFocus={(e) => {
+          if (returnFocus) {
+            e.preventDefault();
+            returnFocus.current?.focus();
+          }
+        }}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{message}</AlertDialogDescription>

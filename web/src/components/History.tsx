@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { type HistoryEntry, type HistoryRun, deleteJob, getHistory } from '../api';
 import { errMessage, formatDate } from '../lib/format';
+import { hostOf } from '../lib/url';
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
 import { ErrorBanner } from './ui/ErrorBanner';
 import { JobStatusChip } from './ui/StatusChip';
@@ -17,7 +18,6 @@ interface DeleteTarget {
   startedAt: string;
 }
 
-// per-site history: single-run sites show a flat row; multi-run sites expand to a run list
 export function History() {
   const navigate = useNavigate();
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
@@ -31,7 +31,6 @@ export function History() {
       .catch((e) => setError(errMessage(e)));
   }, []);
 
-  // prune a deleted run in place, dropping the site when it was its only run
   const removeRun = (jobId: string) =>
     setEntries((prev) =>
       prev
@@ -123,10 +122,14 @@ function HistoryRow({
     <Collapsible asChild>
       <li>
         <div className="group hover:bg-sunken flex items-center gap-3 p-3 transition sm:px-6">
-          {/* chevron toggles the run list; a spacer keeps single-run rows aligned */}
           {multi ? (
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Runs" className="size-7">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`Runs of ${hostOf(entry.url)}`}
+                className="size-7"
+              >
                 <ChevronRight
                   className="transition-transform [[data-state=open]>&]:rotate-90"
                   strokeWidth={2.25}
@@ -151,8 +154,9 @@ function HistoryRow({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            {/* first, so its hidden space sits in the row's empty middle; deletes the latest run */}
+            {/* first, so its hidden space sits in the row's empty middle */}
             <DeleteButton
+              label={`Delete crawl of ${hostOf(entry.url)}`}
               onClick={() =>
                 onRequestDelete({
                   jobId: entry.last_job_id,
@@ -166,7 +170,7 @@ function HistoryRow({
               variant="secondary"
               size="sm"
               onClick={() => onOpen(entry.last_job_id)}
-              aria-label={multi ? 'Open latest report' : 'Open report'}
+              aria-label={`${multi ? 'Open latest report' : 'Open report'} for ${hostOf(entry.url)}`}
               className="ml-1.5 sm:ml-2 sm:px-3"
             >
               <span className="hidden sm:inline">{multi ? 'Latest report' : 'Report'}</span>
@@ -182,7 +186,7 @@ function HistoryRow({
                 <RunRow
                   key={run.job_id}
                   run={run}
-                  index={entry.runs.length - i} // count down so latest = N, oldest = 1
+                  index={entry.runs.length - i}
                   isLatest={i === 0}
                   onOpen={() => onOpen(run.job_id)}
                   onRequestDelete={() =>
@@ -223,13 +227,13 @@ function RunRow({
         {isLatest && <span className="text-link-600 text-caption ml-2 font-semibold">latest</span>}
       </div>
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-        <DeleteButton onClick={onRequestDelete} />
+        <DeleteButton label={`Delete run #${index}`} onClick={onRequestDelete} />
         <JobStatusChip status={run.status} />
         <Button
           variant="ghost"
           size="quiet"
           onClick={onOpen}
-          aria-label="Open report"
+          aria-label={`Open report #${index}`}
           className="text-label ml-1.5 sm:ml-2"
         >
           <span className="hidden sm:inline">Report</span>
@@ -240,16 +244,15 @@ function RunRow({
   );
 }
 
-// trash affordance shared by both rows: quiet until hovered/focused on desktop
-function DeleteButton({ onClick }: { onClick: () => void }) {
+function DeleteButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <Button
       variant="ghost"
       size="icon"
       onClick={onClick}
-      aria-label="Delete crawl"
+      aria-label={label}
       title="Delete crawl"
-      className="hover:bg-bad-bg hover:text-bad-fg focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+      className="hover:bg-bad-bg hover:text-bad-fg focus-visible:opacity-100 sm:group-hover:opacity-100 sm:pointer-fine:opacity-0"
     >
       <Trash2 />
     </Button>

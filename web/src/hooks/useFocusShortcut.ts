@@ -1,6 +1,5 @@
 import { type RefObject, useEffect } from 'react';
 
-// "/" or Cmd/Ctrl+K focuses the given input from anywhere, unless the user is already typing
 export function useFocusShortcut(ref: RefObject<HTMLInputElement | null>) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

@@ -1,5 +1,3 @@
-// Command api serves the LinkTrace HTTP API: crawl creation/control, report/graph/SEO
-// reads, and auth. Handler helpers live in utils.go.
 package main
 
 import (
@@ -31,30 +29,20 @@ import (
 
 const shutdownTimeout = 5 * time.Second
 
-// Per-minute request budgets. Every caller is counted per client IP, and logged-in callers per
-// account as well. The split is by cost to serve, not by HTTP verb (the standard bucket holds
-// mutations too).
 const (
-	// Crawl creation and auth: cheap to call, expensive to serve (thousands of outbound fetches;
-	// ~100ms of bcrypt), and reachable without an account. The only bucket that meaningfully
-	// bounds abuse. The per-account cap only matters for one account used from many addresses.
+	// cheap to call, expensive to serve (thousands of fetches, bcrypt), open to anonymous callers
 	expensivePerMinIP   = 10
 	expensivePerMinUser = 20
-	// Everything else. Deliberately roomy: one open report tab polls ~96 requests/min, and
-	// anonymous callers are keyed by IP, so an office NAT or mobile CGNAT can put many real
-	// users in one bucket. Accidental 429s are likelier here than an attacker.
+	// roomy: a report tab polls ~96/min, and NAT/CGNAT puts many anonymous users on one IP
 	standardPerMin = 1200
-	// Report data (results, report, graph, SEO detail): each response can carry every row of a
-	// 10,000-page crawl. A live tab asks for ~36/min, so this leaves room for several tabs.
+	// each response can carry every row of a 10k-page crawl; a live tab asks ~36/min
 	heavyPerMin = 240
-	// Failed logins per minute for one account: from one address, then from all addresses. The
-	// first makes guessing slow, the second bounds guessing spread across many addresses, and
-	// neither lets someone elsewhere lock the owner out with a handful of attempts.
-	loginFailsPerIP      = 5
-	loginFailsPerAccount = 50
+	// per IP slows guessing; per account bounds it across addresses, yet is too high for a
+	// stranger to lock the owner out
+	loginsPerIP      = 5
+	loginsPerAccount = 50
 )
 
-// bundles shared dependencies so handlers can reach them without globals.
 type Server struct {
 	cfg   config.Config
 	store *store.Store
@@ -62,7 +50,6 @@ type Server struct {
 	queue *queue.Queue
 }
 
-// wires up the store/cache/queue, mounts the routes, and serves until shutdown.
 func main() {
 	cfg := config.Load()
 	auth.SetCookieSecure(cfg.CookieSecure)
@@ -96,10 +83,9 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware(cfg.FrontendOrigin))
 	r.Use(jsonOnly)
-	r.Use(auth.Optional(s.cache)) // tags the request with a user id if logged in; never blocks
+	r.Use(auth.Optional(s.cache))
 
-	// Every route is rate limited. OPTIONS preflights never reach these: corsMiddleware
-	// short-circuits them above, so they don't consume budget.
+	// corsMiddleware answers OPTIONS preflights above, so they don't consume budget
 	r.Group(func(r chi.Router) {
 		r.Use(s.limitPerMin("expensive", expensivePerMinIP, expensivePerMinUser))
 		r.Post("/check", s.handleCreate)
@@ -113,7 +99,6 @@ func main() {
 		r.Post("/auth/logout", s.handleLogout)
 		r.Get("/auth/me", s.handleMe)
 
-		// crawl endpoints are anonymous-friendly; Optional tags ownership when a cookie is present
 		r.Post("/check/{id}/cancel", s.handleCancel)
 		r.Delete("/check/{id}", s.handleDelete)
 		r.Get("/check/{id}", s.handleStatus)
@@ -160,7 +145,6 @@ type createRequest struct {
 	URL string `json:"url"`
 }
 
-// (POST /check) validates the URL, creates the job row, seeds the crawl, returns 202.
 func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var req createRequest
 	if !decodeJSON(w, r, &req) {
@@ -179,7 +163,6 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "LinkTrace only crawls sites on the standard web ports (80 and 443).")
 		return
 	}
-	// a clear refusal up front; the guarded transport enforces the same rule on every request
 	if err := httpx.CheckHost(r.Context(), u.Hostname()); err != nil {
 		if errors.Is(err, httpx.ErrBlockedTarget) {
 			httpError(w, http.StatusBadRequest, "That address points to a private or internal network, which LinkTrace can't crawl.")
@@ -188,7 +171,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	// normalise through the same canonical form used on extracted links, else the homepage crawls twice
+	// same canonical form as extracted links, else the homepage crawls twice
 	seed := crawler.NormalizeURL(u.String())
 
 	id := uuid.NewString()
@@ -202,8 +185,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		anonOwner, seedJob.MaxPages = hash, s.cfg.AnonMaxPages
-		// one anonymous crawl per site; a repeat request joins it. Account crawls skip this, and
-		// every crawl of a host shares the worker's per-host rate limit anyway.
+		// one anonymous crawl per site; a repeat request joins it
 		if holder, claimed := s.claimHost(seedJob.Site, id); !claimed {
 			log.Printf("[api] %s already being crawled by job %s, joining it", seed, short(holder))
 			writeJSON(w, http.StatusOK, map[string]any{"job_id": holder, "status": "crawling", "joined": true})
@@ -212,7 +194,6 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("[api] new job %s for %s (%s)", short(id), seed, cmp.Or(short(owner), "anonymous"))
 
-	// every exit before the seed is queued hands the host claim and lane back
 	queued := false
 	defer func() {
 		if !queued {
@@ -236,7 +217,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"job_id": id, "status": "blocked_by_robots"})
 		return
 	}
-	// without the rules the workers would ignore robots.txt, so this one can't be skipped
+	// fatal: without the rules workers would ignore robots.txt
 	if err := s.cache.SetRobotsRules(id, audit.RobotsRules); err != nil {
 		_ = s.store.UpdateJobStatus(id, "failed")
 		serverError(w, "start the crawl", err)
@@ -245,7 +226,6 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	_ = s.store.UpdateJobStatus(id, "crawling")
 
-	// pin the crawl to the least-occupied shard lane; every page of this job rides that lane
 	shard, err := s.cache.PlaceJob(id)
 	if err != nil {
 		log.Printf("[api] place job %s: %v", short(id), err) // shard defaults to 0 on error
@@ -265,16 +245,17 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	queued = true
 
-	// sitemap URLs are deliberately not enqueued: the crawl stays a pure BFS from the
-	// homepage, and unreached sitemap pages become the coverage_gap report's "missed" entries.
+	// sitemap URLs aren't enqueued; unreached ones become coverage_gap's "missed" entries
 	writeJSON(w, http.StatusAccepted, map[string]string{"job_id": id, "status": "crawling"})
 }
 
-// (POST /check/{id}/cancel) sets the Redis cancel flag and marks the job stopped;
-// workers check IsCancelled and silently ack the rest so the queue drains cheaply.
 func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 	job := s.requireOwnedJob(w, r)
 	if job == nil {
+		return
+	}
+	if job.Status != "pending" && job.Status != "crawling" {
+		writeJSON(w, http.StatusOK, map[string]string{"job_id": job.ID, "status": job.Status})
 		return
 	}
 	if err := s.cache.Cancel(job.ID); err != nil {
@@ -288,15 +269,14 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"job_id": job.ID, "status": "stopped"})
 }
 
-// (DELETE /check/{id}) tears down a job. PurgeJob (tombstone + Redis keys) runs
-// before DeleteJob so no in-flight worker re-creates rows mid-delete.
+// runs PurgeJob first so in-flight workers can't re-create rows mid-delete.
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	job := s.requireOwnedJob(w, r)
 	if job == nil {
 		return
 	}
 	if err := s.cache.PurgeJob(job.ID); err != nil {
-		// non-fatal: keys self-expire; still delete the DB rows so the user-visible delete succeeds
+		// non-fatal: keys self-expire
 		log.Printf("[api] job %s purge cache: %v", short(job.ID), err)
 	}
 	if err := s.store.DeleteJob(job.ID); err != nil {
@@ -307,7 +287,6 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"job_id": job.ID, "status": "deleted"})
 }
 
-// GET /check/{id}, job row (MySQL) + live progress (Redis).
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	job := s.requireJob(w, chi.URLParam(r, "id"))
 	if job == nil {
@@ -320,8 +299,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Redis progress counters expire after progressTTL, so a finished job reopened from
-	// history later returns 0/0. Rebuild the counts from the persisted page rows instead.
+	// Redis counters expire, so rebuild a finished job's counts from its page rows
 	if prog.Checked == 0 {
 		if cs, serr := s.store.GetCrawlStats(job.ID); serr == nil && cs.TotalPages > 0 {
 			prog = cache.Progress{
@@ -357,7 +335,6 @@ type pageRow struct {
 	SEOScore     *int   `json:"seo_score"`
 }
 
-// GET /check/{id}/results, per-page rot + SEO score, joined by URL.
 func (s *Server) handleResults(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if s.requireJob(w, id) == nil {
@@ -388,7 +365,6 @@ func (s *Server) handleResults(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// GET /check/{id}/report, overall totals + per-category breakdown.
 func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if s.requireJob(w, id) == nil {
@@ -404,15 +380,14 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if cats == nil {
-		cats = []store.CategoryReport{} // [] not null so the frontend can .length safely
+		cats = []store.CategoryReport{}
 	}
 
-	// site-level sections are best-effort: log and continue so one missing row doesn't kill the report
 	siteAudit, err := s.store.GetSiteAudit(id)
 	if err != nil {
 		log.Printf("[api] site audit lookup: %v", err)
 	}
-	// pointer so a failed lookup serializes as null (panel hidden) instead of all-zeros
+	// nil on failure so the panel is hidden rather than showing zeros
 	var crawlStats *store.CrawlStats
 	if cs, err := s.store.GetCrawlStats(id); err != nil {
 		log.Printf("[api] crawl stats lookup: %v", err)
@@ -425,7 +400,6 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	} else {
 		siteSEO = &ss
 	}
-	// coverage gap: sitemap URLs vs crawled URLs
 	var gap *site.CoverageGap
 	if siteAudit != nil {
 		crawledURLs := make([]string, 0, len(pages))
@@ -465,8 +439,6 @@ type graphEdge struct {
 	Target string `json:"target"`
 }
 
-// GET /check/{id}/graph, nodes (one per checked page) + edges (recorded by the worker).
-// Edges referencing pages we never crawled (off-host, cap reached, etc.) are filtered out.
 func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if s.requireJob(w, id) == nil {
@@ -503,7 +475,6 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 	edges := make([]graphEdge, 0, len(links))
 	for _, l := range links {
-		// drop edges to URLs we never reached; they'd render as orphan dots
 		if _, ok := urlSet[l.Target]; !ok {
 			continue
 		}
@@ -519,7 +490,6 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /check/{id}/seo?url=..., full SEO audit row for one page (drilldown panel).
 func (s *Server) handleSEODetail(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if s.requireJob(w, id) == nil {
@@ -547,7 +517,6 @@ type authRequest struct {
 	Password string `json:"password"`
 }
 
-// POST /auth/register
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req authRequest
 	if !decodeJSON(w, r, &req) {
@@ -589,7 +558,6 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"username": user.Username})
 }
 
-// POST /auth/login
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req authRequest
 	if !decodeJSON(w, r, &req) {
@@ -602,30 +570,27 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only failures count. Keyed on the account, since MySQL matches the typed name case- and
-	// accent-insensitively; unknown names are counted under the name, so a 429 doesn't reveal
-	// which accounts exist. Fails closed: without the counters, guessing would be unlimited.
+	// Keyed on the account since MySQL matches names case- and accent-insensitively; unknown
+	// names are keyed by name so a 429 doesn't reveal which accounts exist. Fails closed.
 	acct := "name:" + strings.ToLower(name)
 	hash := auth.NoUserHash
 	if user != nil {
 		acct, hash = user.ID, user.PasswordHash
 	}
-	fromIP, fromAll := "loginfail:"+acct+":"+clientIP(r), "loginfail:"+acct
-	nIP, errIP := s.cache.Hits(fromIP)
-	nAll, errAll := s.cache.Hits(fromAll)
+	// counted before the bcrypt check, so concurrent guesses can't all slip under the limit
+	okIP, errIP := s.cache.AllowRequest("login:"+acct+":"+clientIP(r), loginsPerIP)
+	okAll, errAll := s.cache.AllowRequest("login:"+acct, loginsPerAccount)
 	if errIP != nil || errAll != nil {
 		log.Printf("[api] login limit: %v %v", errIP, errAll)
 		httpError(w, http.StatusServiceUnavailable, "Couldn't log you in. Try again in a moment.")
 		return
 	}
-	if nIP >= loginFailsPerIP || nAll >= loginFailsPerAccount {
-		httpError(w, http.StatusTooManyRequests, "Too many failed attempts. Try again in a minute.")
+	if !okIP || !okAll {
+		httpError(w, http.StatusTooManyRequests, "Too many login attempts. Try again in a minute.")
 		return
 	}
 	// the hash is checked even for an unknown name, so both take as long as a wrong password
 	if !auth.CheckPassword(hash, req.Password) || user == nil {
-		_ = s.cache.RecordHit(fromIP)
-		_ = s.cache.RecordHit(fromAll)
 		httpError(w, http.StatusUnauthorized, "Wrong username or password.")
 		return
 	}
@@ -636,7 +601,6 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"username": user.Username})
 }
 
-// POST /auth/logout
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(auth.CookieName); err == nil {
 		_ = s.cache.DeleteSession(cookie.Value)
@@ -645,7 +609,6 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// GET /auth/me, returns the current user's username or 401 if anonymous.
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserID(r)
 	if userID == "" {
@@ -660,8 +623,6 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"username": user.Username})
 }
 
-// (DELETE /auth/account) tears down each owned job, then the user row and
-// session. Jobs go first because jobs.user_id FKs users(id).
 func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserID(r)
 
@@ -684,7 +645,6 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// invalidate the session, same as logout
 	if cookie, cerr := r.Cookie(auth.CookieName); cerr == nil {
 		_ = s.cache.DeleteSession(cookie.Value)
 	}
@@ -693,7 +653,6 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// GET /history (protected by Require middleware, so UserID is guaranteed non-empty).
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	entries, err := s.store.ListUserHistory(auth.UserID(r))
 	if err != nil {

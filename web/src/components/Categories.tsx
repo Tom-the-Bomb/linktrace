@@ -160,7 +160,6 @@ export function Categories({
   );
 }
 
-// the badge says link health in plain words; SEO has its own column
 const PATTERN: Record<string, { tone: BadgeVariant; bar: string }> = {
   healthy: { tone: 'ok', bar: 'bg-ok-dot' },
   mixed: { tone: 'warn', bar: 'bg-warn-dot' },
@@ -193,7 +192,6 @@ function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
         <div className="truncate font-mono text-sm font-medium">{cat.category}</div>
         <div className="num text-ink-3 text-label mt-0.5">
           {cat.total_pages.toLocaleString()} {cat.total_pages === 1 ? 'page' : 'pages'}
-          {/* the SEO column is hidden on mobile, so the figure rides in the meta line there */}
           <span className="sm:hidden">
             {', '}SEO{' '}
             <span className={scoreTextColour(cat.avg_seo_score)}>{cat.avg_seo_score}</span>
@@ -201,7 +199,6 @@ function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
         </div>
       </div>
 
-      {/* the rot bar is extra, so it hides on mobile to keep the row from overflowing */}
       <div className="hidden items-center gap-2.5 sm:flex" title={`${rotPct}% broken`}>
         <div className="bg-sunken ring-line h-1.5 flex-1 overflow-hidden rounded-full ring-1 forced-color-adjust-none ring-inset">
           <div

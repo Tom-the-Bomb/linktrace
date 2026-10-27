@@ -19,25 +19,21 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/store"
 )
 
-// writes v as a JSON response with the given status code.
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// writes a JSON {"error": msg} body with the given status.
 func httpError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-// logs err and writes a 500 telling the user what failed, e.g. action "start the crawl".
 func serverError(w http.ResponseWriter, action string, err error) {
 	log.Printf("[api] %s: %v", action, err)
 	httpError(w, http.StatusInternalServerError, "Couldn't "+action+". Try again in a moment.")
 }
 
-// truncates an id to its first 8 chars for logging, guarding ids shorter than that.
 func short(id string) string {
 	if len(id) > 8 {
 		return id[:8]
@@ -45,11 +41,8 @@ func short(id string) string {
 	return id
 }
 
-// maxBodyBytes caps request bodies. Every payload here is a small JSON object, so anything
-// larger is a mistake or an attempt to make the server buffer an unbounded read.
 const maxBodyBytes = 64 << 10
 
-// decodes the request body into v; on failure it writes a 400 and returns false.
 func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(v); err != nil {
 		httpError(w, http.StatusBadRequest, "bad request")
@@ -58,9 +51,8 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-// returns the client IP for rate limiting: the X-Forwarded-For that Caddy sets to the visitor's
-// address (see trusted_proxies in the Caddyfile), else the socket peer. Assumes only Caddy can
-// reach the API. An IPv6 address is cut to its /64, since one subscriber usually holds the block.
+// trusts the last X-Forwarded-For hop, which Caddy sets (see trusted_proxies), so
+// only Caddy may reach the API. IPv6 is cut to its /64, since one subscriber usually holds it.
 func clientIP(r *http.Request) string {
 	ip := r.RemoteAddr
 	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
@@ -75,9 +67,7 @@ func clientIP(r *http.Request) string {
 	return ip
 }
 
-// sets CORS headers for the configured frontend origin(s). origins is a comma-separated
-// allowlist; the request's Origin is echoed back only when it's on the list. Cookies require an EXACT origin
-// (never "*") plus Allow-Credentials, and OPTIONS preflights short-circuit with 204.
+// Credentialed CORS needs the exact origin echoed back, never "*".
 func corsMiddleware(origins string) func(http.Handler) http.Handler {
 	allowed := map[string]bool{}
 	for _, o := range strings.Split(origins, ",") {
@@ -87,7 +77,6 @@ func corsMiddleware(origins string) func(http.Handler) http.Handler {
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// all three headers are meaningless without Allow-Origin, so they travel together
 			if origin := r.Header.Get("Origin"); allowed[origin] {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Add("Vary", "Origin")
@@ -104,9 +93,8 @@ func corsMiddleware(origins string) func(http.Handler) http.Handler {
 	}
 }
 
-// rejects state-changing requests not sent as JSON. A browser can't send that content type
-// cross-origin without a CORS preflight, which only our own frontend passes, so other sites
-// can't make their visitors' browsers start, stop or delete crawls.
+// blocks CSRF: browsers can't send JSON cross-origin without a CORS preflight,
+// which only our frontend passes.
 func jsonOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -119,10 +107,8 @@ func jsonOnly(next http.Handler) http.Handler {
 	})
 }
 
-// limitPerMin caps requests for the routes it wraps. Every caller is counted per client IP at
-// perIP, and logged-in callers per account at perUser too, so signing up for more accounts
-// doesn't add budget. bucket namespaces the counters so route groups don't share them. Must be
-// mounted below auth.Optional, which resolves the identity.
+// counts the IP even for logged-in callers so extra accounts don't add budget.
+// Mount below auth.Optional, which resolves the identity.
 func (s *Server) limitPerMin(bucket string, perIP, perUser int) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -139,8 +125,7 @@ func (s *Server) limitPerMin(bucket string, perIP, perUser int) func(http.Handle
 	}
 }
 
-// counts a request against key and reports whether it's within limit. Fails open, since a Redis
-// blip shouldn't read as rate limiting (login keeps its own counters, which fail closed).
+// fails open: a Redis blip shouldn't read as rate limiting (login counters fail closed).
 func (s *Server) allow(key string, limit int) bool {
 	allowed, err := s.cache.AllowRequest(key, limit)
 	if err != nil {
@@ -150,7 +135,6 @@ func (s *Server) allow(key string, limit int) bool {
 	return allowed
 }
 
-// returns the job by id, or writes 500/404 and returns nil.
 func (s *Server) requireJob(w http.ResponseWriter, id string) *store.Job {
 	job, err := s.store.GetJob(id)
 	if err != nil {
@@ -164,8 +148,6 @@ func (s *Server) requireJob(w http.ResponseWriter, id string) *store.Job {
 	return job
 }
 
-// is requireJob plus an owner check for mutations (see canManage). Writes 404/403 and returns
-// nil if disallowed.
 func (s *Server) requireOwnedJob(w http.ResponseWriter, r *http.Request) *store.Job {
 	job := s.requireJob(w, chi.URLParam(r, "id"))
 	if job == nil {
@@ -178,8 +160,6 @@ func (s *Server) requireOwnedJob(w http.ResponseWriter, r *http.Request) *store.
 	return job
 }
 
-// reports whether the caller may stop or delete job: its account owner, or the browser holding
-// the owner cookie it was started with.
 func canManage(job *store.Job, r *http.Request) bool {
 	if job.UserID != "" {
 		return job.UserID == auth.UserID(r)
@@ -187,9 +167,8 @@ func canManage(job *store.Job, r *http.Request) bool {
 	return auth.OwnsAnonymous(r, job.AnonOwner)
 }
 
-// claims site for jobID. When another crawl of the site is still live it returns that crawl's
-// id and false; a stale claim is cleared and retried once. Anything uncertain fails open, since
-// it shouldn't stop anyone crawling.
+// returns the live holder's id and false if site is taken. A stale claim is
+// released and retried once; errors fail open.
 func (s *Server) claimHost(site, jobID string) (string, bool) {
 	for range 2 {
 		holder, claimed, err := s.cache.ClaimHost(site, jobID)
@@ -212,16 +191,13 @@ func (s *Server) claimHost(site, jobID string) (string, bool) {
 	return "", true
 }
 
-// pendingGrace outlasts site.Run, which a new crawl runs before it starts. A job still pending
-// after this died before starting, so its claim is stale.
+// outlasts site.Run; a job still pending after it died before starting.
 const pendingGrace = 2 * time.Minute
 
-// reports whether job is a crawl that is running or about to start.
 func isLive(job *store.Job) bool {
 	return job.Status == "crawling" || (job.Status == "pending" && time.Since(job.CreatedAt) < pendingGrace)
 }
 
-// fetches a job's page rows + SEO audits, writing 500 and ok=false on failure.
 func (s *Server) loadPagesAndAudits(w http.ResponseWriter, id string) (pages []store.PageResult, audits []store.SEOAudit, ok bool) {
 	pages, err := s.store.ListPageResults(id)
 	if err != nil {
@@ -236,7 +212,6 @@ func (s *Server) loadPagesAndAudits(w http.ResponseWriter, id string) (pages []s
 	return pages, audits, true
 }
 
-// indexes SEO audit scores by page URL for joining onto page rows.
 func scoreByURL(audits []store.SEOAudit) map[string]int {
 	m := make(map[string]int, len(audits))
 	for _, a := range audits {
@@ -245,7 +220,6 @@ func scoreByURL(audits []store.SEOAudit) map[string]int {
 	return m
 }
 
-// builds the report header: totals + average SEO score + top recurring issue codes.
 func computeOverall(pages []store.PageResult, audits []store.SEOAudit) map[string]any {
 	var rotten, healthy, scoreSum int
 	for _, p := range pages {
@@ -268,7 +242,7 @@ func computeOverall(pages []store.PageResult, audits []store.SEOAudit) map[strin
 		avg = scoreSum / len(audits)
 	}
 
-	// the five most frequent issues; [] rather than null, since the UI reads .length
+	// [] not null: the UI reads .length
 	ranked := slices.SortedFunc(maps.Keys(issueCounts), func(a, b string) int {
 		return cmp.Or(issueCounts[b]-issueCounts[a], strings.Compare(a, b))
 	})
@@ -283,7 +257,6 @@ func computeOverall(pages []store.PageResult, audits []store.SEOAudit) map[strin
 	}
 }
 
-// mints a session id, stores it in Redis, and sets the HttpOnly cookie.
 func (s *Server) startSession(w http.ResponseWriter, userID string) error {
 	sid, err := auth.NewToken()
 	if err != nil {

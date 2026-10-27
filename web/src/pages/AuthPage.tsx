@@ -5,7 +5,6 @@ import { SplitPage } from '../components/SplitPage';
 import { useAuth } from '../context/AuthContext';
 import { useSeo } from '../hooks/useSeo';
 
-// Full-page sign-in at /auth; redirects to / on success or if already logged in
 export default function AuthPage() {
   useSeo({ title: 'Sign in', path: '/auth', noindex: true });
   const navigate = useNavigate();

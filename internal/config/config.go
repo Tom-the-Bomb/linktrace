@@ -1,4 +1,3 @@
-// Package config loads runtime configuration from environment variables, with defaults.
 package config
 
 type Config struct {
@@ -6,21 +5,20 @@ type Config struct {
 	RedisAddr           string
 	RabbitURL           string
 	HTTPAddr            string
-	MaxPages            int // hard cap on total pages per crawl
-	AnonMaxPages        int // lower cap for crawls started without an account
-	MaxDepth            int // hard cap on clicks from the seed (0 = unlimited)
-	MaxPerCategory      int // soft cap per URL category like /blog (0 = unlimited)
-	RatePerMin          int // requests per minute per target host, across every crawl
+	MaxPages            int
+	AnonMaxPages        int
+	MaxDepth            int // 0 = unlimited
+	MaxPerCategory      int // 0 = unlimited
+	RatePerMin          int // per target domain, shared by every crawl
 	WorkerCount         int
-	ShardCount          int // work-queue lanes; a crawl is pinned to one lane
+	ShardCount          int
 	FrontendOrigin      string
-	CookieSecure        bool // session cookie Secure attribute (true behind HTTPS in prod)
-	AllowPrivateTargets bool // lets dev crawl localhost/LAN; keep false in prod (SSRF guard)
+	CookieSecure        bool
+	AllowPrivateTargets bool // disables the SSRF guard; keep false in prod
 }
 
-// reads the configuration from the environment, falling back to dev-friendly defaults.
 func Load() Config {
-	loadDotEnv(".env") // dev convenience; real env (compose/shell) already takes precedence
+	loadDotEnv(".env")
 	return Config{
 		MySQLDSN:            env("MYSQL_DSN", "linktrace:linktrace@tcp(localhost:3306)/linktrace?parseTime=true"),
 		RedisAddr:           env("REDIS_ADDR", "localhost:6379"),

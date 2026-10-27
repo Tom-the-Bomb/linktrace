@@ -15,7 +15,6 @@ import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
 const PAGE_SIZE = 15;
 
-// every broken page with the page it was found on, so you know where to make the fix
 export function BrokenLinks({
   rows,
   foundOn,
@@ -31,7 +30,6 @@ export function BrokenLinks({
   const broken = useMemo(() => rows.filter((r) => !r.is_alive), [rows]);
   const [group, setGroup] = useState<string>('all');
 
-  // failure groups, most common first
   const groups = useMemo(() => {
     const counts = new Map<string, number>();
     for (const r of broken) {

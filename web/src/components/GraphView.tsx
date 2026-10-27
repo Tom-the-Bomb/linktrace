@@ -21,7 +21,7 @@ import { Button } from './ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
-// mutable shape the force-graph lib owns (x/y per node, fx/fy once pinned by a drag)
+// the lib mutates these in place; fx/fy pin a dragged node
 interface FgNode extends GraphNode {
   x?: number;
   y?: number;
@@ -41,7 +41,6 @@ const linkKey = (source: string, target: string) => `${source}\n${target}`;
 
 type HealthKey = keyof typeof HEALTH_HEX;
 const HEALTH_HEX = { ...TIER_HEX, none: NO_SCORE_HEX, broken: BROKEN_HEX };
-// value colours on the dark tooltip
 const TOOLTIP_CLASS: Record<HealthKey, string> = {
   ...TOOLTIP_TEXT,
   none: 'text-white/60',
@@ -55,7 +54,6 @@ const HEALTH_LEGEND: { key: HealthKey; label: string }[] = [
   { key: 'broken', label: 'broken' },
 ];
 
-// health-mode legend key (and so fill) by liveness + SEO score
 function healthKey(n: GraphNode): HealthKey {
   if (!n.is_alive) {
     return 'broken';
@@ -63,19 +61,16 @@ function healthKey(n: GraphNode): HealthKey {
   return n.seo_score === null ? 'none' : scoreTier(n.seo_score);
 }
 
-// the graph shouldn't trap page scrolling: one finger and a plain wheel scroll the page, while two
-// fingers, Ctrl/⌘ + wheel or a trackpad pinch move and zoom the graph. The lib types these
-// filters as MouseEvent, but d3-zoom hands them the raw touch or wheel event. The container's
-// touch-pan-y also overrides d3-drag's inline touch-action: none, which blocks native scrolling.
+// don't trap page scrolling: one finger or a plain wheel scrolls the page; two fingers,
+// Ctrl/⌘ + wheel or a pinch move the graph. Typed as MouseEvent, but d3-zoom passes the raw
+// touch/wheel event. The canvas's touch-pan-y overrides d3-drag's inline touch-action: none.
 const panFilter = (ev: MouseEvent & { touches?: TouchList }) =>
   !ev.touches || ev.touches.length > 1;
 const zoomFilter = (ev: MouseEvent) => ev.ctrlKey || ev.metaKey;
 
-// cap zoom-to-fit so a sparse graph doesn't fill the viewport with one dot
 const MAX_ZOOM = 2.5;
 const LEGEND_SECTIONS = 8;
 
-// node size shrinks with depth; homepage biggest, leaves smallest
 function nodeRadius(depth: number): number {
   if (depth === 0) {
     return 5;
@@ -83,8 +78,7 @@ function nodeRadius(depth: number): number {
   return Math.max(2, 3.8 - depth * 0.35);
 }
 
-// drawn radius in graph units: never smaller on screen than 3.2px (6px for the homepage),
-// so a whole-site fit still reads as shape instead of specks
+// floored in screen pixels so a whole-site fit reads as dots, not specks
 function drawRadius(depth: number, scale: number): number {
   return Math.max(nodeRadius(depth), (depth === 0 ? 6 : 3.2) / scale);
 }
@@ -92,16 +86,14 @@ function drawRadius(depth: number, scale: number): number {
 interface Props {
   data: GraphData;
   tree: SiteTree;
-  // the page whose audit is open; it stays traced while the drawer is up
   selectedUrl: string | null;
   onSelect: (url: string) => void;
   colourFor: (section: string) => string;
-  // largest sections first, for the section legend
+  // largest first; the legend shows only the top few
   sections: string[];
 }
 
-// Force graph: page = node, edge = where the crawler first found it. Hovering traces a page's
-// path from the homepage; clicking opens its audit.
+// edges only record where the crawler first found each page
 export const GraphView = memo(function GraphView({
   data,
   tree,
@@ -115,13 +107,12 @@ export const GraphView = memo(function GraphView({
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 800, height: 520 });
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  // the last hovered page, so the tooltip keeps its text while it fades out
+  // last hovered page, so the tooltip keeps its text while fading out
   const [tipId, setTipId] = useState<string | null>(null);
-  // the search match Enter flew to; traced like a hover but without a tooltip
   const [jumpId, setJumpId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<ColourMode>('section');
-  // on touch screens a swipe that starts on a page should scroll, not drag the page around
+  // on touch, a swipe starting on a page should scroll, not drag it
   const [coarsePointer] = useState(() => window.matchMedia('(pointer: coarse)').matches);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [brokenOnly, setBrokenOnly] = useState(false);
@@ -129,7 +120,7 @@ export const GraphView = memo(function GraphView({
   const legendList = useMemo(() => sections.slice(0, LEGEND_SECTIONS), [sections]);
   const legendSections = useMemo(() => new Set(legendList), [legendList]);
 
-  // the tooltip follows the pointer; written straight to the DOM to avoid re-renders
+  // written straight to the DOM to avoid re-renders
   useEffect(() => {
     const el = containerRef.current;
     if (!el) {
@@ -148,7 +139,7 @@ export const GraphView = memo(function GraphView({
     return () => el.removeEventListener('pointermove', onMove);
   }, []);
 
-  // resize the canvas to the container (lib doesn't auto-fit)
+  // the lib doesn't auto-fit its container
   useEffect(() => {
     if (!containerRef.current) {
       return;
@@ -161,7 +152,7 @@ export const GraphView = memo(function GraphView({
     return () => obs.disconnect();
   }, []);
 
-  // pause the layout while scrolled out of view, so a big graph doesn't stall the rest of the report
+  // paused offscreen so a big graph doesn't stall the rest of the report
   useEffect(() => {
     if (!containerRef.current) {
       return;
@@ -206,7 +197,6 @@ export const GraphView = memo(function GraphView({
         }
       }
 
-      // keyed by id: after the first render the lib has replaced endpoints with node objects
       const edgeKeys = new Set(prev.links.map((l) => linkKey(idOf(l.source), idOf(l.target))));
       let linksChanged = false;
       const links = prev.links.slice();
@@ -219,7 +209,7 @@ export const GraphView = memo(function GraphView({
         }
       }
 
-      // a new object restarts the layout, so only when pages or links were added (fields are read from the nodes)
+      // a new object restarts the layout; updated fields are read off the nodes
       return nodesChanged || linksChanged ? { nodes, links } : prev;
     });
   }, [data]);
@@ -231,8 +221,6 @@ export const GraphView = memo(function GraphView({
     [graph],
   );
 
-  // what to light up: the focused page's path from the homepage plus the pages found on it,
-  // or (in broken-only mode) every broken page and its path
   const focusId =
     hoveredId ?? jumpId ?? (selectedUrl && nodeById.has(selectedUrl) ? selectedUrl : null);
   const lit = useMemo(() => {
@@ -263,7 +251,6 @@ export const GraphView = memo(function GraphView({
     return { nodes, links, active: !!focusId || brokenOnly };
   }, [focusId, brokenOnly, tree, graph]);
 
-  // case-insensitive URL substring match; empty query = no highlight
   const normalizedQuery = query.trim().toLowerCase();
   const hasQuery = normalizedQuery.length > 0;
   const matches = useMemo(
@@ -274,8 +261,7 @@ export const GraphView = memo(function GraphView({
   const matchIds = useMemo(() => new Set(matches.map((n) => n.id)), [matches]);
   const brokenCount = useMemo(() => graph.nodes.filter((n) => !n.is_alive).length, [graph]);
 
-  // zooms to fit every page (or only `only`); zoomToFit has no max zoom, so a sparse fit is
-  // clamped once it lands
+  // zoomToFit has no max zoom, so clamp once it lands
   const fitTo = (ms: number, padding: number, only?: Set<string>) => {
     const fg = fgRef.current;
     if (!fg || graph.nodes.length === 0) {
@@ -289,7 +275,7 @@ export const GraphView = memo(function GraphView({
     }, ms + 50);
   };
   const fitView = () => fitTo(400, 20);
-  // a full first layout, fitted once; later additions get a short reheat so slow devices don't stall
+  // after the first fit, additions get a short reheat so slow devices don't stall
   const [settled, setSettled] = useState(false);
   const fitOnce = () => {
     if (!settled) {
@@ -444,13 +430,11 @@ export const GraphView = memo(function GraphView({
             }
           }}
           onNodeClick={(node) => onSelect((node as FgNode).url)}
-          // a dragged page stays where it was dropped
           onNodeDragEnd={(node) => {
             const n = node as FgNode;
             n.fx = n.x;
             n.fy = n.y;
           }}
-          // hit area matches the drawn dot plus a few pixels, and hidden pages can't be grabbed
           nodePointerAreaPaint={(node, colour, ctx, scale) => {
             const n = node as FgNode;
             if (n.x === undefined || n.y === undefined || isHidden(n)) {
@@ -467,7 +451,7 @@ export const GraphView = memo(function GraphView({
               return;
             }
             const r = drawRadius(n.depth, scale);
-            // a trace wins over the search filter, so a traced path is never half-dimmed
+            // a trace beats the search filter so a traced path is never half-dimmed
             let alpha = 1;
             if (isHidden(n)) {
               alpha = 0.06;
@@ -486,7 +470,6 @@ export const GraphView = memo(function GraphView({
             ctx.strokeStyle = '#ffffff';
             ctx.stroke();
 
-            // broken pages get a ring in both modes, sized in screen pixels so it reads at any zoom
             if (!n.is_alive) {
               ctx.lineWidth = 1.8 / scale;
               ctx.strokeStyle = BROKEN_HEX;
@@ -495,7 +478,6 @@ export const GraphView = memo(function GraphView({
               ctx.stroke();
             }
 
-            // the focused or selected page gets an ink ring
             if (n.id === focusId || n.id === selectedUrl) {
               ctx.lineWidth = 2 / scale;
               ctx.strokeStyle = INK_HEX;
@@ -581,7 +563,6 @@ function ZoomButton({
   );
 }
 
-// clickable legend: each entry hides or shows its pages
 function Legend({
   mode,
   colourFor,
@@ -657,7 +638,6 @@ function Legend({
   );
 }
 
-// right value: SEO score, else the failure reason
 function tooltipDetail(n: GraphNode): string {
   if (!n.is_alive) {
     return pageStatusLabel(false, n.status_code, n.error_type);

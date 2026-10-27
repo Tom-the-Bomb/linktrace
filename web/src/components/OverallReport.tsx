@@ -6,7 +6,6 @@ import { SectionHeader } from './SectionHeader';
 import { ScoreScale } from './ui/ScoreScale';
 import { Badge } from './ui/badge';
 
-// the two numbers that matter, side by side, then the recurring issues
 export function OverallReport({ report }: { report: Report }) {
   const { total_pages, rotten, avg_seo_score, top_issues } = report.overall;
   const tier = scoreTierBadge(avg_seo_score);
@@ -99,7 +98,6 @@ function BrokenBar({ pct: p }: { pct: number }) {
   );
 }
 
-// the verdict weighs the broken count first; a broken page is the more urgent fix
 function linkVerdict(rotten: number, rottenPct: number) {
   if (rotten === 0) {
     return 'No pages are broken.';

@@ -1,5 +1,3 @@
-// Package site runs one-shot domain-level checks (robots.txt, sitemap, HTTPS/cert, www
-// canonicalization) and computes sitemap-vs-crawl coverage gaps. Helpers live in utils.go.
 package site
 
 import (
@@ -12,7 +10,6 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/robots"
 )
 
-// holds every domain-level fact (mirrors the site_audits table).
 type Audit struct {
 	RobotsFound       bool     `json:"robots_found"`
 	RobotsDisallowAll bool     `json:"robots_disallow_all"`
@@ -20,18 +17,17 @@ type Audit struct {
 	SitemapFound      bool     `json:"sitemap_found"`
 	SitemapURL        string   `json:"sitemap_url"`
 	SitemapURLCount   int      `json:"sitemap_url_count"`
-	SitemapURLs       []string `json:"-"` // not serialised in the report, used for coverage gap
+	SitemapURLs       []string `json:"-"`
 	IsHTTPS           bool     `json:"is_https"`
 	HTTPSRedirect     bool     `json:"https_redirect"`
 	CertValid         bool     `json:"cert_valid"`
 	WWWCanonical      string   `json:"www_canonical"`
 
-	RobotsRules []robots.Rule `json:"-"` // handed to the crawl, not stored
+	RobotsRules []robots.Rule `json:"-"`
 }
 
 const maxSitemapURLs = 2000
 
-// performs every domain-level check against the root URL.
 func Run(rawRoot string) Audit {
 	var a Audit
 	root, err := url.Parse(rawRoot)
@@ -40,15 +36,13 @@ func Run(rawRoot string) Audit {
 		return a
 	}
 
-	// robots.txt: path rules + crawl-delay + sitemap hints. "Disallow all" means the rules block
-	// the URL the crawl starts from, so a site that only blocks its homepage still counts.
+	// "disallow all" means the seed itself is blocked, so blocking just the homepage counts
 	ctx, cancel := context.WithTimeout(context.Background(), fetchDeadline)
 	defer cancel()
 	robotsFile, found := fetchRobots(ctx, root)
 	a.RobotsFound, a.CrawlDelay, a.RobotsRules = found, robotsFile.CrawlDelay, robotsFile.Rules
 	a.RobotsDisallowAll = !robots.Allowed(robotsFile.Rules, root.RequestURI())
 
-	// sitemap.xml: prefer one named in robots, else the conventional location
 	sitemapURL := root.Scheme + "://" + root.Host + "/sitemap.xml"
 	if len(robotsFile.Sitemaps) > 0 {
 		sitemapURL = robotsFile.Sitemaps[0]
@@ -65,16 +59,14 @@ func Run(rawRoot string) Audit {
 	return a
 }
 
-// is the set difference between the sitemap and the crawled pages.
 type CoverageGap struct {
-	Orphans     []string `json:"orphans"`      // crawled, not in sitemap
-	NotCrawled  []string `json:"not_crawled"`  // in sitemap, never reached
-	SitemapDead []string `json:"sitemap_dead"` // in sitemap and crawled, but rotten
+	Orphans     []string `json:"orphans"` // crawled, not in sitemap
+	NotCrawled  []string `json:"not_crawled"`
+	SitemapDead []string `json:"sitemap_dead"`
 }
 
-// is pure set arithmetic. Both sides run through crawler.NormalizeURL (the
-// same canonical form crawled URLs were stored under) so trailing-slash/host-case differences
-// don't masquerade as orphans or missed pages.
+// normalizes both sides so trailing-slash/host-case differences don't
+// masquerade as gaps.
 func ComputeCoverageGap(sitemapURLs, crawledURLs, rottenURLs []string) CoverageGap {
 	toSet := func(urls []string) map[string]bool {
 		set := make(map[string]bool, len(urls))
@@ -98,8 +90,7 @@ func ComputeCoverageGap(sitemapURLs, crawledURLs, rottenURLs []string) CoverageG
 			g.SitemapDead = append(g.SitemapDead, u)
 		}
 	}
-	// map iteration is randomised, and the report page re-fetches this every poll: without a
-	// stable order the panel's lists visibly reshuffle while a crawl runs
+	// stable order, else the report's lists reshuffle on every poll
 	sort.Strings(g.Orphans)
 	sort.Strings(g.NotCrawled)
 	sort.Strings(g.SitemapDead)
