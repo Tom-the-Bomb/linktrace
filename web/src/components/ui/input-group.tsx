@@ -1,9 +1,9 @@
 import * as React from 'react';
 
 import { type VariantProps, cva } from 'class-variance-authority';
-import { cn } from 'cn';
 
 import { fieldStyle } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 // a field with icons, prefixes or counts beside the input; clicking an addon focuses the input
 function InputGroup({ className, ...props }: React.ComponentProps<'div'>) {
@@ -13,7 +13,7 @@ function InputGroup({ className, ...props }: React.ComponentProps<'div'>) {
       role="group"
       className={cn(
         fieldStyle,
-        'relative flex h-9 w-full min-w-0 items-center focus-within:shadow-[0_0_0_1px_#a1a1a1,0_0_0_4px_rgba(0,0,0,0.06)]',
+        'focus-within:shadow-control-focus relative flex h-9 w-full min-w-0 items-center',
         className,
       )}
       {...props}

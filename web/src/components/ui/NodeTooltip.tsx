@@ -16,7 +16,7 @@ export function NodeTooltip({ ref, visible, path, detail, detailClass = '', note
     <div
       ref={ref}
       aria-hidden="true"
-      className={`bg-ink shadow-lift pointer-events-none absolute top-0 left-0 z-30 max-w-65 rounded-lg px-2.5 py-1.5 font-mono text-[11px] text-white transition-opacity duration-150 ${
+      className={`bg-ink shadow-lift text-code pointer-events-none absolute top-0 left-0 z-30 max-w-65 rounded-lg px-2.5 py-1.5 font-mono text-white transition-opacity duration-150 ${
         visible ? 'opacity-100' : 'opacity-0'
       }`}
     >
@@ -25,7 +25,7 @@ export function NodeTooltip({ ref, visible, path, detail, detailClass = '', note
         <span className={`num shrink-0 font-medium ${detailClass}`}>{detail}</span>
       </div>
       {note && note.length > 0 && (
-        <div className="mt-0.5 font-sans text-[11px] leading-snug text-white/60">
+        <div className="text-code mt-0.5 font-sans leading-snug text-white/60">
           {note.map((seg) => (
             <div key={seg}>{seg}</div>
           ))}

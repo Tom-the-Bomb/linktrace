@@ -1,10 +1,11 @@
 import * as React from 'react';
 
 import { type VariantProps, cva } from 'class-variance-authority';
-import { cn } from 'cn';
+
+import { cn } from '@/lib/utils';
 
 const badgeVariants = cva(
-  'inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.75 text-[12px]/[1.35] font-medium whitespace-nowrap ring-1 ring-inset [&>svg]:pointer-events-none [&>svg]:shrink-0',
+  'inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.75 text-caption/[1.35] font-medium whitespace-nowrap ring-1 ring-inset transition-colors [&>svg]:pointer-events-none [&>svg]:shrink-0',
   {
     variants: {
       variant: {
@@ -14,7 +15,7 @@ const badgeVariants = cva(
         neutral: 'bg-panel text-ink-2 ring-line-strong',
       },
       // outcome codes and figures keep the mono voice
-      mono: { true: 'font-mono text-[11px]/[1.35]' },
+      mono: { true: 'font-mono text-code/[1.35]' },
     },
     defaultVariants: {
       variant: 'neutral',

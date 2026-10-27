@@ -1,9 +1,9 @@
 import * as React from 'react';
 
-import { cn } from 'cn';
 import { Tabs as TabsPrimitive } from 'radix-ui';
 
 import { SegmentCount, segmentItem, segmentList } from '@/components/ui/toggle-group';
+import { cn } from '@/lib/utils';
 
 function Tabs(props: React.ComponentProps<typeof TabsPrimitive.Root>) {
   return <TabsPrimitive.Root data-slot="tabs" {...props} />;
@@ -37,7 +37,7 @@ function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPr
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"
-      className={cn('outline-none', className)}
+      className={cn('focus-visible:-outline-offset-2', className)}
       {...props}
     />
   );
