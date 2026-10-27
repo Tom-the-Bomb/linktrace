@@ -55,12 +55,9 @@ Docker, Go 1.26+, Node 20+ are needed as MySQL, Redis and RabbitMQ all run in co
 
 ```bash
 cp .env.example .env
-docker compose up -d        # spin up docker
+npm --prefix web install
 
-go run ./cmd/api            # :8080
-go run ./cmd/worker         # separate terminal
-
-cd web && npm install && npm run dev   # :5173
+make dev    # containers, then API :8080, worker and web :5173 in one terminal
 ```
 
 ## Deploying
