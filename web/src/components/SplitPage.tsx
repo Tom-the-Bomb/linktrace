@@ -16,10 +16,10 @@ export function SplitPage({
   return (
     <div className="flex flex-1 flex-col">
       <TopNav showAuth={showAuth} />
-      <div className="frame flex-1">
+      <main className="frame flex-1">
         <section className="grid grid-cols-1 lg:grid-cols-12">
           <div className="cell px-5 pt-12 pb-10 sm:px-8 lg:col-span-8 lg:border-r lg:py-20">
-            <h1 className="tracking-display text-[40px] leading-none font-semibold sm:text-[56px]">
+            <h1 className="tracking-display text-closing sm:text-closing-lg leading-none font-semibold">
               {title}
             </h1>
             {children}
@@ -31,7 +31,7 @@ export function SplitPage({
           )}
         </section>
         <GridRow inner={['lg:left-[66.666%]']} />
-      </div>
+      </main>
     </div>
   );
 }

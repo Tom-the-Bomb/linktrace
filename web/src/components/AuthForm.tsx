@@ -1,36 +1,11 @@
 import { type SubmitEvent, useState } from 'react';
 
-import { ApiError } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { errMessage } from '../lib/format';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Spinner } from './ui/spinner';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
-
-// map server responses to a friendly message, overriding per status where clearer
-function friendlyError(err: unknown, mode: 'login' | 'register'): string {
-  if (err instanceof ApiError) {
-    switch (err.status) {
-      case 401:
-        return mode === 'login' ? 'Wrong username or password.' : err.message;
-      case 409:
-        return 'That username is taken. Try a different one.';
-      case 400:
-        return err.message;
-      case 502:
-      case 503:
-      case 504:
-        return "Can't reach the server. Try again in a moment.";
-      default:
-        return err.message;
-    }
-  }
-  if (err instanceof TypeError) {
-    // fetch rejects with TypeError on network failure (no connection, CORS, etc.)
-    return "Can't reach the server. Check your connection and try again.";
-  }
-  return String(err);
-}
 
 // login/register form; a segmented toggle switches mode over the same two inputs
 export function AuthForm({ onDone }: { onDone?: () => void }) {
@@ -53,7 +28,7 @@ export function AuthForm({ onDone }: { onDone?: () => void }) {
       }
       onDone?.();
     } catch (err) {
-      setError(friendlyError(err, mode));
+      setError(errMessage(err));
     } finally {
       setBusy(false);
     }
@@ -65,7 +40,7 @@ export function AuthForm({ onDone }: { onDone?: () => void }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="w-full">
+    <form onSubmit={onSubmit} className="w-full max-w-md">
       <ToggleGroup
         type="single"
         value={mode}
@@ -96,7 +71,7 @@ export function AuthForm({ onDone }: { onDone?: () => void }) {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoFocus
-            className="h-11 px-3.5 text-[15px]"
+            className="text-body h-11 px-3.5"
           />
         </div>
         <div>
@@ -112,10 +87,10 @@ export function AuthForm({ onDone }: { onDone?: () => void }) {
             aria-describedby={mode === 'register' ? 'auth-password-hint' : undefined}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="h-11 px-3.5 text-[15px]"
+            className="text-body h-11 px-3.5"
           />
           {mode === 'register' && (
-            <p id="auth-password-hint" className="text-ink-3 mt-1.5 text-[13px]">
+            <p id="auth-password-hint" className="text-ink-3 text-label mt-1.5">
               At least 8 characters.
             </p>
           )}

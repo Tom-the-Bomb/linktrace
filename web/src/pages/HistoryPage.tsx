@@ -2,6 +2,7 @@ import { type SubmitEvent, useState } from 'react';
 
 import { CompactHeader } from '../components/CompactHeader';
 import { History } from '../components/History';
+import { ErrorBanner } from '../components/ui/ErrorBanner';
 import { GridRow } from '../components/ui/GridRow';
 import { useAuth } from '../context/AuthContext';
 import { useCreateCrawl } from '../hooks/useCreateCrawl';
@@ -12,7 +13,7 @@ export default function HistoryPage() {
   useSeo({ title: 'Crawl history', path: '/history', noindex: true });
   const { user } = useAuth();
   const [newUrl, setNewUrl] = useState('');
-  const { submit, submitting } = useCreateCrawl();
+  const { submit, submitting, error } = useCreateCrawl();
 
   function onNewCrawl(e: SubmitEvent) {
     e.preventDefault();
@@ -28,9 +29,10 @@ export default function HistoryPage() {
         submitting={submitting}
       />
       <main className="frame flex-1 pb-24">
+        {error && <ErrorBanner className="mx-5 mt-6 sm:mx-8">{error}</ErrorBanner>}
         <div className="px-5 pt-10 pb-6 sm:px-8">
-          <h1 className="text-[28px] font-semibold tracking-[-0.035em] sm:text-4xl">History</h1>
-          <p className="text-ink-3 mt-1 text-[15px]">
+          <h1 className="page-title">History</h1>
+          <p className="text-ink-3 text-body mt-1">
             Crawls saved to <span className="text-ink-2 font-semibold">{user?.username}</span>
           </p>
         </div>

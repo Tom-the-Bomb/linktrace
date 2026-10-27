@@ -25,9 +25,9 @@ export default function AuthPage() {
       showAuth={false}
       aside={<AuthForm onDone={() => navigate('/')} />}
     >
-      <p className="text-ink-2 mt-4 max-w-md text-[17px] leading-relaxed">
-        You can crawl sites without an account. Logging in saves each crawl to your history so you
-        can find the report again later.
+      <p className="text-ink-2 text-lead mt-4 max-w-md leading-relaxed">
+        You can crawl sites without an account. Logging in saves each crawl to your history, so you
+        can find its report later.
       </p>
     </SplitPage>
   );

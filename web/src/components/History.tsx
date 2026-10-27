@@ -92,10 +92,9 @@ export function History() {
 
       {entries && entries.length === 0 && (
         <div className="panel px-6 py-12 text-center">
-          <p className="text-lg font-bold tracking-tight">No crawls yet</p>
-          <p className="text-ink-2 mx-auto mt-1.5 max-w-sm text-[15px]">
-            Crawls you run while logged in are saved here, so you can come back to their reports
-            later.
+          <p className="text-lg font-semibold tracking-tight">No crawls yet</p>
+          <p className="text-ink-2 text-body mx-auto mt-1.5 max-w-sm">
+            Crawls you run while logged in show up here.
           </p>
           <Button size="lg" className="mt-5" asChild>
             <Link to="/">Crawl a site</Link>
@@ -163,11 +162,11 @@ function HistoryRow({
               href={entry.url}
               target="_blank"
               rel="noreferrer"
-              className="hover:text-link-600 block w-fit max-w-full truncate font-mono text-sm font-medium hover:underline"
+              className="tap-area hover:text-link-600 block w-fit max-w-full truncate font-mono text-sm font-medium hover:underline"
             >
               {entry.url}
             </a>
-            <p className="num text-ink-3 mt-0.5 text-[13px]">
+            <p className="num text-ink-3 text-label mt-0.5">
               {entry.crawl_count} {entry.crawl_count === 1 ? 'run' : 'runs'}, last on{' '}
               {formatDate(entry.last_crawled)}
             </p>
@@ -239,10 +238,10 @@ function RunRow({
 }) {
   return (
     <li className="group flex items-center gap-3 py-2">
-      <span className="num text-ink-3 w-8 shrink-0 font-mono text-[11px]">#{index}</span>
-      <div className="text-ink-2 min-w-0 flex-1 text-[13px]">
+      <span className="num text-ink-3 text-code w-8 shrink-0 font-mono">#{index}</span>
+      <div className="text-ink-2 text-label min-w-0 flex-1">
         {formatDate(run.created_at, true)}
-        {isLatest && <span className="text-link-600 ml-2 text-[12px] font-semibold">latest</span>}
+        {isLatest && <span className="text-link-600 text-caption ml-2 font-semibold">latest</span>}
       </div>
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         <DeleteButton onClick={onRequestDelete} />
@@ -252,7 +251,7 @@ function RunRow({
           size="quiet"
           onClick={onOpen}
           aria-label="Open report"
-          className="ml-1.5 text-[13px] sm:ml-2"
+          className="text-label ml-1.5 sm:ml-2"
         >
           <span className="hidden sm:inline">Report</span>
           <ArrowRight className="size-3.5" strokeWidth={2.25} aria-hidden="true" />

@@ -16,7 +16,7 @@ export function ConfirmDeleteDialog({ url, startedAt, busy, error, onConfirm, on
   return (
     <ConfirmDialog
       title="Delete this crawl?"
-      message="This permanently deletes the crawl and its results (and stops it, if it's still running). This can't be undone."
+      message="This deletes the crawl and its results (and stops it if it's still running). It can't be undone."
       confirmLabel="Delete crawl"
       busy={busy}
       error={error}
@@ -26,7 +26,7 @@ export function ConfirmDeleteDialog({ url, startedAt, busy, error, onConfirm, on
       <dl className="divide-line border-line mt-4 divide-y border-y text-sm">
         <div className="flex items-baseline justify-between gap-4 py-2.5">
           <dt className="text-ink-3 shrink-0">Website</dt>
-          <dd className="truncate font-mono text-[13px]">{url}</dd>
+          <dd className="text-label truncate font-mono">{url}</dd>
         </div>
         <div className="flex items-baseline justify-between gap-4 py-2.5">
           <dt className="text-ink-3 shrink-0">Started</dt>
