@@ -37,10 +37,10 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
   return (
     <div className="flex-1">
       <TopNav />
-      <div className="frame">
+      <main className="frame">
         <section className="grid grid-cols-1 lg:grid-cols-12">
           <div className="cell flex flex-col justify-between gap-8 px-5 pt-12 pb-10 sm:px-8 lg:col-span-8 lg:border-r lg:py-16">
-            <h1 className="tracking-display text-[44px] leading-[0.98] font-semibold sm:text-[64px]">
+            <h1 className="tracking-display text-display sm:text-display-lg leading-[0.98] font-semibold wrap-anywhere">
               Broken links,
               <br />
               <span className="text-ink-3">found and explained.</span>
@@ -55,10 +55,10 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
             />
           </div>
           <div className="cell flex flex-col justify-between gap-8 border-t px-5 pt-10 pb-12 sm:px-8 lg:col-span-4 lg:border-t-0 lg:py-16">
-            <p className="text-ink-2 max-w-xl text-[17px] leading-relaxed">
-              LinkTrace crawls outward from the domain, following every internal link. It tells you
-              which links are broken and why, scores each page&rsquo;s on-page SEO and maps out the
-              whole site.
+            <p className="text-ink-2 text-lead max-w-xl leading-relaxed">
+              LinkTrace crawls your site from the homepage, following every internal link. It tells
+              you which links are broken and why, scores each page&rsquo;s SEO and maps the whole
+              site.
             </p>
             <FailureBadges />
           </div>
@@ -74,12 +74,12 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
         <GridRow inner={['lg:left-[33.333%]']}>
           <section className="flex flex-col gap-6 px-5 py-14 sm:px-8 lg:flex-row lg:items-end lg:justify-between lg:py-20">
             <div>
-              <h2 className="tracking-display text-[40px] leading-none font-semibold sm:text-[56px]">
+              <h2 className="tracking-display text-closing sm:text-closing-lg leading-none font-semibold">
                 Check your site.
               </h2>
-              <p className="text-ink-2 mt-4 max-w-md text-[17px] leading-relaxed">
-                You don&rsquo;t need an account to run a crawl. If you log in, each crawl is saved
-                to your history so you can come back to the report later.
+              <p className="text-ink-2 text-lead mt-4 max-w-md leading-relaxed">
+                You don&rsquo;t need an account to run a crawl. Logging in saves each crawl to your
+                history.
               </p>
             </div>
             <Button size="xl" onClick={focusField} className="self-start lg:self-auto">
@@ -88,7 +88,7 @@ export function Hero({ url, setUrl, onSubmit, submitting, error }: HeroProps) {
             </Button>
           </section>
         </GridRow>
-      </div>
+      </main>
     </div>
   );
 }
@@ -115,35 +115,39 @@ function DomainForm({
 
   return (
     <form onSubmit={onSubmit} className="w-full max-w-xl">
-      <div className="flex gap-2">
-        <InputGroup className="h-11 flex-1">
-          <InputGroupAddon className="pl-3 font-mono text-[14px]">https://</InputGroupAddon>
-          <InputGroupInput
-            ref={inputRef}
-            aria-label="Domain to crawl"
-            type="text"
-            inputMode="url"
-            autoComplete="url"
-            spellCheck={false}
-            required
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            aria-invalid={!!error}
-            aria-describedby={error ? 'domain-error' : undefined}
-            className="px-0 font-mono text-[14px]"
-          />
-          {/* fake placeholder: animated demo domain + blinking caret */}
-          {url === '' && !focused && (
-            <span
-              aria-hidden="true"
-              className="text-ink-3 pointer-events-none absolute left-[calc(0.75rem+8ch)] flex items-center font-mono text-[14px]"
-            >
-              {placeholder}
-              <span className="cursor-blink bg-ink ml-px inline-block h-[1.1em] w-px" />
-            </span>
-          )}
+      {/* one row down to 320px; larger text drops the button under the field */}
+      <div className="flex flex-wrap gap-2">
+        <InputGroup className="h-11 grow basis-44">
+          <InputGroupAddon className="pl-3 font-mono text-sm">https://</InputGroupAddon>
+          {/* clips the fake placeholder to the input */}
+          <div className="relative flex h-full min-w-0 flex-1">
+            <InputGroupInput
+              ref={inputRef}
+              aria-label="Domain to crawl"
+              type="text"
+              inputMode="url"
+              autoComplete="url"
+              spellCheck={false}
+              required
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              aria-invalid={!!error}
+              aria-describedby={error ? 'domain-error' : undefined}
+              className="px-0 font-mono text-sm"
+            />
+            {/* fake placeholder: animated demo domain + blinking caret */}
+            {url === '' && !focused && (
+              <span
+                aria-hidden="true"
+                className="text-ink-3 pointer-events-none absolute inset-0 flex items-center overflow-hidden font-mono text-sm"
+              >
+                {placeholder}
+                <span className="cursor-blink bg-ink ml-px inline-block h-[1.1em] w-px" />
+              </span>
+            )}
+          </div>
           {url === '' && (
             <InputGroupAddon
               align="inline-end"
@@ -171,7 +175,7 @@ function DomainForm({
 function FailureBadges() {
   return (
     <div>
-      <p className="text-ink-3 text-[13px]">
+      <p className="text-ink-3 text-label">
         Broken links are labelled by cause.{' '}
         <a
           href="#failures"
@@ -221,19 +225,24 @@ function Failures() {
       <section id="failures" className="grid scroll-mt-4 grid-cols-1 lg:grid-cols-12">
         <div className="cell px-5 py-12 sm:px-8 lg:col-span-4 lg:border-r lg:py-16">
           <h2 className="section-title">Why links break</h2>
-          <p className="text-ink-2 mt-4 max-w-sm text-[17px] leading-relaxed">
-            Knowing that a link is broken doesn&rsquo;t help much on its own. LinkTrace records what
-            went wrong when it tried to load each one, so you can tell a mistyped URL apart from an
-            expired certificate or a server that&rsquo;s down.
+          <p className="text-ink-2 text-lead mt-4 max-w-sm leading-relaxed">
+            LinkTrace records why each link failed, so you can tell a mistyped URL from an expired
+            certificate or a server that&rsquo;s down.
           </p>
         </div>
         <ul className="cell divide-line divide-y border-t lg:col-span-8 lg:border-t-0">
           {FAILURE_TYPES.map((type) => (
-            <li key={type} className="flex items-baseline gap-4 px-5 py-3.5 sm:px-8">
+            // the sentence wraps under its chip when both don't fit
+            <li
+              key={type}
+              className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 px-5 py-3.5 sm:px-8"
+            >
               <span className="w-32 shrink-0">
                 <ToneChip tone={pageStatusTone(false, type)}>{failureGroup(type)}</ToneChip>
               </span>
-              <span className="text-ink-2 text-[15px]">{FAILURE_EXPLANATION[type]}</span>
+              <span className="text-ink-2 text-body min-w-0 grow basis-48">
+                {FAILURE_EXPLANATION[type]}
+              </span>
             </li>
           ))}
         </ul>
@@ -263,16 +272,16 @@ function ReportContents() {
       <section className="grid grid-cols-1 lg:grid-cols-12">
         <div className="cell px-5 py-12 sm:px-8 lg:col-span-4 lg:border-r lg:py-16">
           <h2 className="section-title">What&rsquo;s in a report</h2>
-          <p className="text-ink-2 mt-4 max-w-sm text-[17px] leading-relaxed">
-            You can watch the progress while the crawl runs. Once it&rsquo;s done, the report groups
-            pages by section (the first part of the URL path, like /blog) and runs checks on the
-            domain itself, including robots.txt, the sitemap and HTTPS.
+          <p className="text-ink-2 text-lead mt-4 max-w-sm leading-relaxed">
+            Progress updates live while the crawl runs. When it finishes, the report groups pages by
+            section (the first part of the URL path, like /blog) and checks the domain&rsquo;s
+            robots.txt, sitemap and HTTPS.
           </p>
-          <p className="text-ink-3 mt-4 max-w-sm text-[15px] leading-relaxed">
-            Each page also gets its own SEO audit (title, meta description, headings, canonical tag,
-            Open Graph, structured data and image alt text). For broken pages, the report links to a
-            saved copy on the Wayback Machine when one exists, and it compares your sitemap against
-            the pages the crawl found.
+          <p className="text-ink-3 text-body mt-4 max-w-sm leading-relaxed">
+            Every page gets an SEO audit (title, meta description, headings, canonical tag, Open
+            Graph, structured data and image alt text). Broken pages link to a saved copy on the
+            Wayback Machine when one exists, and the report compares your sitemap with the pages the
+            crawl found.
           </p>
         </div>
         <div className="cell border-t lg:col-span-8 lg:border-t-0">
@@ -282,18 +291,26 @@ function ReportContents() {
           </div>
           <ul className="divide-line border-line mt-3 divide-y border-y">
             {SAMPLE_SECTIONS.map((r, i) => (
-              <li key={r.name} className="flex items-center gap-3.5 px-5 py-3 sm:px-8">
+              // score and chip wrap under the name when large text leaves no room
+              <li
+                key={r.name}
+                className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 px-5 py-3 sm:px-8"
+              >
                 <SectionDot colour={SECTION_HEX[i]} />
-                <span className="min-w-0 flex-1">
+                <span className="min-w-0 grow">
                   <span className="block font-mono text-sm">{r.name}</span>
-                  <span className="num text-ink-3 block text-[13px]">{r.pages} pages</span>
+                  <span className="num text-ink-3 text-label block">{r.pages} pages</span>
                 </span>
-                <span className={`num font-mono text-[13px] ${scoreTextColour(r.seo)}`}>
-                  SEO {r.seo}
+                <span className="ml-auto flex flex-wrap items-center justify-end gap-x-3.5 gap-y-1.5">
+                  <span
+                    className={`num text-label font-mono whitespace-nowrap ${scoreTextColour(r.seo)}`}
+                  >
+                    SEO {r.seo}
+                  </span>
+                  <Badge variant={r.broken ? 'warn' : 'ok'} className="w-21 justify-center">
+                    {r.broken ? `${r.broken} broken` : 'Links OK'}
+                  </Badge>
                 </span>
-                <Badge variant={r.broken ? 'warn' : 'ok'} className="w-21 justify-center">
-                  {r.broken ? `${r.broken} broken` : 'Links OK'}
-                </Badge>
               </li>
             ))}
           </ul>

@@ -11,7 +11,7 @@ export function Wordmark() {
       <span className="rounded-control bg-ink flex size-6 items-center justify-center text-white">
         <Link2 className="size-3.5" strokeWidth={2.5} aria-hidden="true" />
       </span>
-      <span className="text-[19px] font-semibold tracking-[-0.04em]">linktrace</span>
+      <span className="tracking-headline text-[19px] font-semibold">linktrace</span>
     </Link>
   );
 }

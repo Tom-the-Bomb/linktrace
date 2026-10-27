@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 
 const DEMO_DOMAINS = ['example.com', 'vercel.com', 'github.com', 'linear.app', 'nytimes.com'];
 
-// animates a rotating type-and-delete demo domain for the hero placeholder; active=false freezes it
+// animates a rotating type-and-delete demo domain for the hero placeholder; active=false or a
+// reduced-motion preference freezes it
 export function useTypingPlaceholder(active: boolean): string {
   // pre-typed so first paint shows a domain, not an empty field
   const [text, setText] = useState(DEMO_DOMAINS[0]);
   useEffect(() => {
-    if (!active) {
+    if (!active || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       return;
     }
     let domainIdx = 0;

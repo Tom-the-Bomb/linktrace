@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import { BROKEN_HEX, SECTION_HEX, TOOLTIP_TEXT } from '../lib/colours';
+import { BROKEN_HEX, INK_HEX, LINE_STRONG_HEX, SECTION_HEX, TOOLTIP_TEXT } from '../lib/colours';
 import { nodeNote } from '../lib/graph';
 import { NodeTooltip } from './ui/NodeTooltip';
 import { ScoreScale } from './ui/ScoreScale';
@@ -120,7 +120,7 @@ export function SampleCrawl() {
               key={r.path}
               className="flex items-center justify-between gap-3 px-5 py-2.5 sm:px-6"
             >
-              <span className="truncate font-mono text-[13px]">{r.path}</span>
+              <span className="text-label truncate font-mono">{r.path}</span>
               {p >= r.at ? (
                 <span className="animate-tick inline-flex">
                   <StatusChip alive={r.alive} code={r.code} error={r.error} />
@@ -134,7 +134,7 @@ export function SampleCrawl() {
             </li>
           ))}
         </ul>
-        <p className="num text-ink-3 px-5 py-4 text-[13px] sm:px-6">
+        <p className="num text-ink-3 text-label px-5 py-4 sm:px-6">
           {broken} broken of {checked} checked
         </p>
       </section>
@@ -142,7 +142,7 @@ export function SampleCrawl() {
       <section className="cell border-t lg:border-t-0 lg:border-r" aria-label="Sample site graph">
         <CellHead title="Site graph" />
         <SampleGraph p={p} />
-        <ul className="text-ink-3 flex flex-wrap items-center gap-x-3.5 gap-y-1 px-5 pt-2 pb-4 font-mono text-[11px] sm:px-6">
+        <ul className="text-ink-3 text-code flex flex-wrap items-center gap-x-3.5 gap-y-1 px-5 pt-2 pb-4 font-mono forced-color-adjust-none sm:px-6">
           {SECTIONS.map((s, i) => (
             <li key={s} className="flex items-center gap-1.5">
               <span className="size-2 rounded-full" style={{ background: SECTION_HEX[i] }} />
@@ -160,20 +160,18 @@ export function SampleCrawl() {
         <CellHead title="Average SEO score" />
         <div className="px-5 pt-4 pb-5 sm:px-6">
           <p className="flex items-baseline gap-1.5">
-            <span className="num tracking-display text-[72px] leading-none font-semibold">
-              {score}
-            </span>
-            <span className="text-ink-3 text-lg">/100</span>
+            <span className="num tracking-display text-7xl font-semibold">{score}</span>
+            <span className="text-ink-3 text-xl font-semibold">/100</span>
           </p>
           <ScoreScale score={score} />
           <dl className="num divide-line border-line mt-6 divide-y border-y text-sm">
             <div className="flex justify-between py-2.5">
               <dt className="text-ink-3">Pages checked</dt>
-              <dd className="font-mono text-[13px]">{checked}</dd>
+              <dd className="text-label font-mono">{checked}</dd>
             </div>
             <div className="flex justify-between py-2.5">
               <dt className="text-ink-3">Broken</dt>
-              <dd className="text-bad-fg font-mono text-[13px]">{broken}</dd>
+              <dd className="text-bad-fg text-label font-mono">{broken}</dd>
             </div>
           </dl>
         </div>
@@ -238,7 +236,7 @@ function SampleGraph({ p }: { p: number }) {
       <svg
         ref={svgRef}
         viewBox="0 0 400 300"
-        className="mx-auto block h-auto w-full max-w-105 px-3"
+        className="mx-auto block h-auto w-full max-w-105 px-3 forced-color-adjust-none"
         aria-label="Sample site graph: four sections, three broken pages"
         onMouseLeave={() => onHover(null)}
       >
@@ -250,7 +248,7 @@ function SampleGraph({ p }: { p: number }) {
               y1={NODES[a].y}
               x2={NODES[b].x}
               y2={NODES[b].y}
-              stroke={linkLit(b) ? '#171717' : '#d4d4d4'}
+              stroke={linkLit(b) ? INK_HEX : LINE_STRONG_HEX}
               strokeWidth={linkLit(b) ? 1.6 : 1}
               style={{
                 opacity: !shown(NODES[b].d) ? 0 : lit && !linkLit(b) ? 0.4 : 1,
@@ -299,11 +297,11 @@ function SampleGraph({ p }: { p: number }) {
                   cy={n.y}
                   r={hoverRingRadius(i)}
                   fill="none"
-                  stroke="#171717"
+                  stroke={INK_HEX}
                   strokeWidth="1.6"
                 />
               )}
-              <circle cx={n.x} cy={n.y} r={r} fill={n.s < 0 ? '#171717' : SECTION_HEX[n.s]} />
+              <circle cx={n.x} cy={n.y} r={r} fill={n.s < 0 ? INK_HEX : SECTION_HEX[n.s]} />
             </g>
           );
         })}
