@@ -43,14 +43,16 @@ var AllowPrivateTargets bool
 var ErrBlockedTarget = errors.New("target is a private address or not a web port")
 
 // ranges netip's helpers don't cover: "this network", CGNAT, IETF protocol assignments,
-// benchmarking, reserved/broadcast, and NAT64 (which can embed a private IPv4)
+// benchmarking, reserved/broadcast, IPv4-compatible IPv6, and NAT64 (which can embed a private IPv4)
 var extraBlocked = []netip.Prefix{
 	netip.MustParsePrefix("0.0.0.0/8"),
 	netip.MustParsePrefix("100.64.0.0/10"),
 	netip.MustParsePrefix("192.0.0.0/24"),
 	netip.MustParsePrefix("198.18.0.0/15"),
 	netip.MustParsePrefix("240.0.0.0/4"),
+	netip.MustParsePrefix("::/96"),
 	netip.MustParsePrefix("64:ff9b::/96"),
+	netip.MustParsePrefix("64:ff9b:1::/48"),
 }
 
 func isBlockedIP(ip netip.Addr) bool {
