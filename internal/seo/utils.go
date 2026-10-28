@@ -130,19 +130,21 @@ func findIssues(a *Audit, visibleWords int) []Issue {
 			SeverityError)
 	}
 
-	if a.Title == "" {
+	switch {
+	case a.Title == "":
 		add("title_missing", "Missing <title> tag", SeverityError)
-	} else if a.TitleLength > titleMaxLen {
+	case a.TitleLength > titleMaxLen:
 		add("title_too_long", "Title is longer than 60 characters", SeverityWarning)
-	} else if a.TitleLength < titleMinLen {
+	case a.TitleLength < titleMinLen:
 		add("title_too_short", "Title is shorter than 10 characters", SeverityWarning)
 	}
 
-	if a.MetaDescription == "" {
+	switch {
+	case a.MetaDescription == "":
 		add("meta_desc_missing", "Missing meta description", SeverityWarning)
-	} else if a.MetaDescLength > metaDescMaxLen {
+	case a.MetaDescLength > metaDescMaxLen:
 		add("meta_desc_too_long", "Meta description longer than 160 characters", SeverityInfo)
-	} else if a.MetaDescLength < metaDescMinLen {
+	case a.MetaDescLength < metaDescMinLen:
 		add("meta_desc_too_short", "Meta description shorter than 50 characters", SeverityInfo)
 	}
 
@@ -207,15 +209,15 @@ func findIssues(a *Audit, visibleWords int) []Issue {
 	if a.PrimaryKeyword != "" {
 		if !a.KeywordInTitle {
 			add("keyword_not_in_title",
-				"Primary keyword \""+a.PrimaryKeyword+"\" not in title", SeverityWarning)
+				"Primary keyword not in title", SeverityWarning)
 		}
 		if !a.KeywordInH1 {
 			add("keyword_not_in_h1",
-				"Primary keyword \""+a.PrimaryKeyword+"\" not in any H1", SeverityWarning)
+				"Primary keyword not in the H1", SeverityWarning)
 		}
 		if !a.KeywordInURL {
 			add("keyword_not_in_url",
-				"Primary keyword \""+a.PrimaryKeyword+"\" not in URL slug", SeverityInfo)
+				"Primary keyword not in URL slug", SeverityInfo)
 		}
 	}
 

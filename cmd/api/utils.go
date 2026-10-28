@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Tom-the-Bomb/linktrace/internal/auth"
+	"github.com/Tom-the-Bomb/linktrace/internal/crawler"
 	"github.com/Tom-the-Bomb/linktrace/internal/store"
 )
 
@@ -203,6 +204,67 @@ func scoreByURL(audits []store.SEOAudit) map[string]int {
 		m[a.URL] = a.Score
 	}
 	return m
+}
+
+type categoryReport struct {
+	Category    string `json:"category"`
+	TotalPages  int    `json:"total_pages"`
+	RottenPages int    `json:"rotten_pages"`
+	AvgSEOScore int    `json:"avg_seo_score"`
+	Pattern     string `json:"pattern"`
+}
+
+func computeCategories(pages []store.PageResult, audits []store.SEOAudit) []categoryReport {
+	scores := scoreByURL(audits)
+	type tally struct{ total, rotten, scoreSum, scored int }
+	byCat := map[string]*tally{}
+	for _, p := range pages {
+		cat := crawler.CategoryOf(p.URL)
+		t := byCat[cat]
+		if t == nil {
+			t = &tally{}
+			byCat[cat] = t
+		}
+		t.total++
+		if !p.IsAlive {
+			t.rotten++
+		}
+		if score, ok := scores[p.URL]; ok {
+			t.scoreSum += score
+			t.scored++
+		}
+	}
+
+	out := make([]categoryReport, 0, len(byCat))
+	for cat, t := range byCat {
+		avg := 0
+		if t.scored > 0 {
+			avg = t.scoreSum / t.scored
+		}
+		out = append(out, categoryReport{
+			Category:    cat,
+			TotalPages:  t.total,
+			RottenPages: t.rotten,
+			AvgSEOScore: avg,
+			Pattern:     classifyPattern(t.total, t.rotten),
+		})
+	}
+	// the UI breaks size ties by this order, which keeps section colours stable between polls
+	slices.SortFunc(out, func(a, b categoryReport) int { return strings.Compare(a.Category, b.Category) })
+	return out
+}
+
+func classifyPattern(total, rotten int) string {
+	switch {
+	case rotten == total:
+		return "all_rotten"
+	case rotten == 0:
+		return "healthy"
+	case rotten*2 >= total:
+		return "mostly_rotten"
+	default:
+		return "mixed"
+	}
 }
 
 func computeOverall(pages []store.PageResult, audits []store.SEOAudit) map[string]any {

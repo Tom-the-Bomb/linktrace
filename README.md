@@ -43,7 +43,7 @@ DELETE /check/{id}             job + all its data
 POST   /auth/register
 POST   /auth/login
 POST   /auth/logout
-GET    /auth/me                null if anonymous
+GET    /auth/me                401 if anonymous
 DELETE /auth/account           account + all jobs
 
 GET    /history                past crawls (auth)

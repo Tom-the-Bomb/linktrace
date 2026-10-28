@@ -18,8 +18,7 @@ type Cache struct {
 }
 
 const (
-	progressTTL = 2 * time.Hour
-	jobTTL      = 1 * time.Hour
+	jobTTL = 2 * time.Hour
 	// outlives any crawl, so a dead job's leaked lane entry can't wedge the lane.
 	shardJobTTL = 3 * time.Hour
 )
@@ -86,18 +85,20 @@ func (c *Cache) IncDiscovered(jobID string) error {
 	if err := c.rdb.HIncrBy(ctx, progressKey(jobID), "discovered", 1).Err(); err != nil {
 		return err
 	}
-	return c.rdb.Expire(ctx, progressKey(jobID), progressTTL).Err()
+	return c.rdb.Expire(ctx, progressKey(jobID), jobTTL).Err()
 }
 
-// counts each page once, so a redelivered result can't push checked past discovered
+// counts each page once, so a redelivered result can't push checked past discovered. Also slides
+// every crawl key's expiry, since discovery (which refreshes seen) can finish long before checking.
 var markCheckedScript = redis.NewScript(`
 if redis.call('SADD', KEYS[2], ARGV[1]) == 0 then
   return 0
 end
 redis.call('HINCRBY', KEYS[1], 'checked', 1)
 redis.call('HINCRBY', KEYS[1], ARGV[2], 1)
-redis.call('EXPIRE', KEYS[1], ARGV[3])
-redis.call('EXPIRE', KEYS[2], ARGV[3])
+for _, key in ipairs(KEYS) do
+  redis.call('EXPIRE', key, ARGV[3])
+end
 return 1
 `)
 
@@ -108,8 +109,8 @@ func (c *Cache) MarkChecked(jobID, url string, isAlive bool) error {
 	if isAlive {
 		field = "healthy"
 	}
-	keys := []string{progressKey(jobID), checkedKey(jobID)}
-	return markCheckedScript.Run(ctx, c.rdb, keys, url, field, int(progressTTL.Seconds())).Err()
+	keys := []string{progressKey(jobID), checkedKey(jobID), seenKey(jobID), catCountKey(jobID)}
+	return markCheckedScript.Run(ctx, c.rdb, keys, url, field, int(jobTTL.Seconds())).Err()
 }
 
 func (c *Cache) IsChecked(jobID, url string) (bool, error) {
@@ -215,7 +216,7 @@ func (c *Cache) EndJob(jobID string) error {
 func (c *Cache) ClaimComplete(jobID string) (bool, error) {
 	ctx, cancel := c.ctx()
 	defer cancel()
-	return c.rdb.SetNX(ctx, completeKey(jobID), "1", progressTTL).Result()
+	return c.rdb.SetNX(ctx, completeKey(jobID), "1", jobTTL).Result()
 }
 
 func (c *Cache) IsCancelled(jobID string) bool {

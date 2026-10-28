@@ -23,7 +23,7 @@ func (q *Queue) declareTopology() error {
 	if err := q.ch.ExchangeDeclare(ResultsEx, "fanout", true, false, false, false, nil); err != nil {
 		return err
 	}
-	for _, name := range []string{QReport, QArchive, QAggregate} {
+	for _, name := range []string{QReport, QArchive} {
 		if _, err := q.ch.QueueDeclare(name, true, false, false, false, nil); err != nil {
 			return err
 		}
@@ -31,5 +31,7 @@ func (q *Queue) declareTopology() error {
 			return err
 		}
 	}
-	return nil
+	// older versions also fanned results into this queue; left unconsumed, it would grow forever
+	_, err := q.ch.QueueDelete("q.aggregate", false, false, false)
+	return err
 }

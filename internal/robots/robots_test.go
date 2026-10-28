@@ -74,3 +74,9 @@ Sitemap: https://example.com/sitemap.xml
 		t.Errorf("unnamed crawler should fall back to *, got %+v", star)
 	}
 }
+
+func TestParseFractionalCrawlDelay(t *testing.T) {
+	if f := Parse("User-agent: *\nCrawl-delay: 1.5\n", "linktrace"); f.CrawlDelay != 2 {
+		t.Errorf("fractional delay should round up, got %d", f.CrawlDelay)
+	}
+}

@@ -81,17 +81,26 @@ func fetchSitemap(ctx context.Context, sitemapURL string, depth int) ([]string, 
 	return urls, true
 }
 
+func probe(client *http.Client, rawURL string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	httpx.SetCheckerHeaders(req)
+	return client.Do(req)
+}
+
 func checkHTTPS(host string) (isHTTPS, httpsRedirect, certValid bool) {
 	noFollow := httpx.NewClient(probeTimeout, false)
 
-	if resp, err := noFollow.Get("http://" + host); err == nil {
+	if resp, err := probe(noFollow, "http://"+host); err == nil {
 		defer resp.Body.Close()
 		if loc := resp.Header.Get("Location"); strings.HasPrefix(loc, "https://") {
 			httpsRedirect = true
 		}
 	}
 
-	resp, err := httpx.NewClient(probeTimeout, true).Get("https://" + host)
+	resp, err := probe(httpx.NewClient(probeTimeout, true), "https://"+host)
 	if err == nil {
 		defer resp.Body.Close()
 	}
@@ -108,7 +117,7 @@ func checkWWW(host string) string {
 	noFollow := httpx.NewClient(probeTimeout, false)
 
 	land := func(rawURL, self string) (dest string, redirected bool) {
-		resp, err := noFollow.Get(rawURL)
+		resp, err := probe(noFollow, rawURL)
 		if err != nil {
 			return "", false
 		}

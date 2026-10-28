@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -36,14 +37,6 @@ type SEOAudit struct {
 	JobID string `json:"job_id"`
 	URL   string `json:"url"`
 	seo.Audit
-}
-
-type CategoryReport struct {
-	Category    string `json:"category"`
-	TotalPages  int    `json:"total_pages"`
-	RottenPages int    `json:"rotten_pages"`
-	AvgSEOScore int    `json:"avg_seo_score"`
-	Pattern     string `json:"pattern"`
 }
 
 type Store struct {
@@ -81,6 +74,10 @@ func (s *Store) CreateJob(id, url, userID, anonOwner string) error {
 // adds columns newer than a deployment's first boot, since schema.sql only runs on a
 // fresh volume.
 func (s *Store) Migrate() error {
+	// sections are now computed per request
+	if _, err := s.db.Exec("DROP TABLE IF EXISTS category_reports"); err != nil {
+		return err
+	}
 	var n int
 	if err := s.db.QueryRow(
 		"SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'jobs' AND COLUMN_NAME = 'anon_owner'",
@@ -108,7 +105,6 @@ func (s *Store) DeleteJob(id string) error {
 			"DELETE FROM pages WHERE job_id = UUID_TO_BIN(?)",
 			"DELETE FROM seo_audits WHERE job_id = UUID_TO_BIN(?)",
 			"DELETE FROM links WHERE job_id = UUID_TO_BIN(?)",
-			"DELETE FROM category_reports WHERE job_id = UUID_TO_BIN(?)",
 			"DELETE FROM site_audits WHERE job_id = UUID_TO_BIN(?)",
 			"DELETE FROM jobs WHERE id = UUID_TO_BIN(?)",
 		}
@@ -265,40 +261,15 @@ func (s *Store) InsertSEOAudit(audit SEOAudit) error {
 	return err
 }
 
+// loads only what the report endpoints read; GetSEOAudit loads the full audit.
 func (s *Store) ListSEOAudits(jobID string) ([]SEOAudit, error) {
 	return queryRows(s.db,
-		`SELECT `+seoAuditColumns+` FROM seo_audits WHERE job_id = UUID_TO_BIN(?)`,
+		"SELECT url, score, issues FROM seo_audits WHERE job_id = UUID_TO_BIN(?)",
 		func(rows *sql.Rows) (SEOAudit, error) {
-			return scanSEOAudit(rows, jobID)
-		}, jobID)
-}
-
-// is one upsert on PRIMARY KEY (job_id, category), leaving no gap
-// locks for concurrent tickers to deadlock on.
-func (s *Store) ReplaceCategoryReport(jobID string, report CategoryReport) error {
-	_, err := s.db.Exec(
-		`INSERT INTO category_reports (job_id, category, total_pages,
-		rotten_pages, avg_seo_score, pattern)
-		VALUES (UUID_TO_BIN(?), ?, ?, ?, ?, ?) AS new
-		ON DUPLICATE KEY UPDATE
-			total_pages   = new.total_pages,
-			rotten_pages  = new.rotten_pages,
-			avg_seo_score = new.avg_seo_score,
-			pattern       = new.pattern`,
-		jobID, clip(report.Category, 255), report.TotalPages,
-		report.RottenPages, report.AvgSEOScore, report.Pattern,
-	)
-	return err
-}
-
-func (s *Store) ListCategoryReports(jobID string) ([]CategoryReport, error) {
-	return queryRows(s.db,
-		`SELECT category, total_pages, rotten_pages,
-		avg_seo_score, pattern FROM category_reports
-		WHERE job_id = UUID_TO_BIN(?)`,
-		func(rows *sql.Rows) (CategoryReport, error) {
-			var r CategoryReport
-			err := rows.Scan(&r.Category, &r.TotalPages, &r.RottenPages, &r.AvgSEOScore, &r.Pattern)
-			return r, err
+			a := SEOAudit{JobID: jobID}
+			var issues []byte
+			err := rows.Scan(&a.URL, &a.Score, &issues)
+			_ = json.Unmarshal(issues, &a.Issues)
+			return a, err
 		}, jobID)
 }

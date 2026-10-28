@@ -37,8 +37,6 @@ const (
 const (
 	reportConsumers  = 16
 	archiveConsumers = 8 // modest to avoid Wayback throttling
-	// must be 1: tallies are written outside the lock, so concurrent handlers could reorder rows
-	aggregateConsumers = 1
 )
 
 func main() {
@@ -66,7 +64,6 @@ func main() {
 	w := &worker{cfg: cfg, cache: ca, queue: q, chk: checker.New(checkTimeout)}
 	rb := &reportBuilder{store: st, cache: ca}
 	ac := &archiveChecker{store: st, cache: ca}
-	ag := newAggregator(st, ca)
 
 	var wg sync.WaitGroup
 	var channels []*amqp.Channel
@@ -84,7 +81,6 @@ func main() {
 	}{
 		{queue.QReport, reportConsumers, rb.handle},
 		{queue.QArchive, archiveConsumers, ac.handle},
-		{queue.QAggregate, aggregateConsumers, ag.handle},
 	}
 	totalConsumers := 0
 	for _, c := range consumers {
@@ -191,15 +187,9 @@ func (w *worker) processPage(d amqp.Delivery) {
 		}
 	}
 
-	if isTransient(res.ErrorType) {
-		if job.RetryCount < maxRetries {
-			log.Printf("[worker] retry %d/%d (%s) %s", job.RetryCount+1, maxRetries, res.ErrorType, job.URL)
-			w.requeue(d, job)
-			return
-		}
-		log.Printf("[worker] retries exhausted, dead-lettering %s (%s)", job.URL, res.ErrorType)
-		w.publishResult(job, res, nil)
-		_ = d.Nack(false, false)
+	if isTransient(res.ErrorType) && job.RetryCount < maxRetries {
+		log.Printf("[worker] retry %d/%d (%s) %s", job.RetryCount+1, maxRetries, res.ErrorType, job.URL)
+		w.requeue(d, job)
 		return
 	}
 
@@ -303,7 +293,7 @@ func (w *worker) enqueueLinks(job queue.PageJob, res checker.CheckResult) []stri
 		}
 		// before the page cap, so URLs a full category drops don't use up the crawl's pages
 		if w.cfg.MaxPerCategory > 0 {
-			cat := categoryOf(link)
+			cat := crawler.CategoryOf(link)
 			count, err := w.cache.IncCategory(job.JobID, cat)
 			if err == nil && count > w.cfg.MaxPerCategory {
 				if count == w.cfg.MaxPerCategory+1 {
@@ -346,7 +336,7 @@ func runConsumer(q *queue.Queue, queueName string, concurrency int, wg *sync.Wai
 					continue
 				}
 				if err := handle(msg, d.Redelivered); err != nil {
-					requeue := !d.Redelivered // retry once, then dead-letter
+					requeue := !d.Redelivered // retry once, then drop
 					log.Printf("[%s] handler error (requeue=%v): %v", queueName, requeue, err)
 					_ = d.Nack(false, requeue)
 					continue
@@ -370,7 +360,7 @@ func (rb *reportBuilder) handle(msg queue.PageChecked, final bool) error {
 		return nil
 	}
 	if done, err := rb.cache.IsChecked(msg.JobID, msg.URL); err == nil && done {
-		return nil
+		return rb.maybeComplete(msg.JobID)
 	}
 	if err := rb.save(msg); err != nil {
 		if !final {
@@ -449,87 +439,4 @@ func (ac *archiveChecker) handle(msg queue.PageChecked, _ bool) error {
 	}
 	log.Printf("[archive] snapshot found: %s -> %s", msg.URL, snap)
 	return ac.store.SetArchiveURL(msg.JobID, msg.URL, snap)
-}
-
-// keeps tallies in memory, which assumes a single instance.
-type aggregator struct {
-	store     *store.Store
-	cache     *cache.Cache
-	mu        sync.Mutex
-	stats     map[string]map[string]*catTally
-	touched   map[string]time.Time
-	lastSweep time.Time
-}
-
-const (
-	tallyIdleTTL    = time.Hour
-	tallySweepEvery = 10 * time.Minute
-)
-
-type catTally struct {
-	total      int
-	rotten     int
-	scoreSum   int
-	scoreCount int
-}
-
-func newAggregator(st *store.Store, ca *cache.Cache) *aggregator {
-	return &aggregator{store: st, cache: ca, stats: map[string]map[string]*catTally{}, touched: map[string]time.Time{}}
-}
-
-func (ag *aggregator) handle(msg queue.PageChecked, _ bool) error {
-	if ag.cache.IsCancelled(msg.JobID) {
-		ag.mu.Lock()
-		delete(ag.stats, msg.JobID)
-		delete(ag.touched, msg.JobID)
-		ag.mu.Unlock()
-		return nil
-	}
-	cat := categoryOf(msg.URL)
-
-	ag.mu.Lock()
-	now := time.Now()
-	ag.touched[msg.JobID] = now
-	if now.Sub(ag.lastSweep) > tallySweepEvery {
-		for id, t := range ag.touched {
-			if now.Sub(t) > tallyIdleTTL {
-				delete(ag.stats, id)
-				delete(ag.touched, id)
-			}
-		}
-		ag.lastSweep = now
-	}
-	if ag.stats[msg.JobID] == nil {
-		ag.stats[msg.JobID] = map[string]*catTally{}
-	}
-	t := ag.stats[msg.JobID][cat]
-	if t == nil {
-		t = &catTally{}
-		ag.stats[msg.JobID][cat] = t
-	}
-	t.total++
-	if !msg.IsAlive {
-		t.rotten++
-	}
-	if msg.SEO != nil {
-		t.scoreSum += msg.SEO.Score
-		t.scoreCount++
-	}
-	snapshot := *t
-	ag.mu.Unlock()
-
-	avg := 0
-	if snapshot.scoreCount > 0 {
-		avg = snapshot.scoreSum / snapshot.scoreCount
-	}
-	pattern := classifyPattern(snapshot.total, snapshot.rotten)
-	log.Printf("[aggregator] %s: %d pages, %d rotten, avg_seo=%d, pattern=%s",
-		cat, snapshot.total, snapshot.rotten, avg, pattern)
-	return ag.store.ReplaceCategoryReport(msg.JobID, store.CategoryReport{
-		Category:    cat,
-		TotalPages:  snapshot.total,
-		RottenPages: snapshot.rotten,
-		AvgSEOScore: avg,
-		Pattern:     pattern,
-	})
 }

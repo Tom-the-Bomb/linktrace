@@ -8,8 +8,7 @@ import (
 	"time"
 )
 
-// ownerCookieName's token is stored only as its sha256, so a database leak can't be replayed
-// as the cookie.
+// the token is stored only as its sha256, so a database leak can't be replayed as the cookie.
 const ownerCookieName = "lt_owner"
 
 const ownerTTL = 365 * 24 * time.Hour

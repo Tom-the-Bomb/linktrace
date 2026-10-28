@@ -19,7 +19,6 @@ const (
 	ResultsEx       = "page_checked"
 	QReport         = "q.report"
 	QArchive        = "q.archive"
-	QAggregate      = "q.aggregate"
 )
 
 func ShardQueue(i int) string { return WorkQueuePrefix + "." + strconv.Itoa(i) }

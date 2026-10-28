@@ -3,6 +3,8 @@
 
 x-go-service: &go-service
   restart: unless-stopped
+  # the api logs every request and the worker every page, and Docker keeps all of it by default
+  logging: { options: { max-size: 10m, max-file: "3" } }
   depends_on:
     mysql: { condition: service_healthy }
     redis: { condition: service_healthy }

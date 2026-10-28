@@ -97,8 +97,8 @@ var dialer = &net.Dialer{
 	},
 }
 
-// transport's Proxy is nil on purpose: an environment proxy would make the dialer see the
-// proxy's address instead of the target's.
+// Proxy is nil on purpose: an environment proxy would make the dialer see the proxy's address
+// instead of the target's.
 var transport = func() *http.Transport {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.Proxy = nil

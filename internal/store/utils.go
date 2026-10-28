@@ -69,7 +69,7 @@ func nullIfEmpty(s string) any {
 	return s
 }
 
-// seoAuditColumns' order must match scanSEOAudit's Scan order.
+// order must match scanSEOAudit's Scan order.
 const seoAuditColumns = `url, title, title_length, meta_description,
 	meta_description_length, h1_count, h2_count, h3_count,
 	h4_count, h5_count, h6_count,
@@ -81,11 +81,7 @@ const seoAuditColumns = `url, title, title_length, meta_description,
 	primary_keyword, keyword_in_title, keyword_in_h1,
 	keyword_in_url, issues, score`
 
-type scanner interface {
-	Scan(dest ...any) error
-}
-
-func scanSEOAudit(s scanner, jobID string) (SEOAudit, error) {
+func scanSEOAudit(s *sql.Row, jobID string) (SEOAudit, error) {
 	var a SEOAudit
 	var canonical, primaryKeyword, htmlLang sql.NullString
 	var ogTags, twitterTags, jsonLDTypes, topKeywords, issues []byte

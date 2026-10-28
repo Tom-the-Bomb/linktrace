@@ -115,16 +115,3 @@ CREATE TABLE IF NOT EXISTS links (
     PRIMARY KEY (job_id, source_hash, target_hash),
     FOREIGN KEY (job_id) REFERENCES jobs(id)
 );
-
-CREATE TABLE IF NOT EXISTS category_reports (
-    job_id BINARY(16) NOT NULL,
-    category VARCHAR(255) NOT NULL,
-    total_pages INT DEFAULT 0,
-    rotten_pages INT DEFAULT 0,
-    avg_seo_score INT DEFAULT 0,
-    pattern VARCHAR(32),
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
-    PRIMARY KEY (job_id, category),
-    FOREIGN KEY (job_id) REFERENCES jobs(id)
-);

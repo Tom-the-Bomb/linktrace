@@ -1,12 +1,12 @@
 package robots
 
 import (
+	"math"
 	"strconv"
 	"strings"
 )
 
-// maxRules and maxBytes bound per-link matching cost; RFC 9309 asks crawlers to parse at
-// least 500 KiB.
+// bound per-link matching cost; RFC 9309 asks crawlers to parse at least 500 KiB.
 const (
 	maxRules = 500
 	maxBytes = 500 << 10
@@ -78,9 +78,9 @@ func Parse(body, agent string) File {
 				}
 			}
 		case "crawl-delay":
-			if n, err := strconv.Atoi(val); err == nil {
+			if n, err := strconv.ParseFloat(val, 64); err == nil {
 				for _, g := range targets {
-					g.delay = n
+					g.delay = int(math.Ceil(n))
 				}
 			}
 		}

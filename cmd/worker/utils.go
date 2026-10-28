@@ -2,7 +2,6 @@ package main
 
 import (
 	"net/url"
-	"strings"
 
 	"github.com/Tom-the-Bomb/linktrace/internal/checker"
 	"golang.org/x/net/publicsuffix"
@@ -26,28 +25,6 @@ func hasHTML(res checker.CheckResult) bool {
 
 func isTransient(errType string) bool {
 	return errType == checker.ErrTimeout || errType == checker.ErrConnReset
-}
-
-func categoryOf(rawURL string) string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return "/"
-	}
-	seg, _, _ := strings.Cut(strings.TrimLeft(u.Path, "/"), "/")
-	return "/" + seg
-}
-
-func classifyPattern(total, rotten int) string {
-	switch {
-	case rotten == total:
-		return "all_rotten"
-	case rotten == 0:
-		return "healthy"
-	case rotten*2 >= total:
-		return "mostly_rotten"
-	default:
-		return "mixed"
-	}
 }
 
 func robotsPath(rawURL string) string {

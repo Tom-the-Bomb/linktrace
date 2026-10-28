@@ -18,6 +18,15 @@ func NormalizeURL(raw string) string {
 	return canonicalize(u, false)
 }
 
+func CategoryOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "/"
+	}
+	seg, _, _ := strings.Cut(strings.TrimLeft(u.Path, "/"), "/")
+	return "/" + seg
+}
+
 func SiteKey(host string) string {
 	host = strings.TrimSuffix(strings.ToLower(host), ".")
 	return strings.TrimPrefix(host, "www.")

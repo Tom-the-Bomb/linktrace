@@ -33,7 +33,7 @@ const (
 	// cheap to call, expensive to serve (thousands of fetches, bcrypt), open to anonymous callers
 	expensivePerMinIP   = 10
 	expensivePerMinUser = 20
-	// roomy: a report tab polls ~96/min, and NAT/CGNAT puts many anonymous users on one IP
+	// roomy: a report tab polls ~60/min, and NAT/CGNAT puts many anonymous users on one IP
 	standardPerMin = 1200
 	// each response can carry every row of a 10k-page crawl; a live tab asks ~36/min
 	heavyPerMin = 240
@@ -118,7 +118,7 @@ func main() {
 		Handler:           r,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second, // room for a 10k-page report and the 20s site audit
+		WriteTimeout:      60 * time.Second, // room for a 10k-page report and the site audit
 		IdleTimeout:       2 * time.Minute,
 	}
 
@@ -267,7 +267,6 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"job_id": job.ID, "status": "stopped"})
 }
 
-// runs PurgeJob first so in-flight workers can't re-create rows mid-delete.
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	job := s.requireOwnedJob(w, r)
 	if job == nil {
@@ -372,15 +371,6 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	cats, err := s.store.ListCategoryReports(id)
-	if err != nil {
-		serverError(w, "load this report", err)
-		return
-	}
-	if cats == nil {
-		cats = []store.CategoryReport{}
-	}
-
 	siteAudit, err := s.store.GetSiteAudit(id)
 	if err != nil {
 		log.Printf("[api] site audit lookup: %v", err)
@@ -414,7 +404,7 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"overall":      computeOverall(pages, audits),
-		"categories":   cats,
+		"categories":   computeCategories(pages, audits),
 		"site_audit":   siteAudit,
 		"crawl_stats":  crawlStats,
 		"site_seo":     siteSEO,
