@@ -55,7 +55,7 @@ export function ProgressView({
               <JobStatusChip status={state} />
             </span>
           </div>
-          <p className="num text-ink-3 mt-1 text-sm">
+          <p className="text-ink-3 mt-1 text-sm tabular-nums">
             {isDone && (
               <>
                 Checked {checked.toLocaleString()} of the {discovered.toLocaleString()} pages
@@ -116,9 +116,9 @@ export function ProgressView({
         <div className="gutter py-5">
           <div className="flex items-baseline justify-between gap-4">
             <p className="text-body font-medium">
-              Checking <span className="num">{checked.toLocaleString()}</span>
+              Checking <span className="tabular-nums">{checked.toLocaleString()}</span>
               <span className="text-ink-3"> of </span>
-              <span className="num">{discovered.toLocaleString()}</span> pages found
+              <span className="tabular-nums">{discovered.toLocaleString()}</span> pages found
             </p>
             <span className="text-ink-2 font-mono text-sm">{pct(checked, discovered)}%</span>
           </div>
@@ -157,7 +157,7 @@ function Bar({
   const seg = (n: number) => (discovered > 0 ? (n / discovered) * 100 : 0);
   return (
     <div
-      className="bg-sunken ring-line flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full ring-1 forced-color-adjust-none ring-inset"
+      className="bg-sunken ring-line flex h-2.5 gap-0.5 overflow-hidden rounded-full ring-1 forced-color-adjust-none ring-inset"
       role="progressbar"
       aria-valuemin={0}
       aria-valuemax={100}
@@ -216,7 +216,7 @@ function Count({
         {/* key on value so each change replays the tick */}
         <span
           key={value}
-          className={`num animate-tick text-headline tracking-headline inline-block font-semibold ${tone}`}
+          className={`animate-tick text-headline tracking-headline inline-block font-semibold tabular-nums ${tone}`}
         >
           {value.toLocaleString()}
         </span>

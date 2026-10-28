@@ -118,7 +118,7 @@ export function BrokenLinks({
               return (
                 <li
                   key={r.url}
-                  className="hover:bg-sunken gutter grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-1 py-3.5 transition sm:grid-cols-[minmax(0,1fr)_140px_8rem] sm:items-center"
+                  className="hover:bg-sunken gutter grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-1 py-3.5 transition sm:grid-cols-[minmax(0,1fr)_8.75rem_8rem] sm:items-center"
                 >
                   <div className="min-w-0">
                     <button

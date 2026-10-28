@@ -387,7 +387,7 @@ export const GraphView = memo(function GraphView({
 
       <div
         ref={containerRef}
-        className="bg-sunken/60 relative h-[68vh] min-h-110 w-full [&_canvas]:touch-pan-y!"
+        className="bg-sunken/60 relative h-[68vh] min-h-110 [&_canvas]:touch-pan-y!"
         style={{
           backgroundImage: 'radial-gradient(var(--color-line-strong) 1px, transparent 1px)',
           backgroundSize: '22px 22px',
@@ -399,14 +399,12 @@ export const GraphView = memo(function GraphView({
           graphData={graph}
           width={size.width}
           height={size.height}
-          backgroundColor="rgba(0,0,0,0)"
           nodeRelSize={1}
           cooldownTicks={settled ? 40 : 120}
           onEngineStop={fitOnce}
           enablePanInteraction={panFilter}
           enableZoomInteraction={zoomFilter}
           enableNodeDrag={!coarsePointer}
-          linkDirectionalParticles={0}
           linkColor={(link) => {
             if (isLitLink(link)) {
               return 'rgba(23,23,23,0.7)';
@@ -548,7 +546,7 @@ function ZoomButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="text-ink-2 hover:bg-sunken hover:text-ink flex size-8 items-center justify-center border-b transition last:border-0"
+      className="text-ink-2 hover:bg-sunken hover:text-ink flex size-8 items-center justify-center border-b transition last:border-0 focus-visible:-outline-offset-2"
     >
       {children}
     </button>
@@ -581,7 +579,7 @@ function Legend({
         ];
   return (
     <ul
-      className="text-ink-2 text-code flex flex-wrap items-center gap-x-1 gap-y-1 font-mono forced-color-adjust-none"
+      className="text-ink-2 text-code flex flex-wrap items-center gap-x-1 gap-y-1 font-mono"
       aria-label="Show or hide pages"
     >
       {items.map((it) => {
@@ -598,7 +596,7 @@ function Legend({
               }`}
             >
               <span
-                className="size-2.5 rounded-full"
+                className="size-2.5 rounded-full forced-color-adjust-none"
                 style={{
                   background: off ? 'transparent' : it.c,
                   boxShadow: `inset 0 0 0 1.5px ${it.c}`,
@@ -611,7 +609,7 @@ function Legend({
       })}
       {mode === 'section' && (
         <li className="flex items-center gap-1.5 px-2 py-1">
-          <span className="ring-bad-dot size-2.5 rounded-full ring-[1.5px] ring-offset-1" />
+          <span className="ring-bad-dot size-2.5 rounded-full ring-[1.5px] ring-offset-1 forced-color-adjust-none" />
           broken
         </li>
       )}

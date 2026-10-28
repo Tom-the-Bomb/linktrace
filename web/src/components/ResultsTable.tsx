@@ -209,7 +209,7 @@ export function ResultsTable({
                 }}
                 tabIndex={0}
                 aria-label={`Open audit for ${r.url}`}
-                className="focus-visible:bg-sunken cursor-pointer focus-visible:outline-hidden"
+                className="focus-visible:bg-sunken cursor-pointer focus-visible:-outline-offset-2"
               >
                 <TableCell className="max-w-md pl-5 sm:pl-8">
                   <span className="flex items-center gap-2.5" title={r.url}>

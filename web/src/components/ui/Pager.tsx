@@ -17,7 +17,7 @@ export function Pager({ page, total, size, onPage }: Props) {
   const start = (page - 1) * size;
   return (
     <footer className="gutter flex items-center justify-between gap-3 border-t py-2.5">
-      <span className="num text-ink-3 text-label">
+      <span className="text-ink-3 text-label tabular-nums">
         {(start + 1).toLocaleString()} to {Math.min(start + size, total).toLocaleString()} of{' '}
         {total.toLocaleString()}
       </span>
@@ -32,7 +32,7 @@ export function Pager({ page, total, size, onPage }: Props) {
         >
           <ChevronLeft strokeWidth={2.25} />
         </Button>
-        <span className="num text-ink-2 text-label min-w-16 text-center font-medium">
+        <span className="text-ink-2 text-label min-w-16 text-center font-medium tabular-nums">
           {page} of {pageCount}
         </span>
         <Button

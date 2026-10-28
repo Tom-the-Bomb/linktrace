@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { ArrowRight, ChevronRight, Trash2 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import { type HistoryEntry, type HistoryRun, deleteJob, getHistory } from '../api';
 import { errMessage, formatDate } from '../lib/format';
@@ -19,7 +19,6 @@ interface DeleteTarget {
 }
 
 export function History() {
-  const navigate = useNavigate();
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,12 +65,7 @@ export function History() {
       {entries && entries.length > 0 && (
         <ul className="panel divide-y">
           {entries.map((e) => (
-            <HistoryRow
-              key={e.url}
-              entry={e}
-              onOpen={(jobId) => navigate(`/jobs/${jobId}`)}
-              onRequestDelete={setPendingDelete}
-            />
+            <HistoryRow key={e.url} entry={e} onRequestDelete={setPendingDelete} />
           ))}
         </ul>
       )}
@@ -90,11 +84,9 @@ export function History() {
 
 function HistoryRow({
   entry,
-  onOpen,
   onRequestDelete,
 }: {
   entry: HistoryEntry;
-  onOpen: (jobId: string) => void;
   onRequestDelete: (target: DeleteTarget) => void;
 }) {
   const latest = entry.runs[0];
@@ -130,7 +122,7 @@ function HistoryRow({
             >
               {entry.url}
             </a>
-            <p className="num text-ink-3 text-label mt-0.5">
+            <p className="text-ink-3 text-label mt-0.5 tabular-nums">
               {entry.runs.length} {multi ? 'runs' : 'run'}, last on {formatDate(latest.created_at)}
             </p>
           </div>
@@ -150,26 +142,27 @@ function HistoryRow({
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => onOpen(latest.job_id)}
               aria-label={`${multi ? 'Open latest report' : 'Open report'} for ${hostOf(entry.url)}`}
               className="ml-1.5 sm:ml-2 sm:px-3"
+              asChild
             >
-              <span className="hidden sm:inline">{multi ? 'Latest report' : 'Report'}</span>
-              <ArrowRight className="size-3.5" strokeWidth={2.25} />
+              <Link to={`/jobs/${latest.job_id}`}>
+                <span className="hidden sm:inline">{multi ? 'Latest report' : 'Report'}</span>
+                <ArrowRight className="size-3.5" strokeWidth={2.25} />
+              </Link>
             </Button>
           </div>
         </div>
 
         {multi && (
           <CollapsibleContent asChild>
-            <ul className="bg-sunken border-t py-1 pr-3 pl-12 sm:pr-6 sm:pl-16">
+            <ul className="bg-sunken border-t py-1 pr-3 pl-13 sm:pr-6 sm:pl-16">
               {entry.runs.map((run, i) => (
                 <RunRow
                   key={run.job_id}
                   run={run}
                   index={entry.runs.length - i}
                   isLatest={i === 0}
-                  onOpen={() => onOpen(run.job_id)}
                   onRequestDelete={() =>
                     onRequestDelete({
                       jobId: run.job_id,
@@ -191,13 +184,11 @@ function RunRow({
   run,
   index,
   isLatest,
-  onOpen,
   onRequestDelete,
 }: {
   run: HistoryRun;
   index: number;
   isLatest: boolean;
-  onOpen: () => void;
   onRequestDelete: () => void;
 }) {
   return (
@@ -213,12 +204,14 @@ function RunRow({
         <Button
           variant="ghost"
           size="quiet"
-          onClick={onOpen}
           aria-label={`Open report #${index}`}
           className="text-label ml-1.5 sm:ml-2"
+          asChild
         >
-          <span className="hidden sm:inline">Report</span>
-          <ArrowRight className="size-3.5" strokeWidth={2.25} />
+          <Link to={`/jobs/${run.job_id}`}>
+            <span className="hidden sm:inline">Report</span>
+            <ArrowRight className="size-3.5" strokeWidth={2.25} />
+          </Link>
         </Button>
       </div>
     </li>

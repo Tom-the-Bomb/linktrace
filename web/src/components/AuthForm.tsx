@@ -38,13 +38,13 @@ export function AuthForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="w-full max-w-md">
+    <form onSubmit={onSubmit} className="max-w-md">
       <ToggleGroup
         type="single"
         value={mode}
         onValueChange={(v) => v && switchMode(v as 'login' | 'register')}
         aria-label="Account"
-        className="flex w-full"
+        className="flex"
       >
         <ToggleGroupItem value="login" className="flex-1">
           Log in

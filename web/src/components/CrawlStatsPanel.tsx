@@ -19,12 +19,12 @@ export function CrawlStatsPanel({ stats }: { stats: CrawlStats }) {
   return (
     <section>
       <SectionHeader title="Crawl stats" />
-      <dl className="panel grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 xl:divide-x max-xl:[&>div]:border-b">
+      <dl className="panel grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 xl:divide-x sm:max-xl:[&>div:nth-child(-n+3)]:border-b max-sm:[&>div:nth-child(-n+4)]:border-b">
         {items.map((it) => (
           <div key={it.label} className="gutter py-5">
             <dt className="text-ink-3 text-label font-medium">{it.label}</dt>
             <dd
-              className={`num mt-1 text-xl font-semibold tracking-tight ${it.bad ? 'text-bad-fg' : ''}`}
+              className={`mt-1 text-xl font-semibold tracking-tight tabular-nums ${it.bad ? 'text-bad-fg' : ''}`}
             >
               {it.value}
             </dd>

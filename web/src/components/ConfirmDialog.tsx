@@ -1,4 +1,4 @@
-import { type ReactNode, type RefObject, useState } from 'react';
+import { type ReactNode, type RefObject, useRef, useState } from 'react';
 
 import { errMessage } from '../lib/format';
 import {
@@ -35,6 +35,7 @@ export function ConfirmDialog({
 }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const opener = useRef(document.activeElement as HTMLElement | null);
 
   async function confirm() {
     setBusy(true);
@@ -52,10 +53,8 @@ export function ConfirmDialog({
     <AlertDialog open onOpenChange={(open) => !open && !busy && onCancel()}>
       <AlertDialogContent
         onCloseAutoFocus={(e) => {
-          if (returnFocus) {
-            e.preventDefault();
-            returnFocus.current?.focus();
-          }
+          e.preventDefault();
+          (returnFocus ?? opener).current?.focus();
         }}
       >
         <AlertDialogHeader>

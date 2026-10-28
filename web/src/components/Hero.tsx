@@ -27,7 +27,10 @@ export function Hero({ onSubmit, submitting, error }: HeroProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   function focusField() {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({
+      top: 0,
+      behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    });
     inputRef.current?.focus({ preventScroll: true });
   }
 
@@ -284,7 +287,7 @@ function ReportContents() {
                 <SectionDot colour={SECTION_HEX[i]} />
                 <span className="min-w-0 grow">
                   <span className="block font-mono text-sm">{r.name}</span>
-                  <span className="num text-ink-3 text-label block">{r.pages} pages</span>
+                  <span className="text-ink-3 text-label block tabular-nums">{r.pages} pages</span>
                 </span>
                 <span className="ml-auto flex flex-wrap items-center justify-end gap-x-3.5 gap-y-1.5">
                   <span

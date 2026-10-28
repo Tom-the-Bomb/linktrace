@@ -115,7 +115,7 @@ export function SampleCrawl() {
             </li>
           ))}
         </ul>
-        <p className="num text-ink-3 text-label px-5 py-4 sm:px-6">
+        <p className="text-ink-3 text-label px-5 py-4 tabular-nums sm:px-6">
           {broken} broken of {checked} checked
         </p>
       </section>
@@ -123,15 +123,18 @@ export function SampleCrawl() {
       <section className="border-t lg:border-t-0 lg:border-r" aria-label="Sample site graph">
         <CellHead title="Site graph" />
         <SampleGraph p={p} />
-        <ul className="text-ink-3 text-code flex flex-wrap items-center gap-x-3.5 gap-y-1 px-5 pt-2 pb-4 font-mono forced-color-adjust-none sm:px-6">
+        <ul className="text-ink-3 text-code flex flex-wrap items-center gap-x-3.5 gap-y-1 px-5 pt-2 pb-4 font-mono sm:px-6">
           {SECTIONS.map((s, i) => (
             <li key={s} className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full" style={{ background: SECTION_HEX[i] }} />
+              <span
+                className="size-2 rounded-full forced-color-adjust-none"
+                style={{ background: SECTION_HEX[i] }}
+              />
               {s}
             </li>
           ))}
           <li className="flex items-center gap-1.5">
-            <span className="ring-bad-dot size-2 rounded-full ring-[1.5px] ring-offset-1" />
+            <span className="ring-bad-dot size-2 rounded-full ring-[1.5px] ring-offset-1 forced-color-adjust-none" />
             broken
           </li>
         </ul>
@@ -141,7 +144,7 @@ export function SampleCrawl() {
         <CellHead title="Average SEO score" />
         <div className="px-5 pt-4 pb-5 sm:px-6">
           <p className="flex items-baseline gap-1.5">
-            <span className="num tracking-display text-7xl font-semibold">{score}</span>
+            <span className="tracking-display text-7xl font-semibold tabular-nums">{score}</span>
             <span className="text-ink-3 text-xl font-semibold">/100</span>
           </p>
           <ScoreScale score={score} />

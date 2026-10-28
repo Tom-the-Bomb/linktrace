@@ -45,7 +45,8 @@ export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO 
         {seo && seo.pages_audited > 0 && (
           <div className="bg-sunken/50 border-t p-5 sm:p-8 lg:border-t-0 lg:border-l">
             <h3 className="text-body font-semibold tracking-tight">
-              Across <span className="num">{seo.pages_audited.toLocaleString()}</span> audited pages
+              Across <span className="tabular-nums">{seo.pages_audited.toLocaleString()}</span>{' '}
+              audited pages
             </h3>
             <ul className="mt-2 grid grid-cols-1 gap-x-8 divide-y sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-1 xl:grid-cols-2 sm:[&>li]:border-b">
               <Stat

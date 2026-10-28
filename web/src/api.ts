@@ -126,7 +126,6 @@ async function jsonRequest<T>(
   try {
     res = await fetch(`${BASE}${path}`, {
       ...init,
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
     });
   } catch {

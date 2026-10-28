@@ -155,7 +155,7 @@
 
 @utility cross {
   /* bars sit 5px in; -6px lands them on hairlines drawn just before the anchor */
-  @apply text-ink-4 pointer-events-none absolute z-10 size-2.75;
+  @apply text-ink-4 pointer-events-none absolute z-10 size-[11px];
   transform: translate(-6px, -6px);
   background:
     linear-gradient(currentColor, currentColor) center / 1px 100% no-repeat,
@@ -202,10 +202,6 @@
 /* 24px hit area for small links without shifting layout */
 @utility tap-area {
   @apply -my-1 py-1;
-}
-
-@utility num {
-  font-variant-numeric: tabular-nums;
 }
 
 /* forced colours drop shadows and fills, so controls and layers get an edge and selection uses

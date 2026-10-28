@@ -124,7 +124,7 @@ export function Categories({
 
         <div
           aria-hidden="true"
-          className="bg-sunken/60 text-ink-3 gutter hidden grid-cols-[14px_minmax(0,1fr)_170px_64px_118px] gap-x-4 border-b py-2 text-xs font-medium sm:grid"
+          className="bg-sunken/60 text-ink-3 gutter hidden grid-cols-[0.875rem_minmax(0,1fr)_10.625rem_4rem_7.375rem] gap-x-4 border-b py-2 text-xs font-medium sm:grid"
         >
           <span />
           <span>Section</span>
@@ -172,11 +172,11 @@ function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
   const style = PATTERN[cat.pattern] ?? PATTERN.mixed;
 
   return (
-    <li className="gutter grid grid-cols-[14px_minmax(0,1fr)_auto] items-center gap-x-4 py-3.5 sm:grid-cols-[14px_minmax(0,1fr)_170px_64px_118px]">
+    <li className="gutter grid grid-cols-[0.875rem_minmax(0,1fr)_auto] items-center gap-x-4 py-3.5 sm:grid-cols-[0.875rem_minmax(0,1fr)_10.625rem_4rem_7.375rem]">
       <SectionDot colour={colour} />
       <div className="min-w-0">
         <div className="truncate font-mono text-sm font-medium">{cat.category}</div>
-        <div className="num text-ink-3 text-label mt-0.5">
+        <div className="text-ink-3 text-label mt-0.5 tabular-nums">
           {cat.total_pages.toLocaleString()} {cat.total_pages === 1 ? 'page' : 'pages'}
           <span className="sm:hidden">
             {', '}SEO{' '}

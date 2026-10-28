@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 
 import { ChevronDown, History, LogOut, Trash2 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import type { Me } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -15,7 +15,6 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 
-// lazy-loaded so anonymous visitors don't download it
 export default function AccountMenu({ user }: { user: Me }) {
   const { logout, deleteAccount } = useAuth();
   const navigate = useNavigate();
@@ -51,9 +50,11 @@ export default function AccountMenu({ user }: { user: Me }) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => navigate(historyOpen ? '/' : '/history')}>
-            <History className="text-ink-3" />
-            {historyOpen ? 'New crawl' : 'History'}
+          <DropdownMenuItem asChild>
+            <Link to={historyOpen ? '/' : '/history'}>
+              <History className="text-ink-3" />
+              {historyOpen ? 'New crawl' : 'History'}
+            </Link>
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={async () => {

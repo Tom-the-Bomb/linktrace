@@ -93,12 +93,12 @@ function GapList({
       <CollapsibleContent>
         <ul className="bg-sunken/60 gutter max-h-80 space-y-1 overflow-y-auto border-t py-3">
           {urls.slice(0, CAP).map((u) => (
-            <li key={u} className="text-caption truncate font-mono">
+            <li key={u} className="text-caption font-mono">
               <a
                 href={u}
                 target="_blank"
                 rel="noreferrer"
-                className="tap-area text-ink-2 hover:text-link-600 hover:underline"
+                className="text-ink-2 hover:text-link-600 block w-fit max-w-full truncate hover:underline"
               >
                 {u}
               </a>

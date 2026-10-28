@@ -21,11 +21,11 @@ export function OverallReport({ report }: { report: Report }) {
               <p className="text-ink-3 text-label font-medium">Broken pages</p>
               <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
                 <span
-                  className={`num tracking-display text-7xl font-semibold ${rotten > 0 ? 'text-bad-fg' : 'text-ok-fg'}`}
+                  className={`tracking-display text-7xl font-semibold tabular-nums ${rotten > 0 ? 'text-bad-fg' : 'text-ok-fg'}`}
                 >
                   {rotten.toLocaleString()}
                 </span>
-                <span className="num text-ink-3 text-xl font-semibold">
+                <span className="text-ink-3 text-xl font-semibold tabular-nums">
                   of {total_pages.toLocaleString()}
                 </span>
               </p>
@@ -46,7 +46,9 @@ export function OverallReport({ report }: { report: Report }) {
             <div>
               <p className="text-ink-3 text-label font-medium">Average SEO score</p>
               <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
-                <span className="num tracking-display text-7xl font-semibold">{avg_seo_score}</span>
+                <span className="tracking-display text-7xl font-semibold tabular-nums">
+                  {avg_seo_score}
+                </span>
                 <span className="text-ink-3 text-xl font-semibold">/100</span>
                 <Badge variant={tier.tone} className="ml-1 self-center">
                   {tier.label}

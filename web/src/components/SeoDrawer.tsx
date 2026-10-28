@@ -202,7 +202,7 @@ function PageContext({
         {foundHere > 0 && (
           <div>
             <dt className="text-ink-3 text-label font-medium">Pages first found here</dt>
-            <dd className="num text-ink-2 mt-1">
+            <dd className="text-ink-2 mt-1 tabular-nums">
               {foundHere.toLocaleString()} {foundHere === 1 ? 'page' : 'pages'}
             </dd>
           </div>
@@ -245,7 +245,9 @@ function SeoBody({ detail }: { detail: SEODetail }) {
           </Badge>
         </span>
         <span className="flex items-baseline gap-1">
-          <span className="num tracking-display text-5xl font-semibold">{detail.score}</span>
+          <span className="tracking-display text-5xl font-semibold tabular-nums">
+            {detail.score}
+          </span>
           <span className="text-ink-3 text-base font-semibold">/100</span>
         </span>
       </div>
@@ -280,7 +282,7 @@ function SeoBody({ detail }: { detail: SEODetail }) {
       </Section>
 
       <Section label="Headings">
-        <div className="rounded-control ring-line grid grid-cols-6 divide-x ring-1 ring-inset">
+        <div className="rounded-control ring-line grid grid-cols-6 divide-x overflow-hidden ring-1 ring-inset">
           <HeadingTile label="h1" count={detail.h1_count} flagged={detail.h1_count !== 1} />
           <HeadingTile label="h2" count={detail.h2_count} />
           <HeadingTile label="h3" count={detail.h3_count} />
@@ -366,7 +368,7 @@ function SeoBody({ detail }: { detail: SEODetail }) {
               {detail.top_keywords.slice(0, 12).map((k) => (
                 <Badge key={k.term}>
                   {k.term}
-                  <span className="num text-ink-3">{k.count}</span>
+                  <span className="text-ink-3 tabular-nums">{k.count}</span>
                 </Badge>
               ))}
             </div>
@@ -415,7 +417,9 @@ function HeadingTile({
   return (
     <div className={`p-2 text-center ${flagged ? 'bg-bad-bg' : ''}`}>
       <div className="text-ink-3 text-code font-mono">{label}</div>
-      <div className={`num text-lg font-semibold tracking-tight ${flagged ? 'text-bad-fg' : ''}`}>
+      <div
+        className={`text-lg font-semibold tracking-tight tabular-nums ${flagged ? 'text-bad-fg' : ''}`}
+      >
         {count}
       </div>
     </div>
