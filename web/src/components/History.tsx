@@ -91,11 +91,20 @@ function HistoryRow({
 }) {
   const latest = entry.runs[0];
   const multi = entry.runs.length > 1;
+  const [open, setOpen] = useState(false);
 
   return (
-    <Collapsible asChild>
+    <Collapsible asChild open={open} onOpenChange={setOpen}>
       <li>
-        <div className="group hover:bg-sunken flex flex-wrap items-center gap-3 p-3 transition sm:px-6">
+        {/* the chevron stays the keyboard control; clicks elsewhere on the row toggle too */}
+        <div
+          className={`group hover:bg-sunken flex flex-wrap items-center gap-3 p-3 transition sm:px-6 ${multi ? 'cursor-pointer' : ''}`}
+          onClick={(e) => {
+            if (multi && !(e.target as Element).closest('a, button')) {
+              setOpen((o) => !o);
+            }
+          }}
+        >
           {multi ? (
             <CollapsibleTrigger asChild>
               <Button
