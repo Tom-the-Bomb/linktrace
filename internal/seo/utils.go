@@ -29,16 +29,13 @@ const (
 var nonNavPrefixes = []string{"#", "javascript:", "mailto:", "tel:"}
 
 var stopwords = map[string]bool{
-	"the": true, "a": true, "an": true, "and": true, "or": true, "but": true,
-	"of": true, "to": true, "in": true, "on": true, "for": true, "with": true,
-	"is": true, "are": true, "this": true, "that": true, "it": true, "as": true,
-	"at": true, "by": true, "be": true, "from": true, "your": true, "you": true,
-	"we": true, "our": true, "all": true, "can": true, "will": true, "has": true,
-	"have": true, "was": true, "were": true, "not": true, "if": true, "so": true,
-	"its": true, "their": true, "they": true, "them": true, "than": true,
-	"then": true, "what": true, "when": true, "where": true, "which": true,
-	"who": true, "how": true, "more": true, "most": true, "some": true,
-	"any": true, "one": true, "two": true, "may": true, "also": true,
+	"the": true, "and": true, "but": true, "for": true, "with": true, "are": true,
+	"this": true, "that": true, "from": true, "your": true, "you": true, "our": true,
+	"all": true, "can": true, "will": true, "has": true, "have": true, "was": true,
+	"were": true, "not": true, "its": true, "their": true, "they": true, "them": true,
+	"than": true, "then": true, "what": true, "when": true, "where": true, "which": true,
+	"who": true, "how": true, "more": true, "most": true, "some": true, "any": true,
+	"one": true, "two": true, "may": true, "also": true,
 }
 
 func handleJSONLD(a *Audit, n *html.Node) {
@@ -56,7 +53,7 @@ func handleJSONLD(a *Audit, n *html.Node) {
 
 func handleImg(a *Audit, n *html.Node) {
 	a.ImagesTotal++
-	if htmlx.HasAttr(n, "alt") { // empty alt="" is the valid decorative signal
+	if _, ok := htmlx.Attr(n, "alt"); ok { // empty alt="" is the valid decorative signal
 		a.ImagesWithAlt++
 	}
 	if htmlx.GetAttr(n, "width") != "" && htmlx.GetAttr(n, "height") != "" {

@@ -102,7 +102,7 @@ func canonicalize(u *url.URL, dropQuery bool) string {
 }
 
 func resolve(base *url.URL, host, href string) string {
-	u, err := base.Parse(href)
+	u, err := base.Parse(strings.TrimSpace(href))
 	if err != nil {
 		return ""
 	}

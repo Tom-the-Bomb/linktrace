@@ -260,8 +260,7 @@ func (s *Store) ListPageResults(jobID string) ([]PageResult, error) {
 		}, jobID)
 }
 
-// clips text to the column widths so an oversized field can't fail the insert
-// and wedge the crawl.
+// clips text to the column widths so an oversized field can't fail the insert.
 func (s *Store) InsertSEOAudit(audit SEOAudit) error {
 	_, err := s.db.Exec(
 		`INSERT INTO seo_audits (job_id, url, title, title_length,

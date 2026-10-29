@@ -6,7 +6,6 @@ RUN npm ci
 
 COPY web/ ./
 ARG VITE_SITE_URL=https://linktrace.tomthebomb.dev
-ENV VITE_SITE_URL=$VITE_SITE_URL
 RUN npm run build
 
 # Vite copies index.html, robots.txt and sitemap.xml verbatim, so their hardcoded origin is

@@ -55,8 +55,3 @@ func GetAttr(n *html.Node, key string) string {
 	v, _ := Attr(n, key)
 	return v
 }
-
-func HasAttr(n *html.Node, key string) bool {
-	_, ok := Attr(n, key)
-	return ok
-}

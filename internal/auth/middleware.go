@@ -28,8 +28,6 @@ func Optional(sessions sessionLooker) func(http.Handler) http.Handler {
 }
 
 func UserID(r *http.Request) string {
-	if v, ok := r.Context().Value(userIDKey).(string); ok {
-		return v
-	}
-	return ""
+	v, _ := r.Context().Value(userIDKey).(string)
+	return v
 }

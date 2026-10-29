@@ -36,10 +36,7 @@ func serverError(w http.ResponseWriter, action string, err error) {
 }
 
 func short(id string) string {
-	if len(id) > 8 {
-		return id[:8]
-	}
-	return id
+	return id[:min(8, len(id))]
 }
 
 const maxBodyBytes = 64 << 10

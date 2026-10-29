@@ -19,7 +19,7 @@ type Cache struct {
 
 const (
 	jobTTL = 2 * time.Hour
-	// outlives any crawl, so a dead job's leaked lane entry can't wedge the lane.
+	// outlives most crawls, so a dead job's leaked lane entry can't wedge the lane.
 	shardJobTTL = 3 * time.Hour
 )
 

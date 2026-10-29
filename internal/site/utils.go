@@ -49,7 +49,8 @@ func fetchSitemap(ctx context.Context, sitemapURL string, depth int) ([]string, 
 		return nil, false
 	}
 	var doc sitemapXML
-	if err := xml.Unmarshal([]byte(body), &doc); err != nil {
+	// a sitemap cut off at maxSitemapBytes still yields the entries before the cut
+	if err := xml.Unmarshal([]byte(body), &doc); err != nil && len(doc.URLs)+len(doc.Sitemaps) == 0 {
 		return nil, false
 	}
 

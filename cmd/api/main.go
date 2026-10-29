@@ -151,7 +151,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "That doesn't look like a web address. Check it and try again.")
 		return
 	}
-	if p := u.Port(); p != "" && p != "80" && p != "443" {
+	if p := u.Port(); !httpx.AllowPrivateTargets && p != "" && p != "80" && p != "443" {
 		httpError(w, http.StatusBadRequest, "LinkTrace only crawls sites on the standard web ports (80 and 443).")
 		return
 	}
