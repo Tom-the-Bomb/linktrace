@@ -103,11 +103,7 @@ func (q *Queue) publish(exchange, key string, v any) error {
 
 // uses the default exchange, which routes by queue name.
 func (q *Queue) PublishPageJob(job PageJob) error {
-	shard := job.Shard
-	if shard < 0 || shard >= q.shards {
-		shard = 0
-	}
-	return q.publish("", ShardQueue(shard), job)
+	return q.publish("", ShardQueue(job.Shard), job)
 }
 
 func (q *Queue) PublishResult(r PageChecked) error {

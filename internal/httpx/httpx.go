@@ -19,11 +19,16 @@ const (
 	checkerUserAgent = "Mozilla/5.0 (compatible; LinkTraceBot/1.0; +https://linktrace.tomthebomb.dev)"
 )
 
-// leaves Accept-Encoding unset so Go still auto-decompresses.
-func SetCheckerHeaders(req *http.Request) {
+// sends browser-like headers, leaving Accept-Encoding unset so Go still auto-decompresses.
+func Get(client *http.Client, rawURL string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Set("User-Agent", checkerUserAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	return client.Do(req)
 }
 
 var AllowPrivateTargets bool

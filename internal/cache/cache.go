@@ -61,11 +61,11 @@ func (c *Cache) CreateSession(sid, userID string) error {
 	return c.rdb.Set(ctx, sessionKey(sid), userID, auth.SessionTTL).Err()
 }
 
-// returns "" if missing. GETEX slides the expiry, so the TTL measures inactivity.
+// returns "" if missing.
 func (c *Cache) LookupSession(sid string) (string, error) {
 	ctx, cancel := c.ctx()
 	defer cancel()
-	userID, err := c.rdb.GetEx(ctx, sessionKey(sid), auth.SessionTTL).Result()
+	userID, err := c.rdb.Get(ctx, sessionKey(sid)).Result()
 	if errors.Is(err, redis.Nil) {
 		return "", nil
 	}

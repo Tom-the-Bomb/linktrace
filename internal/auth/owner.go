@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// the token is stored only as its sha256, so a database leak can't be replayed as the cookie.
 const ownerCookieName = "lt_owner"
 
 const ownerTTL = 365 * 24 * time.Hour
@@ -36,6 +35,7 @@ func OwnsAnonymous(r *http.Request, wantHash string) bool {
 	return subtle.ConstantTimeCompare([]byte(hashToken(c.Value)), []byte(wantHash)) == 1
 }
 
+// the token is stored only as its sha256, so a database leak can't be replayed as the cookie.
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])

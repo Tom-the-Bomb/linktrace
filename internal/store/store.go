@@ -100,21 +100,23 @@ func (s *Store) UpdateJobStatus(id, status string) error {
 
 // deletes children before the parent since the FKs don't cascade.
 func (s *Store) DeleteJob(id string) error {
-	return s.tx(func(t *sql.Tx) error {
-		stmts := []string{
-			"DELETE FROM pages WHERE job_id = UUID_TO_BIN(?)",
-			"DELETE FROM seo_audits WHERE job_id = UUID_TO_BIN(?)",
-			"DELETE FROM links WHERE job_id = UUID_TO_BIN(?)",
-			"DELETE FROM site_audits WHERE job_id = UUID_TO_BIN(?)",
-			"DELETE FROM jobs WHERE id = UUID_TO_BIN(?)",
+	t, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer t.Rollback() //nolint:errcheck // no-op after a successful Commit
+	for _, q := range []string{
+		"DELETE FROM pages WHERE job_id = UUID_TO_BIN(?)",
+		"DELETE FROM seo_audits WHERE job_id = UUID_TO_BIN(?)",
+		"DELETE FROM links WHERE job_id = UUID_TO_BIN(?)",
+		"DELETE FROM site_audits WHERE job_id = UUID_TO_BIN(?)",
+		"DELETE FROM jobs WHERE id = UUID_TO_BIN(?)",
+	} {
+		if _, err := t.Exec(q, id); err != nil {
+			return err
 		}
-		for _, q := range stmts {
-			if _, err := t.Exec(q, id); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	}
+	return t.Commit()
 }
 
 // returns (nil, nil) if the job doesn't exist.
@@ -191,16 +193,46 @@ func (s *Store) ListLinks(jobID string) ([]Link, error) {
 // returns (nil, nil) if there's no audit for that URL.
 func (s *Store) GetSEOAudit(jobID, pageURL string) (*SEOAudit, error) {
 	var a SEOAudit
-	return getOne(&a, func() error {
-		row := s.db.QueryRow(
-			`SELECT `+seoAuditColumns+`
+	var canonical, primaryKeyword, htmlLang sql.NullString
+	var ogTags, twitterTags, jsonLDTypes, topKeywords, issues []byte
+	out, err := getOne(&a, func() error {
+		return s.db.QueryRow(
+			`SELECT url, title, title_length, meta_description,
+			meta_description_length, h1_count, h2_count, h3_count,
+			h4_count, h5_count, h6_count,
+			images_total, images_with_alt, images_with_dims,
+			images_lazy_loaded, images_responsive,
+			links_internal, links_external, links_nofollow, html_lang,
+			canonical, og_tags, twitter_tags, jsonld_count,
+			jsonld_types, has_viewport, noindex, top_keywords,
+			primary_keyword, keyword_in_title, keyword_in_h1,
+			keyword_in_url, issues, score
 			FROM seo_audits WHERE job_id = UUID_TO_BIN(?) AND url = ? COLLATE utf8mb4_bin LIMIT 1`,
 			jobID, pageURL,
-		)
-		var err error
-		a, err = scanSEOAudit(row, jobID)
-		return err
+		).Scan(&a.URL, &a.Title, &a.TitleLength,
+			&a.MetaDescription, &a.MetaDescLength, &a.H1Count, &a.H2Count, &a.H3Count,
+			&a.H4Count, &a.H5Count, &a.H6Count,
+			&a.ImagesTotal, &a.ImagesWithAlt, &a.ImagesWithDims,
+			&a.ImagesLazyLoaded, &a.ImagesResponsive,
+			&a.LinksInternal, &a.LinksExternal, &a.LinksNofollow, &htmlLang,
+			&canonical, &ogTags, &twitterTags, &a.JSONLDCount,
+			&jsonLDTypes, &a.HasViewport, &a.Noindex, &topKeywords,
+			&primaryKeyword, &a.KeywordInTitle, &a.KeywordInH1,
+			&a.KeywordInURL, &issues, &a.Score)
 	})
+	if out == nil || err != nil {
+		return out, err
+	}
+	a.JobID = jobID
+	a.Canonical = canonical.String
+	a.PrimaryKeyword = primaryKeyword.String
+	a.HTMLLang = htmlLang.String
+	_ = json.Unmarshal(ogTags, &a.OGTags)
+	_ = json.Unmarshal(twitterTags, &a.TwitterTags)
+	_ = json.Unmarshal(jsonLDTypes, &a.JSONLDTypes)
+	_ = json.Unmarshal(topKeywords, &a.TopKeywords)
+	_ = json.Unmarshal(issues, &a.Issues)
+	return out, nil
 }
 
 func (s *Store) SetArchiveURL(jobID, url, archiveURL string) error {
@@ -222,7 +254,6 @@ func (s *Store) ListPageResults(jobID string) ([]PageResult, error) {
 			if err := rows.Scan(&r.URL, &r.StatusCode, &r.ResponseTime, &errType, &r.IsAlive, &r.Depth, &archive); err != nil {
 				return r, err
 			}
-			r.JobID = jobID
 			r.ErrorType = errType.String
 			r.ArchiveURL = archive.String
 			return r, nil
@@ -266,7 +297,7 @@ func (s *Store) ListSEOAudits(jobID string) ([]SEOAudit, error) {
 	return queryRows(s.db,
 		"SELECT url, score, issues FROM seo_audits WHERE job_id = UUID_TO_BIN(?)",
 		func(rows *sql.Rows) (SEOAudit, error) {
-			a := SEOAudit{JobID: jobID}
+			var a SEOAudit
 			var issues []byte
 			err := rows.Scan(&a.URL, &a.Score, &issues)
 			_ = json.Unmarshal(issues, &a.Issues)

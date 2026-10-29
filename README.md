@@ -7,28 +7,28 @@
 
 </div>
 
-An open-source distributed site auditor. Give it a domain, the site will crawl outward from the homepage, audit the page content,
-repeat for every internal link in the page. It finds:
+An open-source distributed site auditor. Give it a domain and it crawls outward from the homepage, following every internal
+link and auditing each page. It reports:
 
-- what links are broken, and the reason: DNS, timeout, SSL, soft 404, 4xx/5xx, redirect loop etc.
-- report an SEO score and list of issues for every page that returns HTML
-- all of these details can be accessed via an interactive table/graph
+- broken links and why they broke: DNS, timeout, SSL, soft 404, 4xx/5xx, redirect loop and so on
+- an SEO score and list of issues for every HTML page
+- all of it in an interactive table and graph
 
 ## How it works
 
 - `cmd/api`: HTTP server that creates jobs and serves reports (orchestrator).
-- `cmd/worker`: the actual crawler that fetches, classifies, extracts links, and audits the page. Each `cmd/worker` process manages a pool of goroutines, so we can easily horizontally scale!
+- `cmd/worker`: the crawler, which fetches, classifies and audits each page and extracts its links. Each process runs a pool of goroutines; scale out by running more processes.
 
-- RabbitMQ manages delivering jobs out to the workers and getting results back.
-- Redis stores the status of running jobs such as progress counters, a 'seen' set, self-imposed per-domain ratelimits, and sessions.
+- RabbitMQ delivers pages to the workers and carries results back.
+- Redis holds live crawl state (progress counters, the seen set, per-domain rate limits) and sessions.
 - MySQL stores jobs, pages, results, the site graph and users.
 - Caddy serves `web/`, proxies `/api`, and does HTTPS.
 
-Frontend: React 19 + Tailwind 4, with UI primitives from [shadcn/ui](https://ui.shadcn.com). `/jobs/<id>` receives live updates (polling) until the crawl finishes.
+Frontend: React 19 + Tailwind 4, with UI primitives from [shadcn/ui](https://ui.shadcn.com). `/jobs/<id>` polls for live updates until the crawl finishes.
 
 ## API
 
-The base path is `/api` in production, everything is JSON
+The site reaches these under `/api`. Everything is JSON.
 
 ```
 POST   /check                  start a crawl
@@ -51,7 +51,7 @@ GET    /history                past crawls (auth)
 
 ## Localhost
 
-Docker, Go 1.26+, Node 20+ are needed as MySQL, Redis and RabbitMQ all run in containers.
+Needs Docker (MySQL, Redis and RabbitMQ run in containers), Go 1.26+ and Node 20+.
 
 ```bash
 cp .env.example .env
@@ -63,7 +63,7 @@ make dev LAN=1     # same, but the site is also reachable from your phone on the
 
 ## Deploying
 
-For Caddy to get a certificate, must point A record to server
+Point the domain's A record at the server first, so Caddy can get a certificate.
 
 ```bash
 ssh root@YOUR_SERVER_IP
@@ -72,21 +72,21 @@ cp .env.production.example .env.production   # DOMAIN, ACME_EMAIL, passwords
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-Redeploy using the same command, you can append `api`, `worker` or `caddy` to rebuild just one.
-There is a GH workflow (`.github/workflows/deploy.yml`, needs the `DROPLET_*` secrets) auto-deploy using SSH on push to `main`.
+Redeploy with the same command; append `api`, `worker` or `caddy` to rebuild just one.
+`.github/workflows/deploy.yml` redeploys over SSH on every push to `main` (needs the `DROPLET_*` secrets).
 
 ## Config
 
 Worker limits: `WORKER_COUNT` (100), `MAX_PAGES` (10000), `MAX_DEPTH` (20), `MAX_PER_CATEGORY` (1000), `RATE_PER_MIN` (300 per target site). `ANON_MAX_PAGES` (500) caps crawls started without an account (api only).
 
-`SHARD_COUNT` (5) is the # of work-queue lanes so that each crawl (no matter how large) is limited to 1 lane so it doesn't block other crawls. (i.e. takes up 1/SHARD_COUNT fraction of the fetch goroutines) Set it to the same value on the api and the worker.
+`SHARD_COUNT` (5) is the number of work-queue lanes. Each crawl, however large, uses one lane, so it takes at most 1/`SHARD_COUNT` of the fetch goroutines and can't block other crawls. Set the same value on the api and the worker.
 
 Connections: `MYSQL_DSN`, `REDIS_ADDR`, `RABBIT_URL`, `HTTP_ADDR`, `COOKIE_SECURE`.
 
 `ALLOW_PRIVATE_TARGETS` (false) lets you crawl localhost and LAN sites in dev. Keep it off in production, otherwise a crawl could reach the API, Redis or the host itself.
 
-Default values point at the dev containers. Production values should go in `.env.production`.
+Defaults point at the dev containers; production values go in `.env.production`.
 
 ## Abuse limits
 
-Crawls without an account are capped at `ANON_MAX_PAGES`, and only one can run per site at a time (starting another just joins it). The crawler identifies itself as `LinkTraceBot` and follows robots.txt, including `Crawl-delay`. Requests are rate limited per IP and per account, and so are login attempts.
+Crawls without an account are capped at `ANON_MAX_PAGES`, and only one can run per site at a time (starting another just joins it). The crawler identifies itself as `LinkTraceBot` and follows robots.txt, including `Crawl-delay`. Requests are rate limited per IP, and login attempts per account.

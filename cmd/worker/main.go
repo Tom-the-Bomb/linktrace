@@ -27,13 +27,12 @@ import (
 
 const (
 	maxRetries        = 3
-	checkTimeout      = 10 * time.Second
 	rateLimitBackoff  = time.Second
 	maxRetryAfterWait = 15 * time.Second // longer is recorded as blocked
 )
 
-// Result queues are shared by every job, and the report consumer owns progress, so a backlog
-// leaves everyone's crawl at 0%. Keep them near-empty.
+// result queues are shared by every job, so a backlog stalls everyone's progress; keep them
+// near-empty
 const (
 	reportConsumers  = 16
 	archiveConsumers = 8 // modest to avoid Wayback throttling
@@ -61,7 +60,7 @@ func main() {
 	}
 	defer q.Close()
 
-	w := &worker{cfg: cfg, cache: ca, queue: q, chk: checker.New(checkTimeout)}
+	w := &worker{cfg: cfg, cache: ca, queue: q}
 	rb := &reportBuilder{store: st, cache: ca}
 	ac := &archiveChecker{store: st, cache: ca}
 
@@ -110,7 +109,6 @@ type worker struct {
 	cfg   config.Config
 	cache *cache.Cache
 	queue *queue.Queue
-	chk   *checker.Checker
 }
 
 // splits workers across shard lanes; a job rides one lane, so one crawl
@@ -171,7 +169,7 @@ func (w *worker) processPage(d amqp.Delivery) {
 		return
 	}
 
-	res := w.chk.Check(job.URL)
+	res := checker.Check(job.URL)
 
 	if res.StatusCode == http.StatusTooManyRequests && job.RetryCount < maxRetries {
 		wait := res.RetryAfter
@@ -242,7 +240,7 @@ func (w *worker) publishResult(job queue.PageJob, res checker.CheckResult, links
 		Links: links,
 	}
 	if hasHTML(res) {
-		msg.SEO = &store.SEOAudit{JobID: job.JobID, URL: job.URL, Audit: seo.AuditHTML(res.Body, job.URL)}
+		msg.SEO = &store.SEOAudit{JobID: job.JobID, URL: job.URL, Audit: seo.AuditHTML(res.Body, res.FinalURL)}
 	}
 	if err := w.queue.PublishResult(msg); err != nil {
 		log.Printf("[worker] publish result failed: %v", err)
@@ -354,7 +352,7 @@ type reportBuilder struct {
 }
 
 // final is the last delivery: a page that still can't be saved is counted anyway, so the crawl
-// can finish without it rather than waiting on it forever.
+// can finish without it.
 func (rb *reportBuilder) handle(msg queue.PageChecked, final bool) error {
 	if rb.cache.IsCancelled(msg.JobID) {
 		return nil

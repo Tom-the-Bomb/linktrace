@@ -11,9 +11,7 @@ const CookieName = "sid"
 
 const SessionTTL = 7 * 24 * time.Hour
 
-var secureCookie bool
-
-func SetCookieSecure(secure bool) { secureCookie = secure }
+var SecureCookie bool
 
 func NewToken() (string, error) {
 	b := make([]byte, 32)
@@ -38,7 +36,7 @@ func setCookie(w http.ResponseWriter, name, value string, maxAge int) {
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   secureCookie,
+		Secure:   SecureCookie,
 		MaxAge:   maxAge,
 	})
 }

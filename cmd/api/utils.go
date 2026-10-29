@@ -52,7 +52,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-// trusts the last X-Forwarded-For hop, which Caddy sets (see trusted_proxies), so
+// trusts the last X-Forwarded-For hop, which Caddy sets, so
 // only Caddy may reach the API. IPv6 is cut to its /64, since one subscriber usually holds it.
 func clientIP(r *http.Request) string {
 	ip := r.RemoteAddr
@@ -82,16 +82,14 @@ func jsonOnly(next http.Handler) http.Handler {
 	})
 }
 
-// counts the IP even for logged-in callers so extra accounts don't add budget.
-// Mount below auth.Optional, which resolves the identity.
-func (s *Server) limitPerMin(bucket string, perIP, perUser int) func(http.Handler) http.Handler {
+// fails open: a Redis blip shouldn't read as rate limiting.
+func (s *Server) limitPerMin(bucket string, perMin int) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ok := s.allow(bucket+":ip:"+clientIP(r), perIP)
-			if userID := auth.UserID(r); ok && userID != "" {
-				ok = s.allow(bucket+":u:"+userID, perUser)
-			}
-			if !ok {
+			key := bucket + ":ip:" + clientIP(r)
+			if allowed, err := s.cache.AllowRequest(key, perMin); err != nil {
+				log.Printf("[api] ratelimit %s: %v", key, err)
+			} else if !allowed {
 				httpError(w, http.StatusTooManyRequests, "Too many requests. Try again in a minute.")
 				return
 			}
@@ -109,16 +107,6 @@ func requireUser(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-// fails open: a Redis blip shouldn't read as rate limiting (login counters fail closed).
-func (s *Server) allow(key string, limit int) bool {
-	allowed, err := s.cache.AllowRequest(key, limit)
-	if err != nil {
-		log.Printf("[api] ratelimit %s: %v", key, err)
-		return true
-	}
-	return allowed
 }
 
 func (s *Server) requireJob(w http.ResponseWriter, id string) *store.Job {
@@ -268,11 +256,9 @@ func classifyPattern(total, rotten int) string {
 }
 
 func computeOverall(pages []store.PageResult, audits []store.SEOAudit) map[string]any {
-	var rotten, healthy, scoreSum int
+	var rotten, scoreSum int
 	for _, p := range pages {
-		if p.IsAlive {
-			healthy++
-		} else {
+		if !p.IsAlive {
 			rotten++
 		}
 	}
@@ -298,7 +284,6 @@ func computeOverall(pages []store.PageResult, audits []store.SEOAudit) map[strin
 	return map[string]any{
 		"total_pages":   len(pages),
 		"rotten":        rotten,
-		"healthy":       healthy,
 		"avg_seo_score": avg,
 		"top_issues":    top,
 	}
@@ -314,4 +299,11 @@ func (s *Server) startSession(w http.ResponseWriter, userID string) error {
 	}
 	auth.SetSessionCookie(w, sid)
 	return nil
+}
+
+func (s *Server) endSession(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(auth.CookieName); err == nil {
+		_ = s.cache.DeleteSession(cookie.Value)
+	}
+	auth.ClearSessionCookie(w)
 }

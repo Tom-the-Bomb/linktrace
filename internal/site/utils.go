@@ -81,33 +81,23 @@ func fetchSitemap(ctx context.Context, sitemapURL string, depth int) ([]string, 
 	return urls, true
 }
 
-func probe(client *http.Client, rawURL string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	httpx.SetCheckerHeaders(req)
-	return client.Do(req)
-}
-
 func checkHTTPS(host string) (isHTTPS, httpsRedirect, certValid bool) {
 	noFollow := httpx.NewClient(probeTimeout, false)
 
-	if resp, err := probe(noFollow, "http://"+host); err == nil {
+	if resp, err := httpx.Get(noFollow, "http://"+host); err == nil {
 		defer resp.Body.Close()
 		if loc := resp.Header.Get("Location"); strings.HasPrefix(loc, "https://") {
 			httpsRedirect = true
 		}
 	}
 
-	resp, err := probe(httpx.NewClient(probeTimeout, true), "https://"+host)
+	resp, err := httpx.Get(httpx.NewClient(probeTimeout, true), "https://"+host)
 	if err == nil {
 		defer resp.Body.Close()
 	}
 	var verifyErr *tls.CertificateVerificationError
 	certValid = err == nil
-	isHTTPS = certValid || errors.As(err, &verifyErr)
-	return
+	return certValid || errors.As(err, &verifyErr), httpsRedirect, certValid
 }
 
 func checkWWW(host string) string {
@@ -117,7 +107,7 @@ func checkWWW(host string) string {
 	noFollow := httpx.NewClient(probeTimeout, false)
 
 	land := func(rawURL, self string) (dest string, redirected bool) {
-		resp, err := probe(noFollow, rawURL)
+		resp, err := httpx.Get(noFollow, rawURL)
 		if err != nil {
 			return "", false
 		}
@@ -140,6 +130,13 @@ func checkWWW(host string) string {
 
 	wwwDest, wwwRedirected := land("https://"+wwwHost, wwwHost)
 	apexDest, apexRedirected := land("https://"+apex, apex)
+	// a host with no www (or apex) record has nothing to disagree with
+	if wwwDest == "" {
+		wwwDest = apexDest
+	}
+	if apexDest == "" {
+		apexDest = wwwDest
+	}
 
 	switch {
 	case wwwDest == "" || apexDest == "":

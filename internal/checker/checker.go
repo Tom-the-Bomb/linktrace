@@ -24,6 +24,7 @@ const (
 )
 
 const (
+	timeout      = 10 * time.Second
 	maxRedirects = 10
 	maxBodyBytes = 1 << 20
 )
@@ -38,29 +39,14 @@ type CheckResult struct {
 	RetryAfter   time.Duration
 }
 
-// builds a client per Check so the redirect hook's loop flag isn't shared.
-type Checker struct {
-	timeout time.Duration
-}
-
-func New(timeout time.Duration) *Checker {
-	return &Checker{timeout: timeout}
-}
-
-func (c *Checker) Check(rawURL string) CheckResult {
+// builds a client per call so the redirect hook's loop flag isn't shared.
+func Check(rawURL string) CheckResult {
 	start := time.Now()
 	res := CheckResult{FinalURL: rawURL}
 
-	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
-	if err != nil {
-		res.ErrorType = ErrUnknown
-		return res
-	}
-	httpx.SetCheckerHeaders(req)
-
 	// ErrUseLastResponse keeps the last response, where a real error would discard it.
 	var looped bool
-	client := httpx.NewClient(c.timeout, true)
+	client := httpx.NewClient(timeout, true)
 	client.CheckRedirect = func(_ *http.Request, via []*http.Request) error {
 		if len(via) >= maxRedirects {
 			looped = true
@@ -69,7 +55,7 @@ func (c *Checker) Check(rawURL string) CheckResult {
 		return nil
 	}
 
-	resp, err := client.Do(req)
+	resp, err := httpx.Get(client, rawURL)
 	res.ResponseTime = int(time.Since(start).Milliseconds())
 	if err != nil {
 		res.ErrorType = classifyNetworkError(err)

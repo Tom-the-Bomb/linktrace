@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -31,15 +32,12 @@ const shutdownTimeout = 5 * time.Second
 
 const (
 	// cheap to call, expensive to serve (thousands of fetches, bcrypt), open to anonymous callers
-	expensivePerMinIP   = 10
-	expensivePerMinUser = 20
+	expensivePerMin = 10
 	// roomy: a report tab polls ~60/min, and NAT/CGNAT puts many anonymous users on one IP
 	standardPerMin = 1200
 	// each response can carry every row of a 10k-page crawl; a live tab asks ~36/min
 	heavyPerMin = 240
-	// per IP slows guessing; per account bounds it across addresses, yet is too high for a
-	// stranger to lock the owner out
-	loginsPerIP      = 5
+	// bounds guessing across addresses, yet too high for a stranger to lock the owner out
 	loginsPerAccount = 50
 )
 
@@ -52,7 +50,7 @@ type Server struct {
 
 func main() {
 	cfg := config.Load()
-	auth.SetCookieSecure(cfg.CookieSecure)
+	auth.SecureCookie = cfg.CookieSecure
 	httpx.AllowPrivateTargets = cfg.AllowPrivateTargets
 
 	st, err := store.New(cfg.MySQLDSN)
@@ -85,14 +83,14 @@ func main() {
 	r.Use(auth.Optional(s.cache))
 
 	r.Group(func(r chi.Router) {
-		r.Use(s.limitPerMin("expensive", expensivePerMinIP, expensivePerMinUser))
+		r.Use(s.limitPerMin("expensive", expensivePerMin))
 		r.Post("/check", s.handleCreate)
 		r.Post("/auth/register", s.handleRegister)
 		r.Post("/auth/login", s.handleLogin)
 	})
 
 	r.Group(func(r chi.Router) {
-		r.Use(s.limitPerMin("standard", standardPerMin, standardPerMin))
+		r.Use(s.limitPerMin("standard", standardPerMin))
 
 		r.Post("/auth/logout", s.handleLogout)
 		r.Get("/auth/me", s.handleMe)
@@ -106,7 +104,7 @@ func main() {
 	})
 
 	r.Group(func(r chi.Router) {
-		r.Use(s.limitPerMin("heavy", heavyPerMin, heavyPerMin))
+		r.Use(s.limitPerMin("heavy", heavyPerMin))
 		r.Get("/check/{id}/results", s.handleResults)
 		r.Get("/check/{id}/report", s.handleReport)
 		r.Get("/check/{id}/graph", s.handleGraph)
@@ -148,10 +146,6 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	if req.URL == "" {
-		httpError(w, http.StatusBadRequest, `body must be {"url":"..."}`)
-		return
-	}
 	u, err := url.Parse(req.URL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		httpError(w, http.StatusBadRequest, "That doesn't look like a web address. Check it and try again.")
@@ -169,7 +163,6 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	// same canonical form as extracted links, else the homepage crawls twice
 	seed := crawler.NormalizeURL(u.String())
 
 	id := uuid.NewString()
@@ -242,8 +235,6 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	queued = true
-
-	// sitemap URLs aren't enqueued; unreached ones become coverage_gap's "not_crawled" entries
 	writeJSON(w, http.StatusAccepted, map[string]string{"job_id": id, "status": "crawling"})
 }
 
@@ -261,7 +252,7 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[api] job %s STOPPED by user", short(job.ID))
-	// cancelled jobs never complete, so end the job and set status here (maybeComplete won't)
+	// cancelled jobs never reach maybeComplete, so they end here
 	_ = s.cache.EndJob(job.ID)
 	_ = s.store.UpdateJobStatus(job.ID, "stopped")
 	writeJSON(w, http.StatusOK, map[string]string{"job_id": job.ID, "status": "stopped"})
@@ -389,7 +380,7 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 		siteSEO = &ss
 	}
 	var gap *site.CoverageGap
-	if siteAudit != nil {
+	if siteAudit != nil && siteAudit.SitemapFound {
 		crawledURLs := make([]string, 0, len(pages))
 		rottenURLs := []string{}
 		for _, p := range pages {
@@ -502,7 +493,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	username := strings.TrimSpace(req.Username)
-	if len(username) < 2 || len(username) > 64 {
+	if n := utf8.RuneCountInString(username); n < 2 || n > 64 {
 		httpError(w, http.StatusBadRequest, "Usernames are 2 to 64 characters long.")
 		return
 	}
@@ -542,34 +533,24 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	name := strings.TrimSpace(req.Username)
-	user, err := s.store.GetUserByUsername(name)
+	user, err := s.store.GetUserByUsername(strings.TrimSpace(req.Username))
 	if err != nil {
 		serverError(w, "log you in", err)
 		return
 	}
-
-	// Keyed on the account since MySQL matches names case- and accent-insensitively; unknown
-	// names are keyed by name so a 429 doesn't reveal which accounts exist. Fails closed.
-	acct := "name:" + strings.ToLower(name)
-	hash := auth.NoUserHash
+	// keyed on the account, not the typed name, which MySQL matches case- and accent-insensitively
 	if user != nil {
-		acct, hash = user.ID, user.PasswordHash
+		allowed, err := s.cache.AllowRequest("login:"+user.ID, loginsPerAccount)
+		if err != nil {
+			serverError(w, "log you in", err)
+			return
+		}
+		if !allowed {
+			httpError(w, http.StatusTooManyRequests, "Too many login attempts. Try again in a minute.")
+			return
+		}
 	}
-	// counted before the bcrypt check, so concurrent guesses can't all slip under the limit
-	okIP, errIP := s.cache.AllowRequest("login:"+acct+":"+clientIP(r), loginsPerIP)
-	okAll, errAll := s.cache.AllowRequest("login:"+acct, loginsPerAccount)
-	if errIP != nil || errAll != nil {
-		log.Printf("[api] login limit: %v %v", errIP, errAll)
-		httpError(w, http.StatusServiceUnavailable, "Couldn't log you in. Try again in a moment.")
-		return
-	}
-	if !okIP || !okAll {
-		httpError(w, http.StatusTooManyRequests, "Too many login attempts. Try again in a minute.")
-		return
-	}
-	// the hash is checked even for an unknown name, so both take as long as a wrong password
-	if !auth.CheckPassword(hash, req.Password) || user == nil {
+	if user == nil || !auth.CheckPassword(user.PasswordHash, req.Password) {
 		httpError(w, http.StatusUnauthorized, "Wrong username or password.")
 		return
 	}
@@ -581,10 +562,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	if cookie, err := r.Cookie(auth.CookieName); err == nil {
-		_ = s.cache.DeleteSession(cookie.Value)
-	}
-	auth.ClearSessionCookie(w)
+	s.endSession(w, r)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -595,7 +573,13 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, err := s.store.GetUserByID(userID)
-	if err != nil || user == nil {
+	if err != nil {
+		serverError(w, "check your login", err)
+		return
+	}
+	if user == nil {
+		// deleted from another device, whose session would otherwise outlive the account
+		s.endSession(w, r)
 		httpError(w, http.StatusUnauthorized, "not logged in")
 		return
 	}
@@ -624,10 +608,7 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if cookie, cerr := r.Cookie(auth.CookieName); cerr == nil {
-		_ = s.cache.DeleteSession(cookie.Value)
-	}
-	auth.ClearSessionCookie(w)
+	s.endSession(w, r)
 	log.Printf("[api] account %s DELETED (%d jobs)", short(userID), len(jobIDs))
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

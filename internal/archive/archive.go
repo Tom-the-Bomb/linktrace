@@ -20,10 +20,7 @@ var client = httpx.NewClient(fetchTimeout, true)
 func Available(rawURL string) (string, error) {
 	api := "https://archive.org/wayback/available?url=" + url.QueryEscape(rawURL)
 
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
-	defer cancel()
-
-	body, _, err := httpx.Fetch(ctx, client, api, maxBodyBytes)
+	body, _, err := httpx.Fetch(context.Background(), client, api, maxBodyBytes)
 	if err != nil {
 		return "", err
 	}

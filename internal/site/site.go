@@ -65,13 +65,13 @@ type CoverageGap struct {
 	SitemapDead []string `json:"sitemap_dead"`
 }
 
-// normalizes both sides so trailing-slash/host-case differences don't
-// masquerade as gaps.
+// keys both sides like the crawler's dedupe, so trailing-slash/host-case differences
+// don't masquerade as gaps.
 func ComputeCoverageGap(sitemapURLs, crawledURLs, rottenURLs []string) CoverageGap {
 	toSet := func(urls []string) map[string]bool {
 		set := make(map[string]bool, len(urls))
 		for _, u := range urls {
-			set[crawler.NormalizeURL(u)] = true
+			set[crawler.CanonicalKey(u)] = true
 		}
 		return set
 	}

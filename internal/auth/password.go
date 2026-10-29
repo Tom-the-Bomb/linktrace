@@ -7,9 +7,6 @@ func HashPassword(plain string) (string, error) {
 	return string(bytes), err
 }
 
-// checked for unknown usernames so timing doesn't reveal which ones exist.
-var NoUserHash, _ = HashPassword("no such user")
-
 func CheckPassword(hash, plain string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(plain)) == nil
 }

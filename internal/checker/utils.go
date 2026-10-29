@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -107,39 +108,17 @@ var soft404Phrases = []string{
 // scans only visible text: SPA shells inline "page not found" copy in <script>,
 // which would soft-404 the whole site.
 func isSoft404(body []byte) bool {
-	text, ok := visibleBodyText(body)
-	if !ok {
-		text = strings.ToLower(string(body))
-	}
-	for _, p := range soft404Phrases {
-		if strings.Contains(text, p) {
-			return true
-		}
-	}
-	return false
-}
-
-func visibleBodyText(body []byte) (string, bool) {
 	doc, err := html.Parse(bytes.NewReader(body))
 	if err != nil {
-		return "", false
+		return false
 	}
-	var buf strings.Builder
-	var inBody bool
+	var text string
 	htmlx.Walk(doc, func(n *html.Node) bool {
-		if n.Type == html.ElementNode {
-			if htmlx.IsNonRendered(n.Data) {
-				return false
-			}
-			if n.Data == "body" {
-				inBody = true
-			}
-		}
-		if inBody && n.Type == html.TextNode {
-			buf.WriteString(strings.ToLower(n.Data))
-			buf.WriteByte(' ')
+		if n.Type == html.ElementNode && n.Data == "body" {
+			text = strings.ToLower(htmlx.TextContent(n))
+			return false
 		}
 		return true
 	})
-	return buf.String(), true
+	return slices.ContainsFunc(soft404Phrases, func(p string) bool { return strings.Contains(text, p) })
 }

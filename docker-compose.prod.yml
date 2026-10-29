@@ -14,7 +14,7 @@ x-go-env: &go-env
   MYSQL_DSN: "${MYSQL_USER:-linktrace}:${MYSQL_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-linktrace}?parseTime=true"
   REDIS_ADDR: "redis:6379"
   RABBIT_URL: "amqp://${RABBITMQ_USER:-linktrace}:${RABBITMQ_PASS}@rabbitmq:5672/"
-  SHARD_COUNT: "${SHARD_COUNT:-5}" # one value for both, so every lane the api places is consumed
+  SHARD_COUNT: "${SHARD_COUNT}" # one value for both, so every lane the api places is consumed
 
 services:
   mysql:
@@ -28,9 +28,9 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
-      # schema.sql only runs on a FRESH volume; redeploying does NOT re-apply it. To apply it live:
+      # schema.sql only runs on a fresh volume, not on redeploy. To apply it live:
       #   docker exec -i linktrace-mysql mysql -ulinktrace -p"$MYSQL_PASSWORD" linktrace < schema.sql
-      # It's CREATE TABLE IF NOT EXISTS, so changed columns still need their own ALTER TABLE.
+      # It's CREATE TABLE IF NOT EXISTS, so changed columns still need an ALTER TABLE.
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
       test:
@@ -80,9 +80,8 @@ services:
     container_name: linktrace-api
     environment:
       <<: *go-env
-      HTTP_ADDR: ":8080"
       COOKIE_SECURE: "true"
-      ANON_MAX_PAGES: "${ANON_MAX_PAGES:-500}"
+      ANON_MAX_PAGES: "${ANON_MAX_PAGES}"
 
   worker:
     <<: *go-service
@@ -90,11 +89,11 @@ services:
     container_name: linktrace-worker
     environment:
       <<: *go-env
-      WORKER_COUNT: "${WORKER_COUNT:-100}"
-      MAX_PAGES: "${MAX_PAGES:-10000}"
-      MAX_DEPTH: "${MAX_DEPTH:-20}"
-      MAX_PER_CATEGORY: "${MAX_PER_CATEGORY:-1000}"
-      RATE_PER_MIN: "${RATE_PER_MIN:-300}"
+      WORKER_COUNT: "${WORKER_COUNT}"
+      MAX_PAGES: "${MAX_PAGES}"
+      MAX_DEPTH: "${MAX_DEPTH}"
+      MAX_PER_CATEGORY: "${MAX_PER_CATEGORY}"
+      RATE_PER_MIN: "${RATE_PER_MIN}"
 
   caddy:
     build:

@@ -24,9 +24,9 @@ var skipPrefixes = []string{
 	"/_static/",
 	"/_image",
 	"/api/",
-	"/feed",
-	"/rss",
-	"/sitemap",
+	"/feed/",
+	"/rss/",
+	"/sitemap/",
 	"/admin/",
 }
 
@@ -81,8 +81,6 @@ var trackingParams = map[string]bool{
 func canonicalize(u *url.URL, dropQuery bool) string {
 	u.Host = strings.ToLower(u.Host)
 	u.Fragment = ""
-
-	u.Path = strings.TrimRight(u.Path, "/")
 	if u.Path == "" {
 		u.Path = "/"
 	}
@@ -103,7 +101,7 @@ func canonicalize(u *url.URL, dropQuery bool) string {
 	return u.String()
 }
 
-func resolve(base *url.URL, href string) string {
+func resolve(base *url.URL, host, href string) string {
 	u, err := base.Parse(href)
 	if err != nil {
 		return ""
@@ -111,7 +109,7 @@ func resolve(base *url.URL, href string) string {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return ""
 	}
-	if !strings.EqualFold(u.Host, base.Host) {
+	if !strings.EqualFold(u.Host, host) {
 		return ""
 	}
 	if isUnwantedPath(u.Path) {

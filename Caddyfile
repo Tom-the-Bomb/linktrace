@@ -1,11 +1,5 @@
 {
 	email {$ACME_EMAIL}
-	# a TLS terminator in front (DOMAIN=":80") connects from a private address. Trusting those
-	# makes {client_ip} the visitor's address, read right to left so a visitor can't spoof it.
-	servers {
-		trusted_proxies static private_ranges
-		trusted_proxies_strict
-	}
 }
 
 {$DOMAIN} {

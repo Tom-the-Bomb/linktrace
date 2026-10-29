@@ -17,7 +17,6 @@ web/.env
 # Secrets / local env
 .env
 .env.*
-!.env.production.example
 
 # Editor / OS
 .DS_Store
