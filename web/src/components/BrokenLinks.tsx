@@ -73,7 +73,7 @@ export function BrokenLinks({
         subtitle={
           broken.length === 0
             ? 'Every page the crawl reached loaded correctly.'
-            : 'Each broken page is listed with the page it was first found on. Fix the link there first (other pages may link to it too).'
+            : 'Each broken page is listed with the page it was first found on. Fix the link there (other pages may link to it too).'
         }
         right={
           broken.length > 0 && (
@@ -124,7 +124,7 @@ export function BrokenLinks({
                     <button
                       onClick={() => onSelect(r.url)}
                       title={r.url}
-                      className="tap-area text-label block max-w-full truncate text-left font-mono underline-offset-4 hover:underline"
+                      className="tap-area text-label block max-w-full truncate text-left font-mono hover:underline"
                     >
                       {pathOf(r.url)}
                     </button>
@@ -136,7 +136,7 @@ export function BrokenLinks({
                           <button
                             onClick={() => onSelect(parent)}
                             title={parent}
-                            className="tap-area text-link-600 text-caption min-w-6 truncate text-left font-mono underline-offset-4 hover:underline"
+                            className="tap-area text-link-600 text-caption min-w-6 truncate text-left font-mono hover:underline"
                           >
                             {pathOf(parent)}
                           </button>
@@ -155,7 +155,7 @@ export function BrokenLinks({
                         href={r.archive_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="tap-area text-link-600 text-label inline-flex items-center gap-1 whitespace-nowrap underline-offset-4 hover:underline"
+                        className="tap-area text-link-600 text-label inline-flex items-center gap-1 whitespace-nowrap hover:underline"
                       >
                         Wayback copy
                         <ArrowUpRight className="size-3.5" />

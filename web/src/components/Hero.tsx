@@ -99,8 +99,8 @@ function DomainForm({
 }: HeroProps & { inputRef: RefObject<HTMLInputElement | null> }) {
   const [url, setUrl] = useState('');
   const [focused, setFocused] = useState(false);
-  // pause when focused/non-empty so the fake caret doesn't fight the real one
-  const placeholder = useTypingPlaceholder(url === '' && !focused);
+  const demo = url === '' && !focused;
+  const placeholder = useTypingPlaceholder(demo);
   useFocusShortcut(inputRef);
 
   return (
@@ -132,7 +132,7 @@ function DomainForm({
               aria-describedby={error ? 'domain-error' : undefined}
               className="px-0 font-mono"
             />
-            {url === '' && !focused && (
+            {demo && (
               <span
                 aria-hidden="true"
                 className="text-ink-3 pointer-events-none absolute inset-0 flex items-center overflow-hidden font-mono text-sm"
@@ -170,10 +170,7 @@ function FailureBadges() {
     <div>
       <p className="text-ink-3 text-label">
         Broken links are labelled by cause.{' '}
-        <a
-          href="#failures"
-          className="text-ink-2 hover:text-ink whitespace-nowrap underline underline-offset-4"
-        >
+        <a href="#failures" className="text-ink-2 hover:text-ink whitespace-nowrap underline">
           What each means
         </a>
       </p>

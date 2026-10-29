@@ -21,7 +21,7 @@ export function OverallReport({ report }: { report: Report }) {
               <p className="text-ink-3 text-label font-medium">Broken pages</p>
               <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
                 <span
-                  className={`tracking-display text-7xl font-semibold tabular-nums ${rotten > 0 ? 'text-bad-fg' : 'text-ok-fg'}`}
+                  className={`tracking-display text-stat font-semibold tabular-nums ${rotten > 0 ? 'text-bad-fg' : 'text-ok-fg'}`}
                 >
                   {rotten.toLocaleString()}
                 </span>
@@ -46,7 +46,7 @@ export function OverallReport({ report }: { report: Report }) {
             <div>
               <p className="text-ink-3 text-label font-medium">Average SEO score</p>
               <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
-                <span className="tracking-display text-7xl font-semibold tabular-nums">
+                <span className="tracking-display text-stat font-semibold tabular-nums">
                   {avg_seo_score}
                 </span>
                 <span className="text-ink-3 text-xl font-semibold">/100</span>

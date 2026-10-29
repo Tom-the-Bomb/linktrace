@@ -32,7 +32,7 @@ export interface Issue {
   severity: 'error' | 'warning' | 'info';
 }
 
-export interface KeywordCount {
+interface KeywordCount {
   term: string;
   count: number;
 }
@@ -90,7 +90,6 @@ export interface Report {
   overall: {
     total_pages: number;
     rotten: number;
-    healthy: number;
     avg_seo_score: number;
     top_issues: string[];
   };

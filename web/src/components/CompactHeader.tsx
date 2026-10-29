@@ -38,7 +38,7 @@ export function CompactHeader({ onSubmit, submitting, canStop, onStopOrBack }: C
               ) : (
                 <>
                   <ArrowLeft strokeWidth={2.25} />
-                  <span className="hidden sm:inline">Home</span>
+                  <span className="sr-only sm:not-sr-only">Home</span>
                 </>
               )}
             </Button>

@@ -7,7 +7,7 @@ export function Footer() {
           href="https://github.com/Tom-the-Bomb"
           target="_blank"
           rel="noreferrer"
-          className="text-ink-2 hover:text-ink tap-area underline-offset-4 hover:underline"
+          className="text-ink-2 hover:text-ink tap-area hover:underline"
         >
           @Tom-the-Bomb
         </a>

@@ -18,6 +18,8 @@
   --text-display: min(2.75rem, 14vw); /* the vw cap keeps it on a phone at large text sizes */
   --text-closing-lg: 3.5rem;
   --text-display-lg: min(4rem, 14vw);
+  --text-stat: min(4.5rem, 19vw);
+  --text-stat--line-height: 1;
 
   --color-canvas: #fafafa;
   --color-panel: #ffffff;
@@ -67,7 +69,7 @@
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --animate-tick: tick 360ms var(--ease-out-expo);
-  --animate-cursor-blink: cursor-blink 1.06s steps(2, jump-none) infinite;
+  --animate-cursor-blink: cursor-blink 1.06s step-end infinite;
 
   @keyframes tick {
     from {
@@ -80,12 +82,7 @@
     }
   }
   @keyframes cursor-blink {
-    0%,
-    49% {
-      opacity: 1;
-    }
-    50%,
-    100% {
+    50% {
       opacity: 0;
     }
   }
@@ -100,8 +97,8 @@
   ::file-selector-button {
     border-color: var(--color-line);
   }
-  button:not(:disabled, [aria-disabled='true']),
-  [role='button']:not(:disabled, [aria-disabled='true']) {
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
     cursor: pointer;
   }
 
@@ -111,7 +108,7 @@
   body {
     background: var(--color-canvas);
     color: var(--color-ink);
-    caret-color: var(--color-ink);
+    text-underline-offset: 4px;
   }
   ::selection {
     background: var(--color-link-100);
@@ -120,9 +117,6 @@
   :focus-visible {
     outline: 2px solid var(--color-link-500);
     outline-offset: 2px;
-  }
-  a {
-    text-underline-offset: 3px;
   }
   * {
     scrollbar-width: thin;
@@ -150,12 +144,14 @@
 }
 
 @utility frame {
-  @apply relative mx-auto w-full max-w-300 border-x;
+  @apply mx-auto w-full max-w-300 border-x;
 }
 
 @utility cross {
   /* bars sit 5px in; -6px lands them on hairlines drawn just before the anchor */
-  @apply text-ink-4 pointer-events-none absolute z-10 size-[11px];
+  @apply text-ink-4 pointer-events-none absolute z-10;
+  width: 11px;
+  height: 11px;
   transform: translate(-6px, -6px);
   background:
     linear-gradient(currentColor, currentColor) center / 1px 100% no-repeat,
@@ -205,9 +201,9 @@
 }
 
 /* forced colours drop shadows and fills, so controls and layers get an edge and selection uses
-   Highlight. Unlayered to beat outline-none */
+   Highlight. Unlayered to beat outline-none, and :where so the focus rule still wins */
 @media (forced-colors: active) {
-  :is(button, kbd, input:not([role='group'] input), [role='group']:has(input)) {
+  :where(button, kbd, input:not([role='group'] input), [role='group']:has(input)) {
     outline: 1px solid;
     outline-offset: -1px;
   }

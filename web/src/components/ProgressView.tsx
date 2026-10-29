@@ -137,8 +137,7 @@ export function ProgressView({
           <Count label="Broken" value={rotten} dot="bg-bad-dot" tone="text-bad-fg" />
         </dl>
         <p className="text-ink-3 text-label gutter border-t py-3">
-          This page updates as pages are checked, and the full report appears when the crawl
-          finishes.
+          Progress updates live, and the full report appears when the crawl finishes.
         </p>
       </div>
     </section>
@@ -184,9 +183,9 @@ function useCheckedDelta(status: Status | null): number {
     if (!status) {
       return;
     }
-    // same running crawl only, so the first poll isn't "+everything"
+    // skips the first poll, which would read as "+everything"
     const last = prev.current;
-    const live = last?.job_id === status.job_id && !isTerminalStatus(status.status);
+    const live = last !== null && !isTerminalStatus(status.status);
     setDelta(live ? Math.max(0, status.checked - last.checked) : 0);
     prev.current = status;
   }, [status]);

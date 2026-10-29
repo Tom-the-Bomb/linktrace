@@ -126,8 +126,7 @@ function JobReport({ jobId }: { jobId: string }) {
 
         {joined && (
           <p className="rounded-control bg-sunken text-ink-2 ring-line mx-5 mt-6 px-4 py-3 text-sm ring-1 ring-inset sm:mx-8">
-            This site was already being crawled, so you&rsquo;ve joined that crawl instead of
-            starting a new one.
+            This site was already being crawled, so you&rsquo;ve joined that crawl.
           </p>
         )}
 
@@ -212,7 +211,7 @@ function JobReport({ jobId }: { jobId: string }) {
           </GridRow>
         )}
 
-        {report?.coverage_gap && report.site_audit?.sitemap_found && (
+        {report?.coverage_gap && (
           <GridRow>
             <CoverageGapPanel gap={report.coverage_gap} />
           </GridRow>

@@ -140,7 +140,7 @@ function PageContext({
                 href={row.archive_url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-link-600 inline-flex items-center gap-0.5 underline-offset-4 hover:underline"
+                className="text-link-600 inline-flex items-center gap-0.5 hover:underline"
               >
                 See the saved copy on the Wayback Machine
                 <ArrowUpRight className="size-3.5" strokeWidth={2.25} />
@@ -159,7 +159,7 @@ function PageContext({
             {foundOn ? (
               <button
                 onClick={() => onNavigate(foundOn)}
-                className="tap-area text-link-600 text-label font-mono underline-offset-4 hover:underline"
+                className="tap-area text-link-600 text-label font-mono hover:underline"
               >
                 {pathOf(foundOn)}
               </button>
@@ -188,7 +188,7 @@ function PageContext({
                     ) : (
                       <button
                         onClick={() => onNavigate(u)}
-                        className="tap-area text-ink-2 hover:text-ink underline-offset-4 hover:underline"
+                        className="tap-area text-ink-2 hover:text-ink hover:underline"
                       >
                         {pathOf(u)}
                       </button>
@@ -226,9 +226,9 @@ function NoAuditState() {
 function Skeleton() {
   return (
     <div className="space-y-4" aria-busy="true" aria-label="Loading audit">
-      <div className="bg-sunken h-20 animate-pulse rounded-xl" />
-      <div className="bg-sunken h-32 animate-pulse rounded-xl" />
-      <div className="bg-sunken h-24 animate-pulse rounded-xl" />
+      <div className="bg-sunken rounded-panel h-20 animate-pulse" />
+      <div className="bg-sunken rounded-panel h-32 animate-pulse" />
+      <div className="bg-sunken rounded-panel h-24 animate-pulse" />
     </div>
   );
 }
@@ -365,7 +365,7 @@ function SeoBody({ detail }: { detail: SEODetail }) {
           </div>
           {detail.top_keywords && detail.top_keywords.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-1.5">
-              {detail.top_keywords.slice(0, 12).map((k) => (
+              {detail.top_keywords.map((k) => (
                 <Badge key={k.term}>
                   {k.term}
                   <span className="text-ink-3 tabular-nums">{k.count}</span>
@@ -431,7 +431,7 @@ function Signal({ label, ok }: { label: string; ok: boolean }) {
   return (
     <li className="flex items-center gap-2.5 border-b py-2 text-sm">
       <span
-        className={`flex size-4.5 items-center justify-center rounded-md ${ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}
+        className={`rounded-control flex size-4.5 items-center justify-center ${ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}
       >
         <Icon className="size-3" strokeWidth={3} />
       </span>

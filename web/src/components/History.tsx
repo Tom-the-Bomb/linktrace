@@ -95,7 +95,7 @@ function HistoryRow({
   return (
     <Collapsible asChild>
       <li>
-        <div className="group hover:bg-sunken flex items-center gap-3 p-3 transition sm:px-6">
+        <div className="group hover:bg-sunken flex flex-wrap items-center gap-3 p-3 transition sm:px-6">
           {multi ? (
             <CollapsibleTrigger asChild>
               <Button
@@ -113,7 +113,7 @@ function HistoryRow({
           ) : (
             <span className="w-7 shrink-0" />
           )}
-          <div className="min-w-0 flex-1">
+          <div className="min-w-24 flex-1">
             <a
               href={entry.url}
               target="_blank"
@@ -126,7 +126,7 @@ function HistoryRow({
               {entry.runs.length} {multi ? 'runs' : 'run'}, last on {formatDate(latest.created_at)}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
             {/* first, so its hidden space sits in the row's empty middle */}
             <DeleteButton
               label={`Delete crawl of ${hostOf(entry.url)}`}
@@ -192,13 +192,13 @@ function RunRow({
   onRequestDelete: () => void;
 }) {
   return (
-    <li className="group flex items-center gap-3 py-2">
+    <li className="group flex flex-wrap items-center gap-3 py-2">
       <span className="text-ink-3 text-code w-8 shrink-0 font-mono">#{index}</span>
-      <div className="text-ink-2 text-label min-w-0 flex-1">
+      <div className="text-ink-2 text-label min-w-24 flex-1">
         {formatDate(run.created_at, true)}
         {isLatest && <span className="text-link-600 text-caption ml-2 font-semibold">latest</span>}
       </div>
-      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
         <DeleteButton label={`Delete run #${index}`} onClick={onRequestDelete} />
         <JobStatusChip status={run.status} />
         <Button

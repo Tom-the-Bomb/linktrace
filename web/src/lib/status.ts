@@ -42,7 +42,7 @@ export const FAILURE_EXPLANATION: Record<string, string> = {
   server_error: 'The server hit an error while responding (500, 502 and so on).',
   blocked:
     'A bot check or rate limit answered instead of the page, so the page itself may be fine.',
-  unknown: 'The URL could not be checked (it may be malformed, or not an http or https link).',
+  unknown: "The URL couldn't be checked (it may be malformed, or not an http or https link).",
 };
 
 const CODE_EXPLANATION: Record<number, string> = {
@@ -66,7 +66,7 @@ export function failureReason(errorType: string, code: number): string {
         : `The server hit an error while responding (${code}).`)
     );
   }
-  return FAILURE_EXPLANATION[errorType] ?? 'The page could not be loaded.';
+  return FAILURE_EXPLANATION[errorType] ?? "The page couldn't be loaded.";
 }
 
 export function failureGroup(errorType: string): string {

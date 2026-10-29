@@ -1,12 +1,5 @@
 export function formatDate(iso: string, withTime = false): string {
-  if (!iso) {
-    return '-';
-  }
-  const date = new Date(iso);
-  if (isNaN(date.getTime())) {
-    return iso;
-  }
-  return date.toLocaleString(undefined, {
+  return new Date(iso).toLocaleString(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

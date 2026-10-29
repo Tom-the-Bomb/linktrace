@@ -23,7 +23,7 @@ export function CoverageGapPanel({ gap }: { gap: CoverageGap }) {
       <div className="panel divide-y">
         <GapList
           label="Not in sitemap"
-          hint="Crawled, but missing from sitemap.xml"
+          hint="Crawled, but missing from the sitemap"
           urls={gap.orphans}
           tone="warn"
         />
@@ -34,7 +34,7 @@ export function CoverageGapPanel({ gap }: { gap: CoverageGap }) {
           tone="warn"
         />
         <GapList
-          label="Dead in sitemap"
+          label="Broken in sitemap"
           hint="Listed in the sitemap, but broken"
           urls={gap.sitemap_dead}
           tone="bad"

@@ -19,6 +19,7 @@ import { pathOf, sectionOf } from '../lib/url';
 import { NodeTooltip } from './ui/NodeTooltip';
 import { Button } from './ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
+import { Kbd } from './ui/kbd';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
 // the lib mutates these in place; fx/fy pin a dragged node
@@ -172,7 +173,6 @@ export const GraphView = memo(function GraphView({
   useEffect(() => {
     setGraph((prev) => {
       const byId = new Map<string, FgNode>(prev.nodes.map((n) => [n.id, n]));
-      const parentOf = new Map(data.edges.map((e) => [e.target, e.source]));
       let nodesChanged = false;
       const nodes = prev.nodes.slice();
       for (const incoming of data.nodes) {
@@ -185,7 +185,7 @@ export const GraphView = memo(function GraphView({
         } else {
           const n: FgNode = { ...incoming };
           // starts beside the page it was found on, so a short reheat settles it
-          const parent = byId.get(parentOf.get(n.id) ?? '');
+          const parent = byId.get(tree.parent.get(n.id) ?? '');
           if (parent?.x !== undefined && parent.y !== undefined) {
             n.x = parent.x + Math.random() * 10 - 5;
             n.y = parent.y + Math.random() * 10 - 5;
@@ -211,7 +211,7 @@ export const GraphView = memo(function GraphView({
       // a new object restarts the layout; updated fields are read off the nodes
       return nodesChanged || linksChanged ? { nodes, links } : prev;
     });
-  }, [data]);
+  }, [data, tree]);
 
   const nodeById = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph]);
   // parsed once per update, not per node per frame
@@ -289,8 +289,10 @@ export const GraphView = memo(function GraphView({
     }
   };
 
+  // each Enter frames the next match, wrapping around
+  const jumpIdx = matches.findIndex((n) => n.id === jumpId);
   const jumpToMatch = () => {
-    const n = matches[0];
+    const n = matches[(jumpIdx + 1) % matches.length];
     if (!n || n.x === undefined || n.y === undefined) {
       return;
     }
@@ -379,7 +381,12 @@ export const GraphView = memo(function GraphView({
           />
           {hasQuery && (
             <InputGroupAddon align="inline-end" className="text-code font-mono" aria-live="polite">
-              {matches.length} found
+              {jumpIdx >= 0 ? `${jumpIdx + 1} of ${matches.length}` : `${matches.length} found`}
+              {matches.length > 0 && (
+                <Kbd aria-hidden="true" className="hidden sm:inline-flex">
+                  ↵
+                </Kbd>
+              )}
             </InputGroupAddon>
           )}
         </InputGroup>
@@ -520,11 +527,10 @@ export const GraphView = memo(function GraphView({
           onShowAll={() => setHidden(new Set())}
         />
         <span className="text-ink-3 text-label pointer-fine:hidden">
-          Tap a page to open its audit. Use two fingers to move or zoom.
+          Use two fingers to move or zoom.
         </span>
         <span className="text-ink-3 text-label hidden pointer-fine:inline">
-          Hover a page to see how the crawl found it, and click it to open its audit. Pinch or
-          Ctrl+scroll to zoom.
+          Pinch or <Kbd>Ctrl</Kbd> + scroll to zoom.
         </span>
       </footer>
     </section>
@@ -618,7 +624,7 @@ function Legend({
           <button
             type="button"
             onClick={onShowAll}
-            className="text-link-600 text-caption px-2 py-1 font-sans underline-offset-4 hover:underline"
+            className="text-link-600 text-caption px-2 py-1 font-sans hover:underline"
           >
             Show all
           </button>

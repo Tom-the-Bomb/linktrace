@@ -54,8 +54,6 @@ const router = createBrowserRouter([
           first.catch(() => {}); // no unhandled rejection if the page never reads it
           return { first };
         },
-        shouldRevalidate: ({ currentParams, nextParams }) =>
-          currentParams.jobId !== nextParams.jobId,
         lazy: page(() => import('./pages/JobReportPage')),
       },
       { path: '*', element: <Navigate to="/" replace /> },

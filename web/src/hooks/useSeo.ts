@@ -1,10 +1,14 @@
 import { useEffect } from 'react';
 
-import { DEFAULT_DESCRIPTION, DEFAULT_TITLE, SITE_NAME, SITE_URL } from '../lib/seo';
+const SITE_URL = (import.meta.env.VITE_SITE_URL ?? 'https://linktrace.tomthebomb.dev').replace(
+  /\/$/,
+  '',
+);
+const SITE_NAME = 'LinkTrace';
+const DEFAULT_TITLE = 'LinkTrace | Broken link and SEO checker';
 
 interface SeoOptions {
   title?: string;
-  description?: string;
   path?: string;
   noindex?: boolean;
 }
@@ -29,20 +33,15 @@ function upsertCanonical(href: string) {
   el.setAttribute('href', href);
 }
 
-export function useSeo({ title, description, path, noindex }: SeoOptions = {}) {
+export function useSeo({ title, path, noindex }: SeoOptions = {}) {
   useEffect(() => {
     const fullTitle = title ? `${title} | ${SITE_NAME}` : DEFAULT_TITLE;
-    const desc = description ?? DEFAULT_DESCRIPTION;
     const url = `${SITE_URL}${path ?? '/'}`;
 
     document.title = fullTitle;
-    upsertMeta('name', 'description', desc);
     upsertMeta('name', 'robots', noindex ? 'noindex, nofollow' : 'index, follow');
     upsertMeta('property', 'og:title', fullTitle);
-    upsertMeta('property', 'og:description', desc);
     upsertMeta('property', 'og:url', url);
-    upsertMeta('name', 'twitter:title', fullTitle);
-    upsertMeta('name', 'twitter:description', desc);
     upsertCanonical(url);
-  }, [title, description, path, noindex]);
+  }, [title, path, noindex]);
 }

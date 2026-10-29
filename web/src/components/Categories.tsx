@@ -12,6 +12,7 @@ import { Badge, type BadgeVariant } from './ui/badge';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
 const PAGE_SIZE = 10;
+const COLS = 'sm:grid-cols-[0.875rem_minmax(0,1fr)_10.625rem_4rem_7.375rem]';
 
 type Filter = 'all' | 'healthy' | 'mixed' | 'rotten';
 type SortKey = 'pages' | 'rot' | 'seo';
@@ -124,7 +125,7 @@ export function Categories({
 
         <div
           aria-hidden="true"
-          className="bg-sunken/60 text-ink-3 gutter hidden grid-cols-[0.875rem_minmax(0,1fr)_10.625rem_4rem_7.375rem] gap-x-4 border-b py-2 text-xs font-medium sm:grid"
+          className={`bg-sunken/60 text-ink-3 gutter hidden gap-x-4 border-b py-2 text-xs font-medium sm:grid ${COLS}`}
         >
           <span />
           <span>Section</span>
@@ -172,7 +173,9 @@ function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
   const style = PATTERN[cat.pattern] ?? PATTERN.mixed;
 
   return (
-    <li className="gutter grid grid-cols-[0.875rem_minmax(0,1fr)_auto] items-center gap-x-4 py-3.5 sm:grid-cols-[0.875rem_minmax(0,1fr)_10.625rem_4rem_7.375rem]">
+    <li
+      className={`gutter grid grid-cols-[0.875rem_minmax(0,1fr)_auto] items-center gap-x-4 py-3.5 ${COLS}`}
+    >
       <SectionDot colour={colour} />
       <div className="min-w-0">
         <div className="truncate font-mono text-sm font-medium">{cat.category}</div>

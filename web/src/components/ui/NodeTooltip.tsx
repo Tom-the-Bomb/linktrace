@@ -1,7 +1,8 @@
-import type { Ref } from 'react';
+import type { CSSProperties, Ref } from 'react';
 
 interface Props {
   ref?: Ref<HTMLDivElement>;
+  style?: CSSProperties;
   visible: boolean;
   path: string;
   detail: string;
@@ -9,13 +10,14 @@ interface Props {
   note?: string[];
 }
 
-// callers position it via the ref, avoiding a re-render per pointer move
-export function NodeTooltip({ ref, visible, path, detail, detailClass = '', note }: Props) {
+// callers position it via style, or via the ref to skip a re-render per pointer move
+export function NodeTooltip({ ref, style, visible, path, detail, detailClass = '', note }: Props) {
   return (
     <div
       ref={ref}
+      style={style}
       aria-hidden="true"
-      className={`bg-ink shadow-lift text-code pointer-events-none absolute top-0 left-0 z-30 max-w-65 rounded-lg px-2.5 py-1.5 font-mono text-white transition-opacity duration-150 ${
+      className={`bg-ink shadow-lift text-code pointer-events-none absolute top-0 left-0 z-30 w-max max-w-65 rounded-lg px-2.5 py-1.5 font-mono text-white transition-opacity duration-150 ${
         visible ? 'opacity-100' : 'opacity-0'
       }`}
     >

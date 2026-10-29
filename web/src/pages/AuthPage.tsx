@@ -16,8 +16,7 @@ export default function AuthPage() {
   return (
     <SplitPage title="Save your crawls." showAuth={false} aside={<AuthForm />}>
       <p className="lead mt-4 max-w-md">
-        You can crawl sites without an account. Logging in saves each crawl to your history, so you
-        can find its report later.
+        You can crawl sites without an account. Logging in saves each crawl to your history.
       </p>
     </SplitPage>
   );

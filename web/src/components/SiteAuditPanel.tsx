@@ -111,7 +111,7 @@ function CheckRow({ ok, label }: { ok: boolean; label: string }) {
   return (
     <li className="flex items-center gap-3 py-2.5 text-sm">
       <span
-        className={`flex size-5 shrink-0 items-center justify-center rounded-md ${ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}
+        className={`rounded-control flex size-5 shrink-0 items-center justify-center ${ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}
       >
         <Icon className="size-3.5" strokeWidth={3} />
       </span>

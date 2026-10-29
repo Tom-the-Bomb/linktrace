@@ -24,7 +24,7 @@ export function scoreTier(score: number): ScoreTier {
 
 const TIER_TONE: Record<ScoreTier, Tone> = { good: 'ok', ok: 'warn', poor: 'bad' };
 
-// canvas and inline SVG can't read CSS tokens
+// hex because canvas can't read CSS tokens
 export const TIER_HEX: Record<ScoreTier, string> = {
   good: '#1fb26b',
   ok: '#f0a400',

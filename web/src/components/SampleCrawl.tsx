@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { BROKEN_HEX, INK_HEX, LINE_STRONG_HEX, SECTION_HEX, TOOLTIP_TEXT } from '../lib/colours';
 import { buildTree, nodeNote, pathFromRoot } from '../lib/graph';
@@ -181,8 +181,6 @@ function SampleGraph({ p }: { p: number }) {
   const [hovered, setHovered] = useState<number | null>(null);
   // last hovered page, so the tooltip keeps its text while fading out
   const [tip, setTip] = useState(0);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const tipRef = useRef<HTMLDivElement>(null);
   const onHover = (i: number | null) => {
     setHovered(i);
     if (i !== null) {
@@ -190,54 +188,43 @@ function SampleGraph({ p }: { p: number }) {
     }
   };
 
-  // opens away from the centre so it never covers the traced path
-  useLayoutEffect(() => {
-    const svg = svgRef.current;
-    const el = tipRef.current;
-    const ctm = svg?.getScreenCTM();
-    if (hovered === null || !svg?.parentElement || !el || !ctm) {
-      return;
-    }
-    const n = NODES[hovered];
-    const at = new DOMPoint(n.x, n.y).matrixTransform(ctm);
-    const box = svg.parentElement.getBoundingClientRect();
-    const gap = hoverRingRadius(hovered) * ctm.a + 6;
-    const dx = n.x < 150 ? '-14px' : n.x > 250 ? 'calc(-100% + 14px)' : '-50%';
-    const dy = n.y <= 150 ? `calc(-100% - ${gap}px)` : `${gap}px`;
-    el.style.transform = `translate3d(${at.x - box.left}px, ${at.y - box.top}px, 0) translate(${dx}, ${dy})`;
-  }, [hovered]);
-
   const shown = (d: number) => p >= DEPTH_AT[d];
   const lit = hovered === null ? null : new Set(pathFromRoot(TREE, NODES[hovered].path));
   // links are parent -> child, so a lit child means its incoming link is lit
   const linkLit = (child: number) => !!lit?.has(NODES[child].path);
   const tipNode = NODES[tip];
+  // opens away from the centre so it never covers the traced path; viewBox-relative (inside the
+  // px-3), so zoom can't misplace it
+  const above = tipNode.y <= 150;
+  const ring = hoverRingRadius(tip);
+  const dx = tipNode.x < 150 ? '-14px' : tipNode.x > 250 ? 'calc(-100% + 14px)' : '-50%';
+  const tipStyle = {
+    left: `calc(0.75rem + (100% - 1.5rem) * ${tipNode.x / 400})`,
+    top: `${(above ? tipNode.y - ring : tipNode.y + ring) / 3}%`,
+    transform: `translate(${dx}, ${above ? 'calc(-100% - 6px)' : '6px'})`,
+  };
   return (
-    <div className="relative">
+    <div className="relative mx-auto max-w-105 px-3">
       <svg
-        ref={svgRef}
         viewBox="0 0 400 300"
-        className="mx-auto block h-auto w-full max-w-105 px-3 forced-color-adjust-none"
+        className="block h-auto w-full forced-color-adjust-none"
         aria-label="Sample site graph: four sections, three broken pages"
-        onMouseLeave={() => onHover(null)}
       >
-        <g strokeWidth="1">
-          {LINKS.map(([a, b]) => (
-            <line
-              key={`${a}-${b}`}
-              x1={NODES[a].x}
-              y1={NODES[a].y}
-              x2={NODES[b].x}
-              y2={NODES[b].y}
-              stroke={linkLit(b) ? INK_HEX : LINE_STRONG_HEX}
-              strokeWidth={linkLit(b) ? 1.6 : 1}
-              style={{
-                opacity: !shown(NODES[b].d) ? 0 : lit && !linkLit(b) ? 0.4 : 1,
-                transition: 'opacity 300ms ease-out, stroke 150ms ease-out',
-              }}
-            />
-          ))}
-        </g>
+        {LINKS.map(([a, b]) => (
+          <line
+            key={`${a}-${b}`}
+            x1={NODES[a].x}
+            y1={NODES[a].y}
+            x2={NODES[b].x}
+            y2={NODES[b].y}
+            stroke={linkLit(b) ? INK_HEX : LINE_STRONG_HEX}
+            strokeWidth={linkLit(b) ? 1.6 : 1}
+            style={{
+              opacity: !shown(NODES[b].d) ? 0 : lit && !linkLit(b) ? 0.4 : 1,
+              transition: 'opacity 300ms ease-out, stroke 150ms ease-out',
+            }}
+          />
+        ))}
         {NODES.map((n, i) => {
           const r = dotRadius(n.d);
           const parent = TREE.parent.get(n.path);
@@ -251,6 +238,7 @@ function SampleGraph({ p }: { p: number }) {
                 parent === undefined ? 'the homepage' : `first found on ${parent}`
               }`}
               onMouseEnter={() => onHover(i)}
+              onMouseLeave={() => onHover(null)}
               className="cursor-pointer"
               style={{
                 opacity: !on ? 0 : dim ? 0.3 : 1,
@@ -287,7 +275,7 @@ function SampleGraph({ p }: { p: number }) {
         })}
       </svg>
       <NodeTooltip
-        ref={tipRef}
+        style={tipStyle}
         visible={hovered !== null}
         path={tipNode.path}
         detail={tipNode.fail ?? '200 OK'}
