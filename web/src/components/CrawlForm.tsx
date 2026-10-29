@@ -24,9 +24,9 @@ export function CrawlForm({ onSubmit, submitting, children }: Props) {
         e.preventDefault();
         onSubmit(url);
       }}
-      className="flex w-full items-center gap-2 md:max-w-lg md:flex-1"
+      className="flex w-full flex-wrap items-center gap-2 md:max-w-lg md:flex-1"
     >
-      <InputGroup className="flex-1">
+      <InputGroup className="grow basis-24">
         <InputGroupAddon>
           <Globe />
         </InputGroupAddon>

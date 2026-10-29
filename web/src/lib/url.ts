@@ -15,9 +15,15 @@ export function pathOf(url: string): string {
   return u ? u.pathname + u.search || '/' : url;
 }
 
-// mirrors the API's categories
+// mirrors the API's categories, which split the decoded path
 export function sectionOf(url: string): string {
-  const seg = parse(url)?.pathname.split('/').filter(Boolean)[0];
+  let path = parse(url)?.pathname ?? '/';
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    /* not UTF-8 */
+  }
+  const seg = path.split('/').filter(Boolean)[0];
   return seg ? `/${seg}` : '/';
 }
 

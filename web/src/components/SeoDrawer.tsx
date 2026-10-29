@@ -282,7 +282,7 @@ function SeoBody({ detail }: { detail: SEODetail }) {
       </Section>
 
       <Section label="Headings">
-        <div className="rounded-control ring-line grid grid-cols-6 divide-x overflow-hidden ring-1 ring-inset">
+        <div className="rounded-control ring-line grid grid-cols-[repeat(auto-fit,minmax(2.75rem,1fr))] divide-x overflow-hidden ring-1 ring-inset">
           <HeadingTile label="h1" count={detail.h1_count} flagged={detail.h1_count !== 1} />
           <HeadingTile label="h2" count={detail.h2_count} />
           <HeadingTile label="h3" count={detail.h3_count} />

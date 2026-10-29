@@ -208,7 +208,7 @@ function Count({
   return (
     <div>
       <dt className="text-ink-3 text-label flex items-center gap-1.5 font-medium">
-        {dot && <span className={`size-2 rounded-full forced-color-adjust-none ${dot}`} />}
+        {dot && <span className={`size-2 shrink-0 rounded-full forced-color-adjust-none ${dot}`} />}
         {label}
       </dt>
       <dd className="mt-0.5 flex items-baseline gap-2">

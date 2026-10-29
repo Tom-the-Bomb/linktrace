@@ -98,7 +98,7 @@ function GapList({
                 href={u}
                 target="_blank"
                 rel="noreferrer"
-                className="text-ink-2 hover:text-link-600 block w-fit max-w-full truncate hover:underline"
+                className="tap-area text-ink-2 hover:text-link-600 block w-fit max-w-full truncate hover:underline"
               >
                 {u}
               </a>

@@ -207,7 +207,7 @@ function RunRow({
         {formatDate(run.created_at, true)}
         {isLatest && <span className="text-link-600 text-caption ml-2 font-semibold">latest</span>}
       </div>
-      <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+      <div className="ml-auto flex flex-wrap items-center gap-1.5 sm:gap-2">
         <DeleteButton label={`Delete run #${index}`} onClick={onRequestDelete} />
         <JobStatusChip status={run.status} />
         <Button

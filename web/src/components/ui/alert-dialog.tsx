@@ -20,7 +20,7 @@ function AlertDialogContent({
       <AlertDialogPrimitive.Content
         data-slot="alert-dialog-content"
         className={cn(
-          'rounded-panel bg-panel shadow-lift data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 ease-out-expo fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 duration-200 outline-none',
+          'rounded-panel bg-panel shadow-lift data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 ease-out-expo fixed top-1/2 left-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto duration-200 outline-none',
           className,
         )}
         {...props}
@@ -40,7 +40,7 @@ function AlertDialogFooter({ className, ...props }: React.ComponentProps<'div'>)
     <div
       data-slot="alert-dialog-footer"
       className={cn(
-        'rounded-b-panel bg-sunken/60 flex justify-end gap-2 border-t px-6 py-4',
+        'rounded-b-panel bg-sunken/60 flex flex-wrap justify-end gap-2 border-t px-6 py-4',
         className,
       )}
       {...props}

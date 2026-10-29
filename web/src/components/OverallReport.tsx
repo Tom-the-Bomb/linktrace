@@ -8,6 +8,8 @@ import { Badge } from './ui/badge';
 
 export function OverallReport({ report }: { report: Report }) {
   const { total_pages, rotten, avg_seo_score, top_issues } = report.overall;
+  // the average is 0, not absent, when no page was audited
+  const audited = !!report.site_seo?.pages_audited;
   const tier = scoreTierBadge(avg_seo_score);
   const rottenPct = pct(rotten, total_pages);
 
@@ -43,23 +45,25 @@ export function OverallReport({ report }: { report: Report }) {
                 )}
               </p>
             </div>
-            <div>
-              <p className="text-ink-3 text-label font-medium">Average SEO score</p>
-              <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
-                <span className="tracking-display text-stat font-semibold tabular-nums">
-                  {avg_seo_score}
-                </span>
-                <span className="text-ink-3 text-xl font-semibold">/100</span>
-                <Badge variant={tier.tone} className="ml-1 self-center">
-                  {tier.label}
-                </Badge>
-              </p>
-              <ScoreScale score={avg_seo_score} />
-            </div>
+            {audited && (
+              <div>
+                <p className="text-ink-3 text-label font-medium">Average SEO score</p>
+                <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
+                  <span className="tracking-display text-stat font-semibold tabular-nums">
+                    {avg_seo_score}
+                  </span>
+                  <span className="text-ink-3 text-xl font-semibold">/100</span>
+                  <Badge variant={tier.tone} className="ml-1 self-center">
+                    {tier.label}
+                  </Badge>
+                </p>
+                <ScoreScale score={avg_seo_score} />
+              </div>
+            )}
           </div>
           <p className="text-lead mt-6 border-t pt-5 leading-snug font-semibold tracking-tight">
             <span>{linkVerdict(rotten, rottenPct)}</span>{' '}
-            <span className="text-ink-2 font-normal">{scoreVerdict(avg_seo_score)}</span>
+            <span className="text-ink-2 font-normal">{audited && scoreVerdict(avg_seo_score)}</span>
           </p>
         </div>
 
