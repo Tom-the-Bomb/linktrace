@@ -79,7 +79,8 @@ func ComputeCoverageGap(sitemapURLs, crawledURLs, rottenURLs []string) CoverageG
 
 	g := CoverageGap{Orphans: []string{}, NotCrawled: []string{}, SitemapDead: []string{}}
 	for u := range crawled {
-		if !inSitemap[u] {
+		// a sitemap cut off at the cap may still list u
+		if !inSitemap[u] && len(sitemapURLs) < maxSitemapURLs {
 			g.Orphans = append(g.Orphans, u)
 		}
 	}

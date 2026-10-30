@@ -195,7 +195,7 @@ type categoryReport struct {
 	Category    string `json:"category"`
 	TotalPages  int    `json:"total_pages"`
 	RottenPages int    `json:"rotten_pages"`
-	AvgSEOScore int    `json:"avg_seo_score"`
+	AvgSEOScore *int   `json:"avg_seo_score"` // nil when no page in the section was audited
 	Pattern     string `json:"pattern"`
 }
 
@@ -222,9 +222,10 @@ func computeCategories(pages []store.PageResult, audits []store.SEOAudit) []cate
 
 	out := make([]categoryReport, 0, len(byCat))
 	for cat, t := range byCat {
-		avg := 0
+		var avg *int
 		if t.scored > 0 {
-			avg = t.scoreSum / t.scored
+			v := t.scoreSum / t.scored
+			avg = &v
 		}
 		out = append(out, categoryReport{
 			Category:    cat,
@@ -287,10 +288,7 @@ func computeOverall(pages []store.PageResult, audits []store.SEOAudit) map[strin
 }
 
 func (s *Server) startSession(w http.ResponseWriter, userID string) error {
-	sid, err := auth.NewToken()
-	if err != nil {
-		return err
-	}
+	sid := auth.NewToken()
 	if err := s.cache.CreateSession(sid, userID); err != nil {
 		return err
 	}

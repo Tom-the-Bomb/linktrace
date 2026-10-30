@@ -51,6 +51,8 @@ type CrawlStats struct {
 	RottenCount     int     `json:"rotten_count"`
 	ErrorRate       float64 `json:"error_rate"`
 	DurationSeconds int     `json:"duration_seconds"`
+	// links hold one edge per discovered page except the seed
+	Discovered int `json:"-"`
 }
 
 func (s *Store) GetCrawlStats(jobID string) (CrawlStats, error) {
@@ -63,9 +65,10 @@ func (s *Store) GetCrawlStats(jobID string) (CrawlStats, error) {
 		       COALESCE(AVG(response_time), 0),
 		       COALESCE(MAX(response_time), 0),
 		       COALESCE(SUM(NOT is_alive), 0),
-		       COALESCE(TIMESTAMPDIFF(SECOND, MIN(checked_at), MAX(checked_at)), 0)
-		FROM pages WHERE job_id = UUID_TO_BIN(?)`, jobID).
-		Scan(&cs.TotalPages, &retries, &avg, &cs.MaxResponseMs, &cs.RottenCount, &cs.DurationSeconds)
+		       COALESCE(TIMESTAMPDIFF(SECOND, MIN(checked_at), MAX(checked_at)), 0),
+		       (SELECT COUNT(*) + 1 FROM links WHERE job_id = UUID_TO_BIN(?))
+		FROM pages WHERE job_id = UUID_TO_BIN(?)`, jobID, jobID).
+		Scan(&cs.TotalPages, &retries, &avg, &cs.MaxResponseMs, &cs.RottenCount, &cs.DurationSeconds, &cs.Discovered)
 	if err != nil {
 		return cs, err
 	}

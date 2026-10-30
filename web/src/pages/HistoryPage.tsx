@@ -19,7 +19,8 @@ export default function HistoryPage() {
         <div className="gutter pt-10 pb-6">
           <h1 className="page-title">History</h1>
           <p className="text-ink-3 text-body mt-1">
-            Crawls saved to <span className="text-ink-2 font-semibold">{user?.username}</span>
+            Crawls saved to{' '}
+            <span className="text-ink-2 font-semibold wrap-anywhere">{user?.username}</span>
           </p>
         </div>
         <History />

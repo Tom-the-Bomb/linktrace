@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 
 export const fieldStyle =
-  'rounded-control bg-panel text-ink shadow-control transition hover:shadow-control-hover';
+  'rounded-control bg-panel text-ink shadow-control transition hover:not-focus-within:shadow-control-hover';
 
 function Input({ className, ...props }: React.ComponentProps<'input'>) {
   return (

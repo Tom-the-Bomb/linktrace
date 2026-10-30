@@ -1,11 +1,9 @@
 package queue
 
 import (
-	"context"
 	"encoding/json"
 	"log"
 	"strconv"
-	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
@@ -23,8 +21,6 @@ const (
 
 func ShardQueue(i int) string { return WorkQueuePrefix + "." + strconv.Itoa(i) }
 
-const publishTimeout = 5 * time.Second
-
 type PageJob struct {
 	JobID      string `json:"job_id"`
 	URL        string `json:"url"`
@@ -38,12 +34,9 @@ type PageJob struct {
 }
 
 type PageChecked struct {
-	JobID   string           `json:"job_id"`
-	URL     string           `json:"url"`
-	IsAlive bool             `json:"is_alive"`
-	Result  store.PageResult `json:"result"`
-	SEO     *store.SEOAudit  `json:"seo"` // nil unless the page is healthy HTML
-	Links   []string         `json:"links,omitempty"`
+	store.PageResult `json:"result"`
+	SEO              *store.SEOAudit `json:"seo"` // nil unless the page is healthy HTML
+	Links            []string        `json:"links,omitempty"`
 }
 
 type Queue struct {
@@ -72,7 +65,7 @@ func New(url string, shards int) (*Queue, error) {
 	return q, nil
 }
 
-// amqp091 doesn't reconnect, so a lost connection or channel exits and Docker restarts the process
+// amqp.Dial doesn't reconnect, so a lost connection or channel exits and Docker restarts the process
 func exitOnClose(closed chan *amqp.Error) {
 	if err := <-closed; err != nil {
 		log.Fatalf("[queue] %v", err)
@@ -88,10 +81,7 @@ func (q *Queue) publish(exchange, key string, v any) error {
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), publishTimeout)
-	defer cancel()
-
-	return q.ch.PublishWithContext(ctx,
+	return q.ch.Publish(
 		exchange, key, false, false,
 		amqp.Publishing{
 			ContentType:  "application/json",

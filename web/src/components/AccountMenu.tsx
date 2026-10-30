@@ -43,7 +43,7 @@ export default function AccountMenu({ user }: { user: Me }) {
               aria-hidden="true"
               className="bg-ink text-code flex size-6 items-center justify-center rounded-full font-semibold text-white uppercase"
             >
-              {user.username.slice(0, 1)}
+              {[...user.username][0]}
             </span>
             <span className="hidden max-w-36 truncate sm:block">{user.username}</span>
             <ChevronDown
@@ -82,8 +82,9 @@ export default function AccountMenu({ user }: { user: Me }) {
           message={
             <>
               This deletes the account{' '}
-              <span className="text-ink font-semibold">{user.username}</span> and every crawl
-              you&rsquo;ve run (any still running are stopped). It can&rsquo;t be undone.
+              <span className="text-ink font-semibold wrap-anywhere">{user.username}</span> and
+              every crawl you&rsquo;ve run (any still running are stopped). It can&rsquo;t be
+              undone.
             </>
           }
           confirmLabel="Delete account"

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { ArrowUpRight, CircleCheck, CornerDownRight, Download } from 'lucide-react';
 
@@ -27,22 +27,18 @@ export function BrokenLinks({
   siteUrl: string;
   onSelect: (url: string) => void;
 }) {
-  const broken = useMemo(() => rows.filter((r) => !r.is_alive), [rows]);
+  const broken = rows.filter((r) => !r.is_alive);
   const [group, setGroup] = useState<string>('all');
 
-  const groups = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const r of broken) {
-      const g = failureGroup(r.error_type);
-      counts.set(g, (counts.get(g) ?? 0) + 1);
-    }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  }, [broken]);
+  const counts = new Map<string, number>();
+  for (const r of broken) {
+    const g = failureGroup(r.error_type);
+    counts.set(g, (counts.get(g) ?? 0) + 1);
+  }
+  const groups = [...counts.entries()].sort((a, b) => b[1] - a[1]);
 
-  const filtered = useMemo(
-    () => (group === 'all' ? broken : broken.filter((r) => failureGroup(r.error_type) === group)),
-    [broken, group],
-  );
+  const filtered =
+    group === 'all' ? broken : broken.filter((r) => failureGroup(r.error_type) === group);
   const { page, setPage, paged } = usePagination(filtered, PAGE_SIZE);
 
   function pickGroup(g: string) {

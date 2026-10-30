@@ -47,7 +47,7 @@ export function History() {
       {error && <ErrorBanner className="mx-5 mb-4 sm:mx-8">{error}</ErrorBanner>}
 
       {!entries && !error && (
-        <div className="panel h-48 animate-pulse" aria-busy="true" aria-label="Loading history" />
+        <div className="panel h-48 animate-pulse" role="status" aria-label="Loading history" />
       )}
 
       {entries && entries.length === 0 && (

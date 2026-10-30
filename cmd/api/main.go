@@ -170,12 +170,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	seedJob := queue.PageJob{JobID: id, URL: seed, Site: crawler.SiteKey(u.Hostname())}
 	var anonOwner string
 	if owner == "" {
-		hash, err := auth.OwnerHash(w, r)
-		if err != nil {
-			serverError(w, "start the crawl", err)
-			return
-		}
-		anonOwner, seedJob.MaxPages = hash, s.cfg.AnonMaxPages
+		anonOwner, seedJob.MaxPages = auth.OwnerHash(w, r), s.cfg.AnonMaxPages
 		// one anonymous crawl per site; a repeat request joins it
 		if holder, claimed := s.claimHost(seedJob.Site, id); !claimed {
 			log.Printf("[api] %s already being crawled by job %s, joining it", seed, short(holder))
@@ -227,7 +222,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	if err := s.cache.MarkSeen(id, crawler.CanonicalKey(seed)); err != nil {
 		log.Printf("[api] MarkSeen seed: %v", err)
 	}
-	_ = s.cache.IncDiscovered(id)
+	_ = s.cache.IncProgress(id, "discovered")
 	seedJob.Shard, seedJob.CrawlDelay = shard, audit.CrawlDelay
 	if err := s.queue.PublishPageJob(seedJob); err != nil {
 		_ = s.store.UpdateJobStatus(id, "failed")
@@ -291,7 +286,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if prog.Checked == 0 {
 		if cs, serr := s.store.GetCrawlStats(job.ID); serr == nil && cs.TotalPages > 0 {
 			prog = cache.Progress{
-				Discovered: cs.TotalPages,
+				Discovered: max(cs.TotalPages, cs.Discovered),
 				Checked:    cs.TotalPages,
 				Healthy:    cs.TotalPages - cs.RottenCount,
 				Rotten:     cs.RottenCount,

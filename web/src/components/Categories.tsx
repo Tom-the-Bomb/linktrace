@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { ArrowDown, ArrowUp } from 'lucide-react';
 
@@ -36,7 +36,7 @@ function inFilter(pattern: string, filter: Filter): boolean {
 const SORT_VALUE: Record<SortKey, (c: CategoryReport) => number> = {
   pages: (c) => c.total_pages,
   rot: (c) => (c.total_pages > 0 ? c.rotten_pages / c.total_pages : 0),
-  seo: (c) => c.avg_seo_score,
+  seo: (c) => c.avg_seo_score ?? -1,
 };
 
 export function Categories({
@@ -50,13 +50,11 @@ export function Categories({
   const [sortKey, setSortKey] = useState<SortKey>('pages');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  const filtered = useMemo(() => {
-    const value = SORT_VALUE[sortKey];
-    const dir = sortDir === 'asc' ? 1 : -1;
-    return categories
-      .filter((c) => inFilter(c.pattern, filter))
-      .sort((a, b) => dir * (value(a) - value(b)));
-  }, [categories, filter, sortKey, sortDir]);
+  const value = SORT_VALUE[sortKey];
+  const dir = sortDir === 'asc' ? 1 : -1;
+  const filtered = categories
+    .filter((c) => inFilter(c.pattern, filter))
+    .sort((a, b) => dir * (value(a) - value(b)));
 
   const { page, setPage, paged } = usePagination(filtered, PAGE_SIZE);
 
@@ -183,7 +181,7 @@ function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
           {cat.total_pages.toLocaleString()} {cat.total_pages === 1 ? 'page' : 'pages'}
           <span className="sm:hidden">
             {', '}SEO{' '}
-            <span className={scoreTextColour(cat.avg_seo_score)}>{cat.avg_seo_score}</span>
+            <span className={scoreTextColour(cat.avg_seo_score)}>{cat.avg_seo_score ?? 'n/a'}</span>
           </span>
         </div>
       </div>
@@ -202,7 +200,7 @@ function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
         className={`text-label hidden text-right font-mono font-medium sm:block ${scoreTextColour(cat.avg_seo_score)}`}
       >
         <span className="sr-only">SEO </span>
-        {cat.avg_seo_score}
+        {cat.avg_seo_score ?? 'n/a'}
       </span>
 
       <Badge variant={style.tone} className="justify-self-end">

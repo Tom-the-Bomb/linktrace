@@ -60,7 +60,7 @@ func ExtractLinks(body []byte, page *url.URL) []string {
 		case !ok:
 		// relative links resolve against the first <base>, as in a browser
 		case n.Data == "base" && base == page:
-			if b, err := page.Parse(href); err == nil {
+			if b, err := page.Parse(strings.TrimSpace(href)); err == nil {
 				base = b
 			}
 		case n.Data == "a":

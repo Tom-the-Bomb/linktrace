@@ -12,16 +12,13 @@ const ownerCookieName = "lt_owner"
 
 const ownerTTL = 365 * 24 * time.Hour
 
-func OwnerHash(w http.ResponseWriter, r *http.Request) (string, error) {
+func OwnerHash(w http.ResponseWriter, r *http.Request) string {
 	if c, err := r.Cookie(ownerCookieName); err == nil && c.Value != "" {
-		return hashToken(c.Value), nil
+		return hashToken(c.Value)
 	}
-	token, err := NewToken()
-	if err != nil {
-		return "", err
-	}
+	token := NewToken()
 	setCookie(w, ownerCookieName, token, int(ownerTTL.Seconds()))
-	return hashToken(token), nil
+	return hashToken(token)
 }
 
 func OwnsAnonymous(r *http.Request, wantHash string) bool {

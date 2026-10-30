@@ -137,7 +137,7 @@ function JobReport({ jobId }: { jobId: string }) {
           recrawling={submitting}
         />
 
-        {report && (
+        {report && report.overall.total_pages > 0 && (
           <GridRow>
             <OverallReport report={report} />
           </GridRow>
@@ -188,7 +188,7 @@ function JobReport({ jobId }: { jobId: string }) {
           </GridRow>
         )}
 
-        {rows.length > 0 && isDone && (
+        {rows.length > 0 && (
           <GridRow>
             <BrokenLinks
               rows={rows}

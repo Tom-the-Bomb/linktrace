@@ -103,7 +103,8 @@ func handleMeta(a *Audit, n *html.Node) {
 	case name == "viewport":
 		a.HasViewport = true
 	case name == "robots":
-		a.Noindex = strings.Contains(strings.ToLower(content), "noindex")
+		// any robots tag can set it, as Google applies the most restrictive
+		a.Noindex = a.Noindex || strings.Contains(strings.ToLower(content), "noindex")
 	case strings.HasPrefix(property, "og:"):
 		a.OGTags[property] = content
 	case strings.HasPrefix(name, "twitter:"):

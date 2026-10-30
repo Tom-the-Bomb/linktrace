@@ -28,7 +28,7 @@ export function Pager({ page, total, size, onPage }: Props) {
           onClick={() => page > 1 && onPage(page - 1)}
           aria-disabled={page <= 1}
           aria-label="Previous page"
-          className="aria-disabled:pointer-events-none aria-disabled:opacity-30"
+          className="aria-disabled:pointer-events-none aria-disabled:opacity-30 aria-disabled:focus-visible:opacity-100"
         >
           <ChevronLeft strokeWidth={2.25} />
         </Button>
@@ -41,7 +41,7 @@ export function Pager({ page, total, size, onPage }: Props) {
           onClick={() => page < pageCount && onPage(page + 1)}
           aria-disabled={page >= pageCount}
           aria-label="Next page"
-          className="aria-disabled:pointer-events-none aria-disabled:opacity-30"
+          className="aria-disabled:pointer-events-none aria-disabled:opacity-30 aria-disabled:focus-visible:opacity-100"
         >
           <ChevronRight strokeWidth={2.25} />
         </Button>

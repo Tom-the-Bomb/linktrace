@@ -105,6 +105,10 @@
   html {
     color-scheme: light;
   }
+  /* keeps tabbed-to controls clear of the sticky report header */
+  html:has(header.sticky) {
+    scroll-padding-top: 10rem;
+  }
   body {
     background: var(--color-canvas);
     color: var(--color-ink);
@@ -228,5 +232,8 @@
     & * {
       color: inherit;
     }
+  }
+  :is([aria-selected='true'], [aria-checked='true'], [aria-pressed='true']):focus-visible {
+    outline-color: CanvasText;
   }
 }

@@ -8,8 +8,8 @@ COPY web/ ./
 ARG VITE_SITE_URL=https://linktrace.tomthebomb.dev
 RUN npm run build
 
-# Vite copies index.html, robots.txt and sitemap.xml verbatim, so their hardcoded origin is
-# rewritten here for other domains
+# index.html, robots.txt and sitemap.xml hardcode the origin, so it's rewritten here for other
+# domains
 RUN find dist -type f \( -name '*.html' -o -name '*.xml' -o -name '*.txt' \) \
       -exec sed -i "s|https://linktrace.tomthebomb.dev|${VITE_SITE_URL}|g" {} \;
 

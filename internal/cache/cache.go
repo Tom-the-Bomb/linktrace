@@ -28,6 +28,7 @@ type Progress struct {
 	Checked    int `redis:"checked"`
 	Healthy    int `redis:"healthy"`
 	Rotten     int `redis:"rotten"`
+	Archived   int `redis:"archived"`
 }
 
 const (
@@ -78,11 +79,11 @@ func (c *Cache) DeleteSession(sid string) error {
 	return c.rdb.Del(ctx, sessionKey(sid)).Err()
 }
 
-func (c *Cache) IncDiscovered(jobID string) error {
+func (c *Cache) IncProgress(jobID, field string) error {
 	ctx, cancel := c.ctx()
 	defer cancel()
 
-	if err := c.rdb.HIncrBy(ctx, progressKey(jobID), "discovered", 1).Err(); err != nil {
+	if err := c.rdb.HIncrBy(ctx, progressKey(jobID), field, 1).Err(); err != nil {
 		return err
 	}
 	return c.rdb.Expire(ctx, progressKey(jobID), jobTTL).Err()

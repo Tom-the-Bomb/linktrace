@@ -72,16 +72,9 @@ const zoomFilter = (ev: MouseEvent) => ev.ctrlKey || ev.metaKey;
 const MAX_ZOOM = 2.5;
 const LEGEND_SECTIONS = 8;
 
-function nodeRadius(depth: number): number {
-  if (depth === 0) {
-    return 5;
-  }
-  return Math.max(2, 3.8 - depth * 0.35);
-}
-
 // floored in screen pixels so a whole-site fit reads as dots, not specks
 function drawRadius(depth: number, scale: number): number {
-  return Math.max(nodeRadius(depth), (depth === 0 ? 6 : 3.2) / scale);
+  return depth === 0 ? Math.max(5, 6 / scale) : Math.max(2, 3.8 - depth * 0.35, 3.2 / scale);
 }
 
 interface Props {
@@ -146,7 +139,7 @@ export const GraphView = memo(function GraphView({
     }
     const obs = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
-      setSize({ width, height: Math.max(420, height) });
+      setSize({ width, height });
     });
     obs.observe(containerRef.current);
     return () => obs.disconnect();
@@ -260,18 +253,19 @@ export const GraphView = memo(function GraphView({
   const matchIds = useMemo(() => new Set(matches.map((n) => n.id)), [matches]);
   const brokenCount = useMemo(() => graph.nodes.filter((n) => !n.is_alive).length, [graph]);
 
-  // zoomToFit has no max zoom, so clamp once it lands
+  // zoomToFit has no max zoom
   const fitTo = (ms: number, padding: number, only?: Set<string>) => {
     const fg = fgRef.current;
     if (!fg || graph.nodes.length === 0) {
       return;
     }
-    fg.zoomToFit(ms, padding, only && ((node) => only.has((node as FgNode).id)));
-    setTimeout(() => {
-      if (fgRef.current && fgRef.current.zoom() > MAX_ZOOM) {
-        fgRef.current.zoom(MAX_ZOOM, 200);
-      }
-    }, ms + 50);
+    const { x, y } = fg.getGraphBbox(only && ((node) => only.has((node as FgNode).id)));
+    const fit = Math.min(
+      (size.width - padding * 2) / (x[1] - x[0]),
+      (size.height - padding * 2) / (y[1] - y[0]),
+    );
+    fg.centerAt((x[0] + x[1]) / 2, (y[0] + y[1]) / 2, ms);
+    fg.zoom(Math.min(fit, MAX_ZOOM), ms);
   };
   const fitView = () => fitTo(400, 20);
   // after the first fit, additions get a short reheat so slow devices don't stall
@@ -394,7 +388,7 @@ export const GraphView = memo(function GraphView({
 
       <div
         ref={containerRef}
-        className="bg-sunken/60 relative h-[68vh] min-h-110 [&_canvas]:touch-pan-y!"
+        className="bg-sunken/60 relative h-[68vh] min-h-110 forced-color-adjust-none [&_canvas]:touch-pan-y!"
         style={{
           backgroundImage: 'radial-gradient(var(--color-line-strong) 1px, transparent 1px)',
           backgroundSize: '22px 22px',
@@ -552,7 +546,7 @@ function ZoomButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="text-ink-2 hover:bg-sunken hover:text-ink flex size-8 items-center justify-center border-b transition last:border-0 focus-visible:-outline-offset-2"
+      className="text-ink-2 hover:bg-sunken hover:text-ink flex size-8 items-center justify-center border-b transition last:border-0 focus-visible:-outline-offset-2!"
     >
       {children}
     </button>

@@ -58,8 +58,8 @@ export function ProgressView({
           <p className="text-ink-3 mt-1 text-sm tabular-nums">
             {isDone && (
               <>
-                Checked {checked.toLocaleString()} of the {discovered.toLocaleString()} pages
-                found.{' '}
+                Checked {checked.toLocaleString()} of the {discovered.toLocaleString()}{' '}
+                {discovered === 1 ? 'page' : 'pages'} found.{' '}
               </>
             )}
             Started {formatDate(created_at, true)}.
@@ -118,7 +118,8 @@ export function ProgressView({
             <p className="text-body font-medium">
               Checking <span className="tabular-nums">{checked.toLocaleString()}</span>
               <span className="text-ink-3"> of </span>
-              <span className="tabular-nums">{discovered.toLocaleString()}</span> pages found
+              <span className="tabular-nums">{discovered.toLocaleString()}</span>{' '}
+              {discovered === 1 ? 'page' : 'pages'} found
             </p>
             <span className="text-ink-2 font-mono text-sm">{pct(checked, discovered)}%</span>
           </div>

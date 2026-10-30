@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { BROKEN_HEX, INK_HEX, LINE_STRONG_HEX, SECTION_HEX, TOOLTIP_TEXT } from '../lib/colours';
+import { BROKEN_HEX, LINE_STRONG_HEX, SECTION_HEX, TOOLTIP_TEXT } from '../lib/colours';
 import { buildTree, nodeNote, pathFromRoot } from '../lib/graph';
 import { NodeTooltip } from './ui/NodeTooltip';
 import { ScoreScale } from './ui/ScoreScale';
@@ -207,7 +207,7 @@ function SampleGraph({ p }: { p: number }) {
     <div className="relative mx-auto max-w-105 px-3">
       <svg
         viewBox="0 0 400 300"
-        className="block h-auto w-full forced-color-adjust-none"
+        className="block h-auto w-full"
         aria-label="Sample site graph: four sections, three broken pages"
       >
         {LINKS.map(([a, b]) => (
@@ -217,7 +217,7 @@ function SampleGraph({ p }: { p: number }) {
             y1={NODES[a].y}
             x2={NODES[b].x}
             y2={NODES[b].y}
-            stroke={linkLit(b) ? INK_HEX : LINE_STRONG_HEX}
+            stroke={linkLit(b) ? 'currentColor' : LINE_STRONG_HEX}
             strokeWidth={linkLit(b) ? 1.6 : 1}
             style={{
               opacity: !shown(NODES[b].d) ? 0 : lit && !linkLit(b) ? 0.4 : 1,
@@ -265,11 +265,11 @@ function SampleGraph({ p }: { p: number }) {
                   cy={n.y}
                   r={hoverRingRadius(i)}
                   fill="none"
-                  stroke={INK_HEX}
+                  stroke="currentColor"
                   strokeWidth="1.6"
                 />
               )}
-              <circle cx={n.x} cy={n.y} r={r} fill={n.s < 0 ? INK_HEX : SECTION_HEX[n.s]} />
+              <circle cx={n.x} cy={n.y} r={r} fill={n.s < 0 ? 'currentColor' : SECTION_HEX[n.s]} />
             </g>
           );
         })}

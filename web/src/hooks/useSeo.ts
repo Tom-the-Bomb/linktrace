@@ -23,16 +23,6 @@ function upsertMeta(key: 'name' | 'property', value: string, content: string) {
   el.setAttribute('content', content);
 }
 
-function upsertCanonical(href: string) {
-  let el = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
-  if (!el) {
-    el = document.createElement('link');
-    el.setAttribute('rel', 'canonical');
-    document.head.appendChild(el);
-  }
-  el.setAttribute('href', href);
-}
-
 export function useSeo({ title, path, noindex }: SeoOptions = {}) {
   useEffect(() => {
     const fullTitle = title ? `${title} | ${SITE_NAME}` : DEFAULT_TITLE;
@@ -42,6 +32,6 @@ export function useSeo({ title, path, noindex }: SeoOptions = {}) {
     upsertMeta('name', 'robots', noindex ? 'noindex, nofollow' : 'index, follow');
     upsertMeta('property', 'og:title', fullTitle);
     upsertMeta('property', 'og:url', url);
-    upsertCanonical(url);
+    document.head.querySelector('link[rel="canonical"]')?.setAttribute('href', url);
   }, [title, path, noindex]);
 }

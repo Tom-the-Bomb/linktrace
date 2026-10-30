@@ -3,7 +3,6 @@ const BASE = '/api';
 export type JobStatus = 'pending' | 'crawling' | 'complete' | 'failed' | 'stopped';
 
 export interface Status {
-  job_id: string;
   url: string;
   status: JobStatus;
   created_at: string;
@@ -41,7 +40,7 @@ export interface CategoryReport {
   category: string;
   total_pages: number;
   rotten_pages: number;
-  avg_seo_score: number;
+  avg_seo_score: number | null;
   pattern: string;
 }
 
@@ -214,7 +213,6 @@ export function getGraph(id: string): Promise<GraphData> {
 }
 
 export interface SEODetail {
-  url: string;
   title: string;
   title_length: number;
   meta_description: string;
@@ -238,7 +236,6 @@ export interface SEODetail {
   og_tags: Record<string, string> | null;
   twitter_tags: Record<string, string> | null;
   jsonld_count: number;
-  jsonld_types: string[] | null;
   has_viewport: boolean;
   noindex: boolean;
   top_keywords: KeywordCount[] | null;

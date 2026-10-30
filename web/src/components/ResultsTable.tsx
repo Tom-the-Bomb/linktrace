@@ -47,39 +47,34 @@ export function ResultsTable({
     return { all: rows.length, healthy: rows.length - rotten, rotten };
   }, [rows]);
 
-  const filtered = useMemo(() => {
-    let r = rows;
-    if (filter === 'rotten') {
-      r = r.filter((x) => !x.is_alive);
-    } else if (filter === 'healthy') {
-      r = r.filter((x) => x.is_alive);
-    }
-    const q = query.trim().toLowerCase();
-    if (q) {
-      r = r.filter((x) => x.url.toLowerCase().includes(q));
-    }
-    return r;
-  }, [rows, filter, query]);
+  let filtered = rows;
+  if (filter === 'rotten') {
+    filtered = filtered.filter((x) => !x.is_alive);
+  } else if (filter === 'healthy') {
+    filtered = filtered.filter((x) => x.is_alive);
+  }
+  const q = query.trim().toLowerCase();
+  if (q) {
+    filtered = filtered.filter((x) => x.url.toLowerCase().includes(q));
+  }
 
-  const sorted = useMemo(() => {
-    const dir = sortDir === 'asc' ? 1 : -1;
-    return [...filtered].sort((a, b) => {
-      if (sortKey === 'seo') {
-        // no-score pages sink to the bottom in either direction
-        if (a.seo_score === null) {
-          return b.seo_score === null ? 0 : 1;
-        }
-        if (b.seo_score === null) {
-          return -1;
-        }
-        return (a.seo_score - b.seo_score) * dir;
+  const dir = sortDir === 'asc' ? 1 : -1;
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortKey === 'seo') {
+      // no-score pages sink to the bottom in either direction
+      if (a.seo_score === null) {
+        return b.seo_score === null ? 0 : 1;
       }
-      if (sortKey === 'response') {
-        return (a.response_time - b.response_time) * dir;
+      if (b.seo_score === null) {
+        return -1;
       }
-      return (a.depth - b.depth) * dir;
-    });
-  }, [filtered, sortKey, sortDir]);
+      return (a.seo_score - b.seo_score) * dir;
+    }
+    if (sortKey === 'response') {
+      return (a.response_time - b.response_time) * dir;
+    }
+    return (a.depth - b.depth) * dir;
+  });
 
   function exportCsv() {
     const csv = toCsv(
@@ -138,7 +133,7 @@ export function ResultsTable({
           ))}
         </ToggleGroup>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-          <InputGroup className="flex-1 sm:w-56 sm:flex-none">
+          <InputGroup className="sm:w-56">
             <InputGroupAddon>
               <Search />
             </InputGroupAddon>

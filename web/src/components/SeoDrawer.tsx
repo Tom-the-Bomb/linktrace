@@ -27,9 +27,9 @@ interface Props {
 }
 
 export function SeoDrawer({ jobId, url, open, row, tree, onNavigate, onClose }: Props) {
-  const [detail, setDetail] = useState<SEODetail | null>(null);
+  // undefined while loading, null when the page has no audit
+  const [detail, setDetail] = useState<SEODetail | null>();
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   // no SheetTrigger for Radix to refocus, so focus is handed back to the opener
   const opener = useRef<HTMLElement | null>(null);
 
@@ -38,13 +38,11 @@ export function SeoDrawer({ jobId, url, open, row, tree, onNavigate, onClose }: 
       return;
     }
     let cancelled = false;
-    setLoading(true);
     setError(null);
-    setDetail(null);
+    setDetail(undefined);
     getSEODetail(jobId, url)
       .then((d) => !cancelled && setDetail(d))
-      .catch((e) => !cancelled && setError(errMessage(e)))
-      .finally(() => !cancelled && setLoading(false));
+      .catch((e) => !cancelled && setError(errMessage(e)));
     return () => {
       cancelled = true;
     };
@@ -94,9 +92,9 @@ export function SeoDrawer({ jobId, url, open, row, tree, onNavigate, onClose }: 
           className="flex-1 overflow-y-auto p-5 focus-visible:-outline-offset-2 sm:px-6"
         >
           <PageContext url={url} row={row} tree={tree} onNavigate={onNavigate} />
-          {loading && <Skeleton />}
+          {detail === undefined && !error && <Skeleton />}
           {error && <ErrorBanner>{error}</ErrorBanner>}
-          {!loading && !error && !detail && <NoAuditState />}
+          {detail === null && <NoAuditState />}
           {detail && <SeoBody detail={detail} />}
         </div>
       </SheetContent>
@@ -140,10 +138,10 @@ function PageContext({
                 href={row.archive_url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-link-600 inline-flex items-center gap-0.5 hover:underline"
+                className="text-link-600 inline-block hover:underline"
               >
                 See the saved copy on the Wayback Machine
-                <ArrowUpRight className="size-3.5" strokeWidth={2.25} />
+                <ArrowUpRight className="ml-0.5 inline size-3.5" strokeWidth={2.25} />
               </a>
             </>
           ) : (
@@ -159,7 +157,7 @@ function PageContext({
             {foundOn ? (
               <button
                 onClick={() => onNavigate(foundOn)}
-                className="tap-area text-link-600 text-label font-mono hover:underline"
+                className="tap-area text-link-600 text-label max-w-full truncate font-mono hover:underline"
               >
                 {pathOf(foundOn)}
               </button>
@@ -179,16 +177,18 @@ function PageContext({
             <dd className="mt-1">
               <ol className="text-caption flex flex-wrap items-center gap-x-1 gap-y-1 font-mono">
                 {chain.map((u, i) => (
-                  <li key={u} className="flex items-center gap-1">
-                    {i > 0 && <ChevronRight className="text-ink-4 size-3" strokeWidth={2.5} />}
+                  <li key={u} className="flex min-w-0 items-center gap-1">
+                    {i > 0 && (
+                      <ChevronRight className="text-ink-4 size-3 shrink-0" strokeWidth={2.5} />
+                    )}
                     {u === url ? (
-                      <span className="text-ink" aria-current="page">
+                      <span className="text-ink truncate" aria-current="page">
                         {pathOf(u)}
                       </span>
                     ) : (
                       <button
                         onClick={() => onNavigate(u)}
-                        className="tap-area text-ink-2 hover:text-ink hover:underline"
+                        className="tap-area text-ink-2 hover:text-ink truncate hover:underline"
                       >
                         {pathOf(u)}
                       </button>
@@ -225,7 +225,7 @@ function NoAuditState() {
 
 function Skeleton() {
   return (
-    <div className="space-y-4" aria-busy="true" aria-label="Loading audit">
+    <div className="space-y-4" role="status" aria-label="Loading audit">
       <div className="bg-sunken rounded-panel h-20 animate-pulse" />
       <div className="bg-sunken rounded-panel h-32 animate-pulse" />
       <div className="bg-sunken rounded-panel h-24 animate-pulse" />
@@ -237,7 +237,7 @@ function SeoBody({ detail }: { detail: SEODetail }) {
   const tier = scoreTierBadge(detail.score);
   return (
     <div className="space-y-7">
-      <div className="flex items-end justify-between border-b pb-6">
+      <div className="flex flex-wrap items-end justify-between gap-x-4 border-b pb-6">
         <span>
           <span className="text-ink-3 text-label block font-medium">SEO score</span>
           <Badge variant={tier.tone} className="mt-1.5">
@@ -352,7 +352,7 @@ function SeoBody({ detail }: { detail: SEODetail }) {
 
       {detail.primary_keyword && (
         <Section label="Keywords">
-          <p className="flex items-baseline gap-2">
+          <p className="flex flex-wrap items-baseline gap-2">
             <span className="tracking-headline text-2xl font-semibold">
               {detail.primary_keyword}
             </span>
@@ -431,7 +431,7 @@ function Signal({ label, ok }: { label: string; ok: boolean }) {
   return (
     <li className="flex items-center gap-2.5 border-b py-2 text-sm">
       <span
-        className={`rounded-control flex size-4.5 items-center justify-center ${ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}
+        className={`rounded-control flex size-4.5 shrink-0 items-center justify-center ${ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}
       >
         <Icon className="size-3" strokeWidth={3} />
       </span>

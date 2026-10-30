@@ -62,37 +62,25 @@ func main() {
 
 	w := &worker{cfg: cfg, cache: ca, queue: q}
 	rb := &reportBuilder{store: st, cache: ca}
-	ac := &archiveChecker{store: st, cache: ca}
+	ac := &archiveChecker{rb}
 
 	var wg sync.WaitGroup
-	var channels []*amqp.Channel
-
-	pageChs, err := startPageWorkers(w, &wg)
+	channels, err := startPageWorkers(w, &wg)
 	if err != nil {
 		log.Fatalf("page workers: %v", err)
 	}
-	channels = append(channels, pageChs...)
-
-	consumers := []struct {
-		name        string
-		concurrency int
-		handler     func(msg queue.PageChecked, final bool) error
-	}{
-		{queue.QReport, reportConsumers, rb.handle},
-		{queue.QArchive, archiveConsumers, ac.handle},
+	reportCh, err := runConsumer(q, queue.QReport, reportConsumers, &wg, rb.handle)
+	if err != nil {
+		log.Fatalf("report consumer: %v", err)
 	}
-	totalConsumers := 0
-	for _, c := range consumers {
-		ch, err := runConsumer(q, c.name, c.concurrency, &wg, c.handler)
-		if err != nil {
-			log.Fatalf("consumer %s: %v", c.name, err)
-		}
-		channels = append(channels, ch)
-		totalConsumers += c.concurrency
+	archiveCh, err := runConsumer(q, queue.QArchive, archiveConsumers, &wg, ac.handle)
+	if err != nil {
+		log.Fatalf("archive consumer: %v", err)
 	}
+	channels = append(channels, reportCh, archiveCh)
 
 	log.Printf("worker running: %d page goroutines across %d shards + %d result consumers",
-		cfg.WorkerCount, cfg.ShardCount, totalConsumers)
+		cfg.WorkerCount, cfg.ShardCount, reportConsumers+archiveConsumers)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -224,10 +212,7 @@ func (w *worker) republish(d amqp.Delivery, job queue.PageJob) {
 
 func (w *worker) publishResult(job queue.PageJob, res checker.CheckResult, links []string) {
 	msg := queue.PageChecked{
-		JobID:   job.JobID,
-		URL:     job.URL,
-		IsAlive: res.IsAlive,
-		Result: store.PageResult{
+		PageResult: store.PageResult{
 			JobID:        job.JobID,
 			URL:          job.URL,
 			StatusCode:   res.StatusCode,
@@ -248,7 +233,7 @@ func (w *worker) publishResult(job queue.PageJob, res checker.CheckResult, links
 }
 
 func (w *worker) publishChild(child queue.PageJob) {
-	_ = w.cache.IncDiscovered(child.JobID)
+	_ = w.cache.IncProgress(child.JobID, "discovered")
 	if err := w.queue.PublishPageJob(child); err != nil {
 		log.Printf("[worker] publish child %s: %v", child.URL, err)
 	}
@@ -373,7 +358,7 @@ func (rb *reportBuilder) handle(msg queue.PageChecked, final bool) error {
 }
 
 func (rb *reportBuilder) save(msg queue.PageChecked) error {
-	if err := rb.store.InsertPageResult(msg.Result); err != nil {
+	if err := rb.store.InsertPageResult(msg.PageResult); err != nil {
 		return err
 	}
 	if msg.SEO != nil {
@@ -397,7 +382,8 @@ func (rb *reportBuilder) maybeComplete(jobID string) error {
 	if err != nil {
 		return err
 	}
-	if prog.Discovered > 0 && prog.Checked >= prog.Discovered {
+	// broken pages also wait for their Wayback lookup, so the final report has every link
+	if prog.Discovered > 0 && prog.Checked >= prog.Discovered && prog.Archived >= prog.Rotten {
 		if err := rb.store.UpdateJobStatus(jobID, "complete"); err != nil {
 			return err
 		}
@@ -414,17 +400,28 @@ func (rb *reportBuilder) maybeComplete(jobID string) error {
 }
 
 type archiveChecker struct {
-	store *store.Store
-	cache *cache.Cache
+	*reportBuilder
 }
 
-func (ac *archiveChecker) handle(msg queue.PageChecked, _ bool) error {
-	if msg.IsAlive {
+// final is the last delivery: a lookup that still fails is counted anyway, so the crawl can
+// complete without it.
+func (ac *archiveChecker) handle(msg queue.PageChecked, final bool) error {
+	if msg.IsAlive || ac.cache.IsCancelled(msg.JobID) {
 		return nil
 	}
-	if ac.cache.IsCancelled(msg.JobID) {
-		return nil
+	if err := ac.lookup(msg); err != nil {
+		if !final {
+			return err
+		}
+		log.Printf("[archive] dropping %s: %v", msg.URL, err)
 	}
+	if err := ac.cache.IncProgress(msg.JobID, "archived"); err != nil {
+		return err
+	}
+	return ac.maybeComplete(msg.JobID)
+}
+
+func (ac *archiveChecker) lookup(msg queue.PageChecked) error {
 	log.Printf("[archive] looking up wayback for %s", msg.URL)
 	snap, err := archive.Available(msg.URL)
 	if err != nil {
