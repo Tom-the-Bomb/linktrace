@@ -1,93 +1,58 @@
-import { type FormEvent, useState } from 'react';
+import { useRef, useState } from 'react';
 
-import { useTypingPlaceholder } from '../hooks/useTypingPlaceholder';
+import { Globe } from 'lucide-react';
+
+import { useFocusShortcut } from '../hooks/useFocusShortcut';
+import { Button } from './ui/button';
+import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
+import { Kbd } from './ui/kbd';
+import { Spinner } from './ui/spinner';
 
 interface Props {
-  url: string;
-  setUrl: (s: string) => void;
-  onSubmit: (e: FormEvent) => void;
+  onSubmit: (url: string) => void;
   submitting: boolean;
-  error?: string | null;
-  // hero = large landing input w/ animated placeholder; compact = sticky-header bar
-  variant?: 'hero' | 'compact';
-  // extra controls beside submit (compact stop/back button)
   children?: React.ReactNode;
 }
 
-// shared URL input + submit button (landing hero and compact header)
-export function CrawlForm({
-  url,
-  setUrl,
-  onSubmit,
-  submitting,
-  error,
-  variant = 'hero',
-  children,
-}: Props) {
-  if (variant === 'compact') {
-    return (
-      <form onSubmit={onSubmit} className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto sm:max-w-md sm:flex-1">
-        <input
-          type="text"
-          required
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="new domain…"
-          className="input h-[34px] flex-1 px-3 text-xs"
-        />
-        <button
-          type="submit"
-          disabled={submitting}
-          // fixed size so the "crawl" -> "…" swap during submit can't shift layout
-          className="h-[34px] w-[80px] shrink-0 bg-accent font-mono text-[11px] uppercase tracking-widest text-ink-900 transition hover:bg-accent-soft disabled:opacity-50"
-        >
-          {submitting ? '…' : 'crawl'}
-        </button>
-        {children}
-      </form>
-    );
-  }
-
-  return <HeroForm url={url} setUrl={setUrl} onSubmit={onSubmit} submitting={submitting} error={error} />;
-}
-
-function HeroForm({ url, setUrl, onSubmit, submitting, error }: Omit<Props, 'variant' | 'children'>) {
-  const [focused, setFocused] = useState(false);
-  // pause when focused/non-empty so the fake caret doesn't fight the real one
-  const placeholder = useTypingPlaceholder(url === '' && !focused);
+export function CrawlForm({ onSubmit, submitting, children }: Props) {
+  const [url, setUrl] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  useFocusShortcut(inputRef);
   return (
-    <form onSubmit={onSubmit} className="mt-14 w-full max-w-2xl">
-      <div className="group relative">
-        <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 font-mono text-xs uppercase tracking-widest text-ink-300">
-          https://
-        </span>
-        <input
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(url);
+      }}
+      className="flex w-full flex-wrap items-center gap-2 md:max-w-lg md:flex-1"
+    >
+      <InputGroup className="grow basis-24">
+        <InputGroupAddon>
+          <Globe />
+        </InputGroupAddon>
+        <InputGroupInput
+          ref={inputRef}
+          aria-label="Domain to crawl"
           type="text"
+          inputMode="url"
+          autoComplete="url"
+          spellCheck={false}
           required
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          placeholder=""
-          className="w-full border border-ink-500 bg-ink-800/80 py-6 pl-6 pr-44 font-mono text-base text-paper shadow-card backdrop-blur-sm placeholder:text-ink-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40 sm:text-lg"
+          placeholder="Crawl another domain"
+          className="text-label font-mono placeholder:font-sans placeholder:text-sm"
         />
-        {/* fake placeholder: animated demo domain + blinking cursor */}
-        {url === '' && !focused && (
-          // override [&_span]:pointer-events-auto so these spans don't eat input clicks
-          <div className="pointer-events-none absolute left-6 top-1/2 flex -translate-y-1/2 items-center gap-px font-mono text-base text-ink-400/60 sm:text-lg [&_*]:!pointer-events-none">
-            <span>{placeholder}</span>
-            <span className="cursor-blink inline-block h-[1.2em] w-[2px] bg-accent/60" />
-          </div>
+        {url === '' && (
+          <InputGroupAddon align="inline-end" className="hidden sm:flex" aria-hidden="true">
+            <Kbd>/</Kbd>
+          </InputGroupAddon>
         )}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 bg-accent px-6 py-3.5 font-mono text-xs uppercase tracking-widest text-ink-900 shadow-amber transition hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {submitting ? 'starting…' : 'crawl →'}
-        </button>
-      </div>
-      {error && <p className="mt-4 font-mono text-xs text-rose-300">{error}</p>}
+      </InputGroup>
+      <Button type="submit" disabled={submitting} className="w-18">
+        {submitting ? <Spinner aria-label="Starting crawl" /> : 'Crawl'}
+      </Button>
+      {children}
     </form>
   );
 }

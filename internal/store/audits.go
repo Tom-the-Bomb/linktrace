@@ -3,39 +3,26 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+
+	"github.com/Tom-the-Bomb/linktrace/internal/site"
 )
 
-type SiteAudit struct {
-	RobotsFound       bool     `json:"robots_found"`
-	RobotsDisallowAll bool     `json:"robots_disallow_all"`
-	CrawlDelay        int      `json:"crawl_delay"`
-	SitemapFound      bool     `json:"sitemap_found"`
-	SitemapURL        string   `json:"sitemap_url"`
-	SitemapURLCount   int      `json:"sitemap_url_count"`
-	SitemapURLs       []string `json:"-"`
-	IsHTTPS           bool     `json:"is_https"`
-	HTTPSRedirect     bool     `json:"https_redirect"`
-	CertValid         bool     `json:"cert_valid"`
-	WWWCanonical      string   `json:"www_canonical"`
-}
-
-// persists the one-shot domain checks. Called once per crawl at job creation.
-func (s *Store) SaveSiteAudit(jobID string, a SiteAudit) error {
+func (s *Store) SaveSiteAudit(jobID string, a site.Audit) error {
 	_, err := s.db.Exec(
 		`INSERT INTO site_audits (job_id, robots_found, robots_disallow_all, crawl_delay,
 		 sitemap_found, sitemap_url, sitemap_url_count, sitemap_urls,
 		 is_https, https_redirect, cert_valid, www_canonical)
 		 VALUES (UUID_TO_BIN(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		jobID, a.RobotsFound, a.RobotsDisallowAll, a.CrawlDelay,
-		a.SitemapFound, nullIfEmpty(a.SitemapURL), a.SitemapURLCount, mustJSON(a.SitemapURLs),
+		a.SitemapFound, nullIfEmpty(clip(a.SitemapURL, 10000)), a.SitemapURLCount, mustJSON(a.SitemapURLs),
 		a.IsHTTPS, a.HTTPSRedirect, a.CertValid, a.WWWCanonical,
 	)
 	return err
 }
 
-// retrieves the one-shot domain checks. Returns (nil, nil) if absent.
-func (s *Store) GetSiteAudit(jobID string) (*SiteAudit, error) {
-	var a SiteAudit
+// returns (nil, nil) if absent.
+func (s *Store) GetSiteAudit(jobID string) (*site.Audit, error) {
+	var a site.Audit
 	var sitemapURL sql.NullString
 	var urls []byte
 	out, err := getOne(&a, func() error {
@@ -64,30 +51,29 @@ type CrawlStats struct {
 	RottenCount     int     `json:"rotten_count"`
 	ErrorRate       float64 `json:"error_rate"`
 	DurationSeconds int     `json:"duration_seconds"`
+	// links hold one edge per discovered page except the seed
+	Discovered int `json:"-"`
 }
 
-// aggregates per-page rows into the telemetry numbers. Pure SQL: nothing new stored.
 func (s *Store) GetCrawlStats(jobID string) (CrawlStats, error) {
 	var cs CrawlStats
-	var avg sql.NullFloat64
-	var maxMs, retries, rotten, dur sql.NullInt64
+	var retries int
+	var avg float64 // AVG returns a decimal
 	err := s.db.QueryRow(`
 		SELECT COUNT(*),
 		       COALESCE(SUM(retry_count), 0),
 		       COALESCE(AVG(response_time), 0),
 		       COALESCE(MAX(response_time), 0),
 		       COALESCE(SUM(NOT is_alive), 0),
-		       COALESCE(TIMESTAMPDIFF(SECOND, MIN(checked_at), MAX(checked_at)), 0)
-		FROM pages WHERE job_id = UUID_TO_BIN(?)`, jobID).
-		Scan(&cs.TotalPages, &retries, &avg, &maxMs, &rotten, &dur)
+		       COALESCE(TIMESTAMPDIFF(SECOND, MIN(checked_at), MAX(checked_at)), 0),
+		       (SELECT COUNT(*) + 1 FROM links WHERE job_id = UUID_TO_BIN(?))
+		FROM pages WHERE job_id = UUID_TO_BIN(?)`, jobID, jobID).
+		Scan(&cs.TotalPages, &retries, &avg, &cs.MaxResponseMs, &cs.RottenCount, &cs.DurationSeconds, &cs.Discovered)
 	if err != nil {
 		return cs, err
 	}
-	cs.TotalRequests = cs.TotalPages + int(retries.Int64)
-	cs.AvgResponseMs = int(avg.Float64)
-	cs.MaxResponseMs = int(maxMs.Int64)
-	cs.RottenCount = int(rotten.Int64)
-	cs.DurationSeconds = int(dur.Int64)
+	cs.TotalRequests = cs.TotalPages + retries
+	cs.AvgResponseMs = int(avg)
 	if cs.TotalPages > 0 {
 		cs.ErrorRate = float64(cs.RottenCount) / float64(cs.TotalPages)
 	}
@@ -108,8 +94,6 @@ type SiteSEO struct {
 	MissingH1          int `json:"missing_h1"`
 }
 
-// aggregates the per-page seo_audits rows into site-wide signals.
-// Two queries: one row of counts, then a second for the duplicate-title set count.
 func (s *Store) GetSiteSEO(jobID string) (SiteSEO, error) {
 	var out SiteSEO
 	err := s.db.QueryRow(`
@@ -130,15 +114,11 @@ func (s *Store) GetSiteSEO(jobID string) (SiteSEO, error) {
 	if err != nil {
 		return out, err
 	}
-	// duplicate titles: titles that appear on more than one page
 	err = s.db.QueryRow(`
 		SELECT COUNT(*) FROM (
 		    SELECT title FROM seo_audits
 		    WHERE job_id = UUID_TO_BIN(?) AND title <> ''
 		    GROUP BY title HAVING COUNT(*) > 1
 		) t`, jobID).Scan(&out.DuplicateTitleSets)
-	if err != nil {
-		return out, err
-	}
-	return out, nil
+	return out, err
 }

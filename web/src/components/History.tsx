@@ -1,31 +1,28 @@
 import { useEffect, useState } from 'react';
 
 import { ArrowRight, ChevronRight, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import { type HistoryEntry, type HistoryRun, deleteJob, getHistory } from '../api';
 import { errMessage, formatDate } from '../lib/format';
+import { hostOf } from '../lib/url';
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
-import { SectionHeader } from './SectionHeader';
+import { ErrorBanner } from './ui/ErrorBanner';
+import { JobStatusChip } from './ui/StatusChip';
+import { Button } from './ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 
-// a run targeted for deletion; url + startedAt populate the confirm dialog
 interface DeleteTarget {
   jobId: string;
   url: string;
   startedAt: string;
 }
 
-// per-site history: single-run sites show a flat row; multi-run sites expand to a run list
 export function History() {
-  const navigate = useNavigate();
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // URLs whose run list is currently expanded
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const [pendingDelete, setPendingDelete] = useState<DeleteTarget | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     getHistory()
@@ -33,93 +30,42 @@ export function History() {
       .catch((e) => setError(errMessage(e)));
   }, []);
 
-  const toggle = (url: string) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(url)) {
-        next.delete(url);
-      } else {
-        next.add(url);
-      }
-      return next;
-    });
-
-  // drop a deleted run in place: prune it, recompute count + latest pointers, drop the entry if it was the only run
-  const removeRun = (jobId: string) =>
-    setEntries((prev) =>
-      prev
-        ? prev.flatMap((e) => {
-            if (!e.runs.some((r) => r.job_id === jobId)) {
-              return [e];
-            }
-            const runs = e.runs.filter((r) => r.job_id !== jobId);
-            if (runs.length === 0) {
-              return [];
-            }
-            // runs stay newest-first, so runs[0] is the new latest
-            return [
-              {
-                ...e,
-                runs,
-                crawl_count: runs.length,
-                last_job_id: runs[0].job_id,
-                last_crawled: runs[0].created_at,
-              },
-            ];
-          })
-        : prev,
+  async function confirmDelete(jobId: string) {
+    await deleteJob(jobId);
+    setEntries(
+      (prev) =>
+        prev &&
+        prev
+          .map((e) => ({ ...e, runs: e.runs.filter((r) => r.job_id !== jobId) }))
+          .filter((e) => e.runs.length > 0),
     );
-
-  async function confirmDelete() {
-    if (!pendingDelete) {
-      return;
-    }
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      await deleteJob(pendingDelete.jobId);
-      removeRun(pendingDelete.jobId);
-      setPendingDelete(null);
-    } catch (e) {
-      // server message without the ApiError: prefix
-      setDeleteError(errMessage(e));
-    } finally {
-      setDeleting(false);
-    }
-  }
-
-  function closeDialog() {
     setPendingDelete(null);
-    setDeleteError(null);
   }
 
   return (
     <section>
-      <SectionHeader number="—" title="History" subtitle="Your previous crawls" />
+      {error && <ErrorBanner className="mx-5 mb-4 sm:mx-8">{error}</ErrorBanner>}
 
-      {error && (
-        <div className="border-l-2 border-rose-500 bg-rose-500/5 px-5 py-3 font-mono text-xs text-rose-200">
-          {error}
-        </div>
+      {!entries && !error && (
+        <div className="panel h-48 animate-pulse" role="status" aria-label="Loading history" />
       )}
 
       {entries && entries.length === 0 && (
-        <p className="font-mono text-xs text-ink-300">
-          No crawls yet. Start one while logged in and it will show up here.
-        </p>
+        <div className="panel px-6 py-12 text-center">
+          <p className="text-lg font-semibold tracking-tight">No crawls yet</p>
+          <p className="text-ink-2 text-body mx-auto mt-1.5 max-w-sm">
+            Crawls you run while logged in show up here.
+          </p>
+          <Button size="lg" className="mt-5" asChild>
+            <Link to="/">Crawl a site</Link>
+          </Button>
+        </div>
       )}
 
       {entries && entries.length > 0 && (
-        <ul className="divide-y divide-ink-500/60 border-y border-ink-500/60">
+        <ul className="panel divide-y">
           {entries.map((e) => (
-            <HistoryRow
-              key={e.url}
-              entry={e}
-              expanded={expanded.has(e.url)}
-              onToggle={() => toggle(e.url)}
-              onOpen={(jobId) => navigate(`/jobs/${jobId}`)}
-              onRequestDelete={setPendingDelete}
-            />
+            <HistoryRow key={e.url} entry={e} onRequestDelete={setPendingDelete} />
           ))}
         </ul>
       )}
@@ -128,10 +74,8 @@ export function History() {
         <ConfirmDeleteDialog
           url={pendingDelete.url}
           startedAt={pendingDelete.startedAt}
-          busy={deleting}
-          error={deleteError}
-          onConfirm={confirmDelete}
-          onCancel={closeDialog}
+          onConfirm={() => confirmDelete(pendingDelete.jobId)}
+          onCancel={() => setPendingDelete(null)}
         />
       )}
     </section>
@@ -140,99 +84,108 @@ export function History() {
 
 function HistoryRow({
   entry,
-  expanded,
-  onToggle,
-  onOpen,
   onRequestDelete,
 }: {
   entry: HistoryEntry;
-  expanded: boolean;
-  onToggle: () => void;
-  onOpen: (jobId: string) => void;
   onRequestDelete: (target: DeleteTarget) => void;
 }) {
-  const multi = entry.crawl_count > 1;
+  const latest = entry.runs[0];
+  const multi = entry.runs.length > 1;
+  const [open, setOpen] = useState(false);
 
   return (
-    <li>
-      <div
-        onClick={multi ? onToggle : undefined}
-        className={`group flex items-center gap-3 py-4 pl-1 pr-3 transition hover:bg-ink-700/30 ${multi ? 'cursor-pointer' : ''}`}
-      >
-        {/* chevron: blank when single-run, lights up on row hover */}
-        <div className="flex w-4 shrink-0 justify-center">
+    <Collapsible asChild open={open} onOpenChange={setOpen}>
+      <li>
+        {/* the chevron stays the keyboard control; clicks elsewhere on the row toggle too */}
+        <div
+          className={`group hover:bg-sunken flex flex-wrap items-center gap-3 p-3 transition sm:px-6 ${multi ? 'cursor-pointer' : ''}`}
+          onClick={(e) => {
+            if (multi && !(e.target as Element).closest('a, button')) {
+              setOpen((o) => !o);
+            }
+          }}
+        >
           {multi ? (
-            <ChevronRight
-              className={`h-4 w-4 text-ink-300 transition-transform group-hover:text-accent ${expanded ? 'rotate-90' : ''}`}
-              strokeWidth={2}
-            />
-          ) : null}
-        </div>
-        {/* url with run-count + date stacked beneath; truncates so the row never overflows */}
-        <div className="min-w-0 flex-1">
-          <a
-            href={entry.url}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(ev) => ev.stopPropagation()}
-            className="block truncate font-mono text-sm text-paper hover:text-accent"
-          >
-            {entry.url}
-          </a>
-          <div className="mt-1 flex items-center gap-2 font-mono text-[10px] text-ink-300">
-            <span className="uppercase tracking-widest">
-              {entry.crawl_count}
-              {entry.crawl_count === 1 ? ' run' : ' runs'}
-            </span>
-            <span className="text-ink-500">·</span>
-            <span className="text-ink-400">{formatDate(entry.last_crawled)}</span>
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`Runs of ${hostOf(entry.url)}`}
+                className="size-7"
+              >
+                <ChevronRight
+                  className="transition-transform [[data-state=open]>&]:rotate-90"
+                  strokeWidth={2.25}
+                />
+              </Button>
+            </CollapsibleTrigger>
+          ) : (
+            <span className="w-7 shrink-0" />
+          )}
+          <div className="min-w-24 flex-1">
+            <a
+              href={entry.url}
+              target="_blank"
+              rel="noreferrer"
+              className="tap-area hover:text-link-600 block w-fit max-w-full truncate font-mono text-sm font-medium hover:underline"
+            >
+              {entry.url}
+            </a>
+            <p className="text-ink-3 text-label mt-0.5 tabular-nums">
+              {entry.runs.length} {multi ? 'runs' : 'run'}, last on {formatDate(latest.created_at)}
+            </p>
           </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          {/* targets the latest run; older runs are deleted individually from RunRows below */}
-          <DeleteButton
-            onClick={(ev) => {
-              ev.stopPropagation();
-              onRequestDelete({
-                jobId: entry.last_job_id,
-                url: entry.url,
-                startedAt: entry.runs[0]?.created_at ?? entry.last_crawled,
-              });
-            }}
-          />
-          {/* runs[0] is newest, so its status reflects the "view latest" target */}
-          <StatusBadge status={entry.runs[0]?.status} />
-          <button
-            onClick={(ev) => {
-              ev.stopPropagation();
-              onOpen(entry.last_job_id);
-            }}
-            aria-label={multi ? 'View latest crawl' : 'View report'}
-            className="flex shrink-0 items-center whitespace-nowrap border border-ink-500/70 px-2 py-1.5 font-mono text-[10px] uppercase tracking-widest text-ink-300 transition hover:border-accent hover:text-accent sm:px-3"
-          >
-            <span className="hidden sm:inline">{multi ? 'view latest' : 'view report'}</span>
-            <ArrowRight className="size-3.5 sm:hidden" strokeWidth={2} />
-          </button>
-        </div>
-      </div>
-
-      {multi && expanded && (
-        <ul className="ml-8 border-l border-ink-500/60 py-1 pl-4">
-          {entry.runs.map((run, i) => (
-            <RunRow
-              key={run.job_id}
-              run={run}
-              index={entry.runs.length - i} // count down so latest = N, oldest = 1
-              isLatest={i === 0}
-              onOpen={() => onOpen(run.job_id)}
-              onRequestDelete={() =>
-                onRequestDelete({ jobId: run.job_id, url: entry.url, startedAt: run.created_at })
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {/* first, so its hidden space sits in the row's empty middle */}
+            <DeleteButton
+              label={`Delete crawl of ${hostOf(entry.url)}`}
+              onClick={() =>
+                onRequestDelete({
+                  jobId: latest.job_id,
+                  url: entry.url,
+                  startedAt: latest.created_at,
+                })
               }
             />
-          ))}
-        </ul>
-      )}
-    </li>
+            <JobStatusChip status={latest.status} />
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label={`${multi ? 'Open latest report' : 'Open report'} for ${hostOf(entry.url)}`}
+              className="ml-1.5 sm:ml-2 sm:px-3"
+              asChild
+            >
+              <Link to={`/jobs/${latest.job_id}`}>
+                <span className="hidden sm:inline">{multi ? 'Latest report' : 'Report'}</span>
+                <ArrowRight className="size-3.5" strokeWidth={2.25} />
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        {multi && (
+          <CollapsibleContent asChild>
+            <ul className="bg-sunken border-t py-1 pr-3 pl-13 sm:pr-6 sm:pl-16">
+              {entry.runs.map((run, i) => (
+                <RunRow
+                  key={run.job_id}
+                  run={run}
+                  index={entry.runs.length - i}
+                  isLatest={i === 0}
+                  onRequestDelete={() =>
+                    onRequestDelete({
+                      jobId: run.job_id,
+                      url: entry.url,
+                      startedAt: run.created_at,
+                    })
+                  }
+                />
+              ))}
+            </ul>
+          </CollapsibleContent>
+        )}
+      </li>
+    </Collapsible>
   );
 }
 
@@ -240,115 +193,51 @@ function RunRow({
   run,
   index,
   isLatest,
-  onOpen,
   onRequestDelete,
 }: {
   run: HistoryRun;
   index: number;
   isLatest: boolean;
-  onOpen: () => void;
   onRequestDelete: () => void;
 }) {
   return (
-    <li className="group flex items-center gap-3 py-2 pr-3 transition hover:bg-ink-700/30">
-      <span className="shrink-0 font-mono text-[10px] tabular-nums text-ink-400">
-        #{String(index).padStart(2, '0')}
-      </span>
-      <div className="min-w-0 flex-1 font-mono text-[11px] text-ink-300">
+    <li className="group flex flex-wrap items-center gap-3 py-2">
+      <span className="text-ink-3 text-code w-8 shrink-0 font-mono">#{index}</span>
+      <div className="text-ink-2 text-label min-w-24 flex-1">
         {formatDate(run.created_at, true)}
-        {isLatest && (
-          <span className="ml-2 font-mono text-[9px] uppercase tracking-widest text-accent/70">
-            latest
-          </span>
-        )}
+        {isLatest && <span className="text-link-600 text-caption ml-2 font-semibold">latest</span>}
       </div>
-      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-        <DeleteButton
-          small
-          onClick={(ev) => {
-            ev.stopPropagation();
-            onRequestDelete();
-          }}
-        />
-        <StatusBadge status={run.status} />
-        <button
-          onClick={(ev) => {
-            ev.stopPropagation();
-            onOpen();
-          }}
-          aria-label="View report"
-          className="btn-ghost flex items-center whitespace-nowrap"
+      <div className="ml-auto flex flex-wrap items-center gap-1.5 sm:gap-2">
+        <DeleteButton label={`Delete run #${index}`} onClick={onRequestDelete} />
+        <JobStatusChip status={run.status} />
+        <Button
+          variant="ghost"
+          size="quiet"
+          aria-label={`Open report #${index}`}
+          className="text-label ml-1.5 sm:ml-2"
+          asChild
         >
-          <span className="hidden sm:inline">view report →</span>
-          <ArrowRight className="size-3.5 sm:hidden" strokeWidth={2} />
-        </button>
+          <Link to={`/jobs/${run.job_id}`}>
+            <span className="hidden sm:inline">Report</span>
+            <ArrowRight className="size-3.5" strokeWidth={2.25} />
+          </Link>
+        </Button>
       </div>
     </li>
   );
 }
 
-// trash affordance shared by both rows: hidden until row hover/focus, lights rose on hover
-function DeleteButton({
-  onClick,
-  className = '',
-  small = false,
-}: {
-  onClick: (ev: React.MouseEvent) => void;
-  className?: string;
-  // run rows use a smaller icon than top-level rows
-  small?: boolean;
-}) {
+function DeleteButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="icon"
       onClick={onClick}
-      aria-label="Delete crawl"
+      aria-label={label}
       title="Delete crawl"
-      className={`flex items-center text-ink-400 opacity-100 transition hover:text-rose-300 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 ${className}`}
+      className="hover:bg-bad-bg hover:text-bad-fg focus-visible:opacity-100 sm:group-hover:opacity-100 sm:pointer-fine:opacity-0"
     >
-      <Trash2 className={small ? 'h-3.5 w-3.5 translate-x-0.5' : 'h-4 w-4'} strokeWidth={2} />
-    </button>
-  );
-}
-
-// border + text colour per status; unknown falls back to neutral ink
-const STATUS_STYLES: Record<string, string> = {
-  complete: 'border-emerald-400/40 text-emerald-300',
-  crawling: 'border-accent/40 text-accent',
-  checking: 'border-accent/40 text-accent',
-  pending: 'border-ink-500/70 text-ink-300',
-  failed: 'border-rose-400/40 text-rose-300',
-  stopped: 'border-amber-400/40 text-amber-300',
-};
-
-// dot colour mirrors STATUS_STYLES, used for the compact mobile indicator
-const STATUS_DOT: Record<string, string> = {
-  complete: 'bg-emerald-400',
-  crawling: 'bg-accent',
-  checking: 'bg-accent',
-  pending: 'bg-ink-400',
-  failed: 'bg-rose-400',
-  stopped: 'bg-amber-400',
-};
-
-function StatusBadge({ status }: { status?: string }) {
-  if (!status) {
-    return null;
-  }
-  const cls = STATUS_STYLES[status] ?? 'border-ink-500/70 text-ink-300';
-  const dot = STATUS_DOT[status] ?? 'bg-ink-400';
-  return (
-    <>
-      {/* mobile: colour-coded dot to save horizontal space */}
-      <span
-        title={status}
-        className={`inline-block size-2 shrink-0 rounded-full sm:hidden ${dot}`}
-      />
-      {/* desktop: full labelled badge */}
-      <span
-        className={`hidden whitespace-nowrap border px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest sm:inline-block ${cls}`}
-      >
-        {status}
-      </span>
-    </>
+      <Trash2 />
+    </Button>
   );
 }

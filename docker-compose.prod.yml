@@ -1,9 +1,20 @@
-# Production stack: infra + Go services + Caddy (TLS + static frontend + API proxy).
-# Run on the droplet with:
-#     docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
-#
-# Security note: only Caddy publishes ports (80/443). MySQL/Redis/RabbitMQ and the
-# API are reachable ONLY on the internal docker network — never from the internet.
+# Only Caddy publishes ports. MySQL/Redis/RabbitMQ and the API must stay on the internal
+# docker network, never the internet.
+
+x-go-service: &go-service
+  restart: unless-stopped
+  # the api logs every request and the worker every page, and Docker keeps all of it by default
+  logging: { options: { max-size: 10m, max-file: "3" } }
+  depends_on:
+    mysql: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    rabbitmq: { condition: service_healthy }
+
+x-go-env: &go-env
+  MYSQL_DSN: "${MYSQL_USER:-linktrace}:${MYSQL_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-linktrace}?parseTime=true"
+  REDIS_ADDR: "redis:6379"
+  RABBIT_URL: "amqp://${RABBITMQ_USER:-linktrace}:${RABBITMQ_PASS}@rabbitmq:5672/"
+  SHARD_COUNT: "${SHARD_COUNT}" # one value for both, so every lane the api places is consumed
 
 services:
   mysql:
@@ -17,11 +28,9 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
-      # schema.sql only runs on a FRESH volume (first boot) — redeploying does NOT re-apply it.
-      # To apply a change to a live database:
+      # schema.sql only runs on a fresh volume, not on redeploy. To apply it live:
       #   docker exec -i linktrace-mysql mysql -ulinktrace -p"$MYSQL_PASSWORD" linktrace < schema.sql
-      # Safe to re-run (every statement is CREATE TABLE IF NOT EXISTS), but it won't alter
-      # existing tables — changed columns still need their own ALTER TABLE.
+      # It's CREATE TABLE IF NOT EXISTS, so changed columns still need an ALTER TABLE.
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
       test:
@@ -41,6 +50,7 @@ services:
   rabbitmq:
     image: rabbitmq:3-management
     container_name: linktrace-rabbitmq
+    hostname: rabbitmq
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-linktrace}
@@ -66,53 +76,32 @@ services:
       retries: 20
 
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
+    <<: *go-service
+    build: { context: ., dockerfile: Dockerfile.api }
     container_name: linktrace-api
-    restart: unless-stopped
     environment:
-      MYSQL_DSN: "${MYSQL_USER:-linktrace}:${MYSQL_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-linktrace}?parseTime=true"
-      REDIS_ADDR: "redis:6379"
-      RABBIT_URL: "amqp://${RABBITMQ_USER:-linktrace}:${RABBITMQ_PASS}@rabbitmq:5672/"
-      HTTP_ADDR: ":8080"
-      FRONTEND_ORIGIN: "https://${DOMAIN}"
+      <<: *go-env
       COOKIE_SECURE: "true"
-      SHARD_COUNT: "${SHARD_COUNT:-5}" # must match the worker so placed lanes are consumed
-    depends_on:
-      mysql: { condition: service_healthy }
-      redis: { condition: service_healthy }
-      rabbitmq: { condition: service_healthy }
+      ANON_MAX_PAGES: "${ANON_MAX_PAGES}"
 
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
+    <<: *go-service
+    build: { context: ., dockerfile: Dockerfile.worker }
     container_name: linktrace-worker
-    restart: unless-stopped
     environment:
-      MYSQL_DSN: "${MYSQL_USER:-linktrace}:${MYSQL_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-linktrace}?parseTime=true"
-      REDIS_ADDR: "redis:6379"
-      RABBIT_URL: "amqp://${RABBITMQ_USER:-linktrace}:${RABBITMQ_PASS}@rabbitmq:5672/"
-      WORKER_COUNT: "${WORKER_COUNT:-100}"
-      MAX_PAGES: "${MAX_PAGES:-10000}"
-      MAX_DEPTH: "${MAX_DEPTH:-20}"
-      MAX_PER_CATEGORY: "${MAX_PER_CATEGORY:-1000}"
-      RATE_PER_MIN: "${RATE_PER_MIN:-1000}"
-      SHARD_COUNT: "${SHARD_COUNT:-5}"
-    depends_on:
-      mysql: { condition: service_healthy }
-      redis: { condition: service_healthy }
-      rabbitmq: { condition: service_healthy }
+      <<: *go-env
+      WORKER_COUNT: "${WORKER_COUNT}"
+      MAX_PAGES: "${MAX_PAGES}"
+      MAX_DEPTH: "${MAX_DEPTH}"
+      MAX_PER_CATEGORY: "${MAX_PER_CATEGORY}"
+      RATE_PER_MIN: "${RATE_PER_MIN}"
 
   caddy:
     build:
       context: .
       dockerfile: Dockerfile.web
       args:
-        VITE_API_BASE: /api
-        # public origin for canonical/og:url + robots/sitemap. Deliberately NOT derived from
-        # DOMAIN, which is a Caddy listener spec (e.g. ":80") and often isn't a hostname at all.
+        # deliberately not derived from DOMAIN, a Caddy listener spec that may be ":80"
         VITE_SITE_URL: "${VITE_SITE_URL:-https://linktrace.tomthebomb.dev}"
     container_name: linktrace-caddy
     restart: unless-stopped

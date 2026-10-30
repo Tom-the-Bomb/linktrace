@@ -1,23 +1,38 @@
-# Global options. ACME_EMAIL is where Let's Encrypt sends cert-expiry notices.
 {
 	email {$ACME_EMAIL}
 }
 
-# DOMAIN is injected by docker-compose (e.g. linktrace.example.com).
-# Caddy automatically obtains + renews an HTTPS certificate for it.
 {$DOMAIN} {
 	encode gzip zstd
 
-	# API: strip the /api prefix, then forward to the Go service.
-	# /api/check  ->  api:8080/check
-	handle_path /api/* {
-		reverse_proxy api:8080
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# crawled titles and URLs are untrusted text, so scripts only ever load from this origin.
+		# Inline styles stay allowed for the <style> tags Radix injects to lock scrolling.
+		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		-Server
 	}
 
-	# Frontend: serve the built SPA. try_files falls back to index.html so
-	# client-side routes (react-router) work on hard refresh / deep links.
+	handle_path /api/* {
+		reverse_proxy api:8080 {
+			# the API rate limits by this address
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+
 	handle {
 		root * /srv
+		# hashed build files cache forever; the rest (notably HTML) revalidates so a deploy never
+		# points a cached page at chunks that no longer exist
+		@hashed {
+			path /assets/*
+			file
+		}
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		header ?Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
 	}

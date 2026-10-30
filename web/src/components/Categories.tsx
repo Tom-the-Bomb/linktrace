@@ -1,69 +1,67 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+
+import { ArrowDown, ArrowUp } from 'lucide-react';
 
 import type { CategoryReport } from '../api';
+import { usePagination } from '../hooks/usePagination';
+import { pct, scoreTextColour } from '../lib/colours';
 import { SectionHeader } from './SectionHeader';
 import { Pager } from './ui/Pager';
-import { TextChip } from './ui/TextChip';
+import { SectionDot } from './ui/SectionDot';
+import { Badge, type BadgeVariant } from './ui/badge';
+import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
 const PAGE_SIZE = 10;
+const COLS = 'sm:grid-cols-[0.875rem_minmax(0,1fr)_10.625rem_4rem_7.375rem]';
 
 type Filter = 'all' | 'healthy' | 'mixed' | 'rotten';
 type SortKey = 'pages' | 'rot' | 'seo';
 type SortDir = 'asc' | 'desc';
 
+const FILTER_LABEL: Record<Filter, string> = {
+  all: 'All',
+  healthy: 'Links OK',
+  mixed: 'Some broken',
+  rotten: 'Mostly broken',
+};
+const SORT_LABEL: Record<SortKey, string> = { pages: 'Pages', rot: 'Broken %', seo: 'SEO' };
+
 function inFilter(pattern: string, filter: Filter): boolean {
-  if (filter === 'all') {
-    return true;
+  if (filter === 'rotten') {
+    return pattern === 'mostly_rotten' || pattern === 'all_rotten';
   }
-  if (filter === 'healthy') {
-    return pattern === 'healthy';
-  }
-  if (filter === 'mixed') {
-    return pattern === 'mixed';
-  }
-  return pattern === 'mostly_rotten' || pattern === 'all_rotten';
+  return filter === 'all' || pattern === filter;
 }
 
-function rotRatio(c: CategoryReport): number {
-  return c.total_pages > 0 ? c.rotten_pages / c.total_pages : 0;
-}
-
-// per-key value extractor; comparator reads the active one
 const SORT_VALUE: Record<SortKey, (c: CategoryReport) => number> = {
   pages: (c) => c.total_pages,
-  rot: rotRatio,
-  seo: (c) => c.avg_seo_score,
+  rot: (c) => (c.total_pages > 0 ? c.rotten_pages / c.total_pages : 0),
+  seo: (c) => c.avg_seo_score ?? -1,
 };
 
-export function Categories({ categories }: { categories: CategoryReport[] }) {
+export function Categories({
+  categories,
+  colourFor,
+}: {
+  categories: CategoryReport[];
+  colourFor: (section: string) => string;
+}) {
   const [filter, setFilter] = useState<Filter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('pages');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [page, setPage] = useState(1);
 
-  const filtered = useMemo(() => {
-    let r = categories;
-    if (filter !== 'all') {
-      r = r.filter((c) => inFilter(c.pattern, filter));
-    }
-    const value = SORT_VALUE[sortKey];
-    return r.slice().sort((a, b) => {
-      const diff = value(a) - value(b);
-      return sortDir === 'asc' ? diff : -diff;
-    });
-  }, [categories, filter, sortKey, sortDir]);
+  const value = SORT_VALUE[sortKey];
+  const dir = sortDir === 'asc' ? 1 : -1;
+  const filtered = categories
+    .filter((c) => inFilter(c.pattern, filter))
+    .sort((a, b) => dir * (value(a) - value(b)));
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const current = Math.min(page, pageCount);
-  const start = (current - 1) * PAGE_SIZE;
-  const paged = filtered.slice(start, start + PAGE_SIZE);
+  const { page, setPage, paged } = usePagination(filtered, PAGE_SIZE);
 
-  // controls that mutate the result set reset paging
-  function setFilterReset(f: Filter) {
+  function pickFilter(f: Filter) {
     setFilter(f);
     setPage(1);
   }
-  // click active key flips direction; click another sets it (resets to desc)
   function pickSort(k: SortKey) {
     if (k === sortKey) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -74,133 +72,140 @@ export function Categories({ categories }: { categories: CategoryReport[] }) {
     setPage(1);
   }
 
-  const controls = (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:ml-auto sm:justify-end">
-      <div className="flex items-center gap-3">
-        {(['all', 'healthy', 'mixed', 'rotten'] as Filter[]).map((f) => (
-          <TextChip key={f} active={filter === f} onClick={() => setFilterReset(f)}>
-            {f}
-          </TextChip>
-        ))}
-      </div>
-
-      <Divider />
-
-      <div className="flex items-center gap-3">
-        <SortChip k="pages" label="pages" current={sortKey} dir={sortDir} onPick={pickSort} />
-        <SortChip k="rot" label="rot%" current={sortKey} dir={sortDir} onPick={pickSort} />
-        <SortChip k="seo" label="seo" current={sortKey} dir={sortDir} onPick={pickSort} />
-      </div>
-
-      <Divider />
-
-      <span className="hidden text-xs italic text-ink-300 sm:inline">Where the rot lives.</span>
-    </div>
-  );
+  const DirIcon = sortDir === 'asc' ? ArrowUp : ArrowDown;
 
   return (
     <section>
-      <SectionHeader number="03" title="By section" right={controls} />
+      <SectionHeader
+        title="By section"
+        subtitle="Pages grouped by the first part of their URL path (like /blog)."
+      />
 
-      <ul className="divide-y divide-ink-500/60 border-y border-ink-500/60">
-        {paged.map((c, i) => (
-          <CategoryRow key={c.category} cat={c} index={start + i} />
-        ))}
-      </ul>
-
-      {pageCount > 1 && (
-        <div className="mt-4 flex items-center justify-center gap-6">
-          <Pager current={current} pageCount={pageCount} onPage={setPage} />
+      <div className="panel">
+        <div className="panel-head">
+          <ToggleGroup
+            type="single"
+            value={filter}
+            onValueChange={(v) => v && pickFilter(v as Filter)}
+            aria-label="Filter sections"
+          >
+            {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
+              <ToggleGroupItem
+                key={f}
+                value={f}
+                count={categories.filter((c) => inFilter(c.pattern, f)).length}
+              >
+                {FILTER_LABEL[f]}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          {/* clicking the active key again flips the direction */}
+          <ToggleGroup
+            type="single"
+            value={sortKey}
+            onValueChange={(v) => pickSort((v || sortKey) as SortKey)}
+            aria-label="Sort sections"
+          >
+            {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
+              <ToggleGroupItem key={k} value={k}>
+                {SORT_LABEL[k]}
+                {sortKey === k && (
+                  <DirIcon
+                    className="size-3.5"
+                    strokeWidth={2.5}
+                    aria-label={sortDir === 'asc' ? 'ascending' : 'descending'}
+                  />
+                )}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
         </div>
-      )}
+
+        <div
+          aria-hidden="true"
+          className={`bg-sunken/60 text-ink-3 gutter hidden gap-x-4 border-b py-2 text-xs font-medium sm:grid ${COLS}`}
+        >
+          <span />
+          <span>Section</span>
+          <span>Broken pages</span>
+          <span className="text-right">SEO</span>
+          <span className="text-right">Links</span>
+        </div>
+        {paged.length === 0 ? (
+          <p className="text-ink-3 text-body px-6 py-10 text-center">
+            No sections match this filter.
+          </p>
+        ) : (
+          <ul className="divide-y">
+            {paged.map((c) => (
+              <CategoryRow key={c.category} cat={c} colour={colourFor(c.category)} />
+            ))}
+          </ul>
+        )}
+
+        <Pager page={page} total={filtered.length} size={PAGE_SIZE} onPage={setPage} />
+      </div>
     </section>
   );
 }
 
-function Divider() {
-  return (
-    <span aria-hidden="true" className="hidden font-mono text-[10px] text-ink-400 sm:inline">
-      ·
-    </span>
-  );
-}
-
-// borderless toggle with a direction arrow when active
-function SortChip({
-  k,
-  label,
-  current,
-  dir,
-  onPick,
-}: {
-  k: SortKey;
-  label: string;
-  current: SortKey;
-  dir: SortDir;
-  onPick: (k: SortKey) => void;
-}) {
-  const active = current === k;
-  return (
-    <TextChip active={active} onClick={() => onPick(k)}>
-      {label}
-      {active && <span className="ml-1">{dir === 'asc' ? '↑' : '↓'}</span>}
-    </TextChip>
-  );
-}
-
-const patternStyle: Record<string, { bar: string; chip: string }> = {
-  healthy: {
-    bar: 'bg-emerald-400',
-    chip: 'border-emerald-400/40 bg-emerald-500/5 text-emerald-300',
-  },
-  mixed: {
-    bar: 'bg-accent',
-    chip: 'border-accent/40 bg-accent/5 text-accent',
-  },
-  mostly_rotten: {
-    bar: 'bg-rose-400',
-    chip: 'border-rose-400/40 bg-rose-500/5 text-rose-300',
-  },
-  all_rotten: {
-    bar: 'bg-rose-500',
-    chip: 'border-rose-500/50 bg-rose-600/10 text-rose-300',
-  },
-  empty: {
-    bar: 'bg-ink-500',
-    chip: 'border-ink-400/40 bg-ink-700 text-ink-300',
-  },
+const PATTERN: Record<string, { tone: BadgeVariant; bar: string }> = {
+  healthy: { tone: 'ok', bar: 'bg-ok-dot' },
+  mixed: { tone: 'warn', bar: 'bg-warn-dot' },
+  mostly_rotten: { tone: 'bad', bar: 'bg-bad-dot' },
+  all_rotten: { tone: 'bad', bar: 'bg-bad-dot' },
 };
 
-function CategoryRow({ cat, index }: { cat: CategoryReport; index: number }) {
-  const rotPct = cat.total_pages > 0 ? (cat.rotten_pages / cat.total_pages) * 100 : 0;
-  const style = patternStyle[cat.pattern] ?? patternStyle.mixed;
+function linkLabel(cat: CategoryReport): string {
+  if (cat.rotten_pages === 0) {
+    return 'Links OK';
+  }
+  if (cat.pattern === 'all_rotten') {
+    return 'All broken';
+  }
+  return `${cat.rotten_pages.toLocaleString()} broken`;
+}
+
+function CategoryRow({ cat, colour }: { cat: CategoryReport; colour: string }) {
+  const rotPct = pct(cat.rotten_pages, cat.total_pages);
+  const style = PATTERN[cat.pattern] ?? PATTERN.mixed;
 
   return (
-    <li className="flex items-center gap-4 py-5">
-      <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-ink-300">
-        {String(index + 1).padStart(2, '0')}
-      </span>
-
-      <div className="min-w-0 flex-1">
-        <div className="display truncate text-xl font-light">{cat.category}</div>
-        <div className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-ink-300">
-          {cat.total_pages} pages · {cat.rotten_pages} rotten · seo {cat.avg_seo_score}
+    <li
+      className={`gutter grid grid-cols-[0.875rem_minmax(0,1fr)_auto] items-center gap-x-4 py-3.5 ${COLS}`}
+    >
+      <SectionDot colour={colour} />
+      <div className="min-w-0">
+        <div className="truncate font-mono text-sm font-medium">{cat.category}</div>
+        <div className="text-ink-3 text-label mt-0.5 tabular-nums">
+          {cat.total_pages.toLocaleString()} {cat.total_pages === 1 ? 'page' : 'pages'}
+          <span className="sm:hidden">
+            {', '}SEO{' '}
+            <span className={scoreTextColour(cat.avg_seo_score)}>{cat.avg_seo_score ?? 'n/a'}</span>
+          </span>
         </div>
       </div>
 
-      {/* progress bar is supplementary — hidden on mobile so the row never overflows */}
-      <div className="hidden w-32 shrink-0 sm:block lg:w-48">
-        <div className="h-px w-full overflow-hidden bg-ink-500">
-          <div className={`h-full ${style.bar}`} style={{ width: `${rotPct}%` }} />
+      <div className="hidden items-center gap-2.5 sm:flex" title={`${rotPct}% broken`}>
+        <div className="bg-sunken ring-line h-1.5 flex-1 overflow-hidden rounded-full ring-1 forced-color-adjust-none ring-inset">
+          <div
+            className={`h-full rounded-full ${style.bar}`}
+            style={{ width: `${Math.max(rotPct, rotPct > 0 ? 4 : 0)}%` }}
+          />
         </div>
-        <div className="mt-1 font-mono text-[10px] uppercase tracking-widest text-ink-300">
-          rot {Math.round(rotPct)}%
-        </div>
+        <span className="text-ink-3 text-code w-9 text-right font-mono">{rotPct}%</span>
       </div>
 
-      <span className={`chip shrink-0 whitespace-nowrap ${style.chip}`}>
-        {cat.pattern.replace('_', ' ')}
+      <span
+        className={`text-label hidden text-right font-mono font-medium sm:block ${scoreTextColour(cat.avg_seo_score)}`}
+      >
+        <span className="sr-only">SEO </span>
+        {cat.avg_seo_score ?? 'n/a'}
       </span>
+
+      <Badge variant={style.tone} className="justify-self-end">
+        {linkLabel(cat)}
+      </Badge>
     </li>
   );
 }

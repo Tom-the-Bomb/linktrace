@@ -2,15 +2,14 @@ package config
 
 import (
 	"bufio"
+	"cmp"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 )
 
-// loadDotEnv best-effort loads KEY=VALUE lines from a .env file in the working directory into
-// the process environment, skipping any key already set (so explicit env and docker-compose
-// still win). No-op when the file is absent — prod passes env directly; dev keeps it in .env.
+// skips keys already set, so real env and docker-compose win over .env.
 func loadDotEnv(path string) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -29,7 +28,6 @@ func loadDotEnv(path string) {
 			continue
 		}
 		key, val = strings.TrimSpace(key), strings.TrimSpace(val)
-		// strip matching surrounding quotes, if any
 		if len(val) >= 2 && (val[0] == '"' || val[0] == '\'') && val[len(val)-1] == val[0] {
 			val = val[1 : len(val)-1]
 		}
@@ -43,15 +41,10 @@ func loadDotEnv(path string) {
 	}
 }
 
-// returns the value of key, or deflt if unset/empty.
 func env(key, deflt string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	return deflt
+	return cmp.Or(os.Getenv(key), deflt)
 }
 
-// returns key parsed as an int, or deflt if unset/empty/unparseable.
 func envInt(key string, deflt int) int {
 	if val := os.Getenv(key); val != "" {
 		if i, err := strconv.Atoi(val); err == nil {
@@ -61,7 +54,6 @@ func envInt(key string, deflt int) int {
 	return deflt
 }
 
-// parses key as a bool, or returns deflt if unset/unparseable.
 func envBool(key string, deflt bool) bool {
 	if val := os.Getenv(key); val != "" {
 		if b, err := strconv.ParseBool(val); err == nil {

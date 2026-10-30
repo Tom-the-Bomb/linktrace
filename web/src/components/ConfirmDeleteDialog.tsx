@@ -2,37 +2,29 @@ import { formatDate } from '../lib/format';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface Props {
-  // url + start date shown so runs are distinguishable
   url: string;
   startedAt: string;
-  busy?: boolean;
-  error?: string | null;
-  onConfirm: () => void;
+  onConfirm: () => Promise<void>;
   onCancel: () => void;
 }
 
-// crawl delete confirmation: ConfirmDialog plus a website/started detail block
-export function ConfirmDeleteDialog({ url, startedAt, busy, error, onConfirm, onCancel }: Props) {
+export function ConfirmDeleteDialog({ url, startedAt, onConfirm, onCancel }: Props) {
   return (
     <ConfirmDialog
-      eyebrow="delete crawl"
-      title="This can't be undone"
-      message="Permanently delete this crawl and all of its results. If it's still running, it will be stopped and its workers freed."
-      confirmLabel="delete"
-      busyLabel="deleting…"
-      busy={busy}
-      error={error}
+      title="Delete this crawl?"
+      message="This deletes the crawl and its results (and stops it if it's still running). It can't be undone."
+      confirmLabel="Delete crawl"
       onConfirm={onConfirm}
       onCancel={onCancel}
     >
-      <dl className="mt-4 divide-y divide-ink-500/40 border border-ink-500/60 bg-ink-700/40 font-mono text-xs">
-        <div className="flex items-baseline justify-between gap-4 px-4 py-2.5">
-          <dt className="shrink-0 text-ink-400">website</dt>
-          <dd className="truncate text-paper">{url}</dd>
+      <dl className="mt-4 divide-y border-y text-sm">
+        <div className="flex items-baseline justify-between gap-4 py-2.5">
+          <dt className="text-ink-3 shrink-0">Website</dt>
+          <dd className="text-label truncate font-mono">{url}</dd>
         </div>
-        <div className="flex items-baseline justify-between gap-4 px-4 py-2.5">
-          <dt className="shrink-0 text-ink-400">started</dt>
-          <dd className="text-paper">{formatDate(startedAt, true)}</dd>
+        <div className="flex items-baseline justify-between gap-4 py-2.5">
+          <dt className="text-ink-3 shrink-0">Started</dt>
+          <dd>{formatDate(startedAt, true)}</dd>
         </div>
       </dl>
     </ConfirmDialog>

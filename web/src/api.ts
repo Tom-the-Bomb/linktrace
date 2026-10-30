@@ -1,11 +1,8 @@
-// Typed wrappers around the LinkTrace REST API; types mirror the Go handler responses.
-
-const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080';
+const BASE = '/api';
 
 export type JobStatus = 'pending' | 'crawling' | 'complete' | 'failed' | 'stopped';
 
 export interface Status {
-  job_id: string;
   url: string;
   status: JobStatus;
   created_at: string;
@@ -13,6 +10,8 @@ export interface Status {
   checked: number;
   healthy: number;
   rotten: number;
+  // the viewer's account or browser started the crawl
+  can_manage: boolean;
 }
 
 export interface PageRow {
@@ -32,7 +31,7 @@ export interface Issue {
   severity: 'error' | 'warning' | 'info';
 }
 
-export interface KeywordCount {
+interface KeywordCount {
   term: string;
   count: number;
 }
@@ -41,13 +40,12 @@ export interface CategoryReport {
   category: string;
   total_pages: number;
   rotten_pages: number;
-  avg_seo_score: number;
+  avg_seo_score: number | null;
   pattern: string;
 }
 
 export interface SiteAudit {
   robots_found: boolean;
-  // set when robots.txt disallows everything; the crawl is refused before any page is fetched
   robots_disallow_all: boolean;
   crawl_delay: number;
   sitemap_found: boolean;
@@ -91,7 +89,6 @@ export interface Report {
   overall: {
     total_pages: number;
     rotten: number;
-    healthy: number;
     avg_seo_score: number;
     top_issues: string[];
   };
@@ -102,7 +99,7 @@ export interface Report {
   coverage_gap: CoverageGap | null;
 }
 
-// thrown on non-2xx. carries the HTTP status so callers can branch (401 vs 409).
+// status 0 means no response arrived
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -112,10 +109,6 @@ export class ApiError extends Error {
   }
 }
 
-// all requests go through this for the session cookie + JSON headers.
-// credentials: 'include' sends the cookie cross-origin.
-// nullOn lets a single status (e.g. 404/401) resolve to null instead of throwing —
-// for endpoints where "not found"/"not logged in" is a valid, expected state.
 function jsonRequest<T>(path: string, init?: RequestInit): Promise<T>;
 function jsonRequest<T>(
   path: string,
@@ -127,34 +120,47 @@ async function jsonRequest<T>(
   init?: RequestInit,
   nullOn?: number,
 ): Promise<T | null> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch {
+    throw new ApiError(0, "Can't reach LinkTrace. Check your connection and try again.");
+  }
   if (res.status === nullOn) {
     return null;
   }
   if (!res.ok) {
-    // prefer the server {error} message, fall back to status text
-    let msg = `${res.status} ${res.statusText || 'request failed'}`;
+    // a 5xx without {error} came from the proxy, so the API is down
+    let msg =
+      res.status >= 500
+        ? "LinkTrace isn't responding right now. Try again in a moment."
+        : `${res.status} ${res.statusText || 'request failed'}`;
     try {
       const body = (await res.json()) as { error?: string };
       if (body?.error) {
         msg = body.error;
       }
     } catch {
-      /* response wasn't JSON, keep the default */
+      /* not JSON */
     }
     throw new ApiError(res.status, msg);
   }
   return res.json() as Promise<T>;
 }
 
-// POST /check: start a crawl (prepends https:// if no scheme)
-export function createCheck(url: string): Promise<{ job_id: string }> {
+// URL converts an international domain to the ASCII form its links use (bücher.de -> xn--bcher-kva.de)
+export function createCheck(input: string): Promise<{ job_id: string; joined?: boolean }> {
+  let url = input.trim();
   if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`;
+  }
+  try {
+    url = new URL(url).href;
+  } catch {
+    /* malformed; the server explains */
   }
   return jsonRequest('/check', {
     method: 'POST',
@@ -162,28 +168,22 @@ export function createCheck(url: string): Promise<{ job_id: string }> {
   });
 }
 
-// POST /check/{id}/cancel: stop a running crawl
-export function cancelCheck(id: string): Promise<{ job_id: string; status: string }> {
+export function cancelCheck(id: string): Promise<{ job_id: string; status: JobStatus }> {
   return jsonRequest(`/check/${id}/cancel`, { method: 'POST' });
 }
 
-// removes a job and its data. the server tombstones it so a running crawl's
-// workers stop and queued work drains.
 export function deleteJob(id: string): Promise<{ job_id: string; status: string }> {
   return jsonRequest(`/check/${id}`, { method: 'DELETE' });
 }
 
-// GET /check/{id}: job status + live progress counts
 export function getStatus(id: string): Promise<Status> {
   return jsonRequest(`/check/${id}`);
 }
 
-// GET /check/{id}/results: per-page rows
 export function getResults(id: string): Promise<PageRow[]> {
   return jsonRequest(`/check/${id}/results`);
 }
 
-// GET /check/{id}/report: aggregated report (overall, categories, site audit, etc)
 export function getReport(id: string): Promise<Report> {
   return jsonRequest(`/check/${id}/report`);
 }
@@ -208,13 +208,11 @@ export interface GraphData {
   edges: GraphEdge[];
 }
 
-// GET /check/{id}/graph: nodes + edges for the site graph
 export function getGraph(id: string): Promise<GraphData> {
   return jsonRequest(`/check/${id}/graph`);
 }
 
 export interface SEODetail {
-  url: string;
   title: string;
   title_length: number;
   meta_description: string;
@@ -238,7 +236,6 @@ export interface SEODetail {
   og_tags: Record<string, string> | null;
   twitter_tags: Record<string, string> | null;
   jsonld_count: number;
-  jsonld_types: string[] | null;
   has_viewport: boolean;
   noindex: boolean;
   top_keywords: KeywordCount[] | null;
@@ -250,7 +247,7 @@ export interface SEODetail {
   score: number;
 }
 
-// rotten/uncrawled pages have no audit row; return null on 404 so the drawer shows empty
+// 404 for rotten/uncrawled pages, which have no audit row
 export function getSEODetail(id: string, url: string): Promise<SEODetail | null> {
   return jsonRequest(`/check/${id}/seo?url=${encodeURIComponent(url)}`, undefined, 404);
 }
@@ -262,18 +259,14 @@ export interface Me {
 export interface HistoryRun {
   job_id: string;
   created_at: string;
-  status: string; // pending | crawling | checking | complete | failed | stopped
+  status: JobStatus;
 }
 
 export interface HistoryEntry {
   url: string;
-  crawl_count: number;
-  last_job_id: string;
-  last_crawled: string;
   runs: HistoryRun[]; // most recent first
 }
 
-// POST /auth/register: create an account and start a session
 export function register(username: string, password: string): Promise<Me> {
   return jsonRequest('/auth/register', {
     method: 'POST',
@@ -281,7 +274,6 @@ export function register(username: string, password: string): Promise<Me> {
   });
 }
 
-// POST /auth/login: start a session
 export function login(username: string, password: string): Promise<Me> {
   return jsonRequest('/auth/login', {
     method: 'POST',
@@ -289,23 +281,18 @@ export function login(username: string, password: string): Promise<Me> {
   });
 }
 
-// POST /auth/logout: end the session
 export function logout(): Promise<{ ok: boolean }> {
   return jsonRequest('/auth/logout', { method: 'POST' });
 }
 
-// removes the user, all their jobs (stopping running ones), and ends the
-// session. requires login.
 export function deleteAccount(): Promise<{ ok: boolean }> {
   return jsonRequest('/auth/account', { method: 'DELETE' });
 }
 
-// returns null when anonymous (401 isn't an error here, it's a valid state)
 export function getMe(): Promise<Me | null> {
   return jsonRequest('/auth/me', undefined, 401);
 }
 
-// GET /history: the logged-in user's past crawls (auth required)
 export function getHistory(): Promise<HistoryEntry[]> {
   return jsonRequest('/history');
 }

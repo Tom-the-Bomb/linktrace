@@ -1,41 +1,43 @@
-import { useState } from 'react';
+import { ChevronRight, CircleCheck } from 'lucide-react';
 
 import type { CoverageGap } from '../api';
 import { SectionHeader } from './SectionHeader';
+import { Badge } from './ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 
-// max URLs listed before collapsing into a "...and N more" line
 const CAP = 50;
 
-// sitemap vs crawled diff; always renders all three sections (empty ones show a green 0)
 export function CoverageGapPanel({ gap }: { gap: CoverageGap }) {
   const total = gap.orphans.length + gap.not_crawled.length + gap.sitemap_dead.length;
 
   return (
     <section>
       <SectionHeader
-        number="07"
         title="Sitemap coverage"
-        subtitle={total === 0 ? 'no discrepancies' : `${total} discrepancies`}
+        subtitle={
+          total === 0
+            ? 'Your sitemap and the crawl agree.'
+            : `${total.toLocaleString()} ${total === 1 ? 'difference' : 'differences'} between your sitemap and the crawl.`
+        }
       />
-      {total === 0 && (
-        <p className="mb-4 border-l-2 border-emerald-400/50 bg-emerald-500/5 px-3 py-2 font-mono text-[11px] text-emerald-300">
-          Sitemap and crawl agree. Nothing missing on either side.
-        </p>
-      )}
-
-      <div className="space-y-3">
-        <GapList label="orphaned" hint="crawled, not in sitemap" urls={gap.orphans} tone="amber" />
+      <div className="panel divide-y">
         <GapList
-          label="missed"
-          hint="in sitemap, never reached"
-          urls={gap.not_crawled}
-          tone="amber"
+          label="Not in sitemap"
+          hint="Crawled, but missing from the sitemap"
+          urls={gap.orphans}
+          tone="warn"
         />
         <GapList
-          label="dead in sitemap"
-          hint="listed but rotten"
+          label="Never reached"
+          hint="Listed in the sitemap, but the crawl never reached it"
+          urls={gap.not_crawled}
+          tone="warn"
+        />
+        <GapList
+          label="Broken in sitemap"
+          hint="Listed in the sitemap, but broken"
           urls={gap.sitemap_dead}
-          tone="rose"
+          tone="bad"
         />
       </div>
     </section>
@@ -51,50 +53,64 @@ function GapList({
   label: string;
   hint: string;
   urls: string[];
-  tone: 'amber' | 'rose';
+  tone: 'warn' | 'bad';
 }) {
-  const [open, setOpen] = useState(false);
   const empty = urls.length === 0;
-  const accent = empty ? 'border-ink-500/60' : tone === 'rose' ? 'border-rose-400/60' : 'border-amber-400/60';
-  const countColour = empty ? 'text-emerald-300' : tone === 'rose' ? 'text-rose-300' : 'text-amber-300';
 
   const header = (
     <>
-      <div>
-        <span className="text-paper/80">{label}</span> <span className="text-ink-400">{hint}</span>
-      </div>
-      <span className={`tabular-nums ${countColour}`}>
-        {empty ? '0' : `${urls.length} ${open ? '▲' : '▼'}`}
+      <span className="min-w-0">
+        <span className="text-body block font-semibold">{label}</span>
+        <span className="text-ink-3 text-label block">{hint}</span>
       </span>
+      {empty ? (
+        <Badge variant="ok">
+          <CircleCheck className="size-3" strokeWidth={2.5} />
+          none
+        </Badge>
+      ) : (
+        <span className="flex items-center gap-2">
+          <Badge variant={tone} mono>
+            {urls.length.toLocaleString()}
+          </Badge>
+          <ChevronRight
+            className="text-ink-3 size-4 transition-transform group-data-[state=open]:rotate-90"
+            strokeWidth={2.25}
+          />
+        </span>
+      )}
     </>
   );
 
+  if (empty) {
+    return <div className="gutter flex items-center justify-between gap-4 py-3.5">{header}</div>;
+  }
   return (
-    <div className={`border-l-2 ${accent} ${empty ? '' : 'bg-ink-700/20'}`}>
-      {empty ? (
-        <div className="flex items-baseline justify-between px-4 py-2 font-mono text-xs">{header}</div>
-      ) : (
-        <button
-          onClick={() => setOpen((o) => !o)}
-          className="flex w-full items-baseline justify-between px-4 py-2 font-mono text-xs transition hover:bg-ink-600/30"
-        >
-          {header}
-        </button>
-      )}
-      {open && !empty && (
-        <ul className="space-y-1 border-t border-ink-500/40 px-4 py-2">
+    <Collapsible className="group">
+      <CollapsibleTrigger className="hover:bg-sunken gutter flex w-full items-center justify-between gap-4 py-3.5 text-left transition">
+        {header}
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <ul className="bg-sunken/60 gutter max-h-80 space-y-1 overflow-y-auto border-t py-3">
           {urls.slice(0, CAP).map((u) => (
-            <li key={u} className="truncate font-mono text-[11px]">
-              <a href={u} target="_blank" rel="noreferrer" className="text-ink-300 hover:text-accent">
+            <li key={u} className="text-caption font-mono">
+              <a
+                href={u}
+                target="_blank"
+                rel="noreferrer"
+                className="tap-area text-ink-2 hover:text-link-600 block w-fit max-w-full truncate hover:underline"
+              >
                 {u}
               </a>
             </li>
           ))}
           {urls.length > CAP && (
-            <li className="font-mono text-[10px] text-ink-400">...and {urls.length - CAP} more</li>
+            <li className="text-ink-3 text-label pt-1">
+              …and {(urls.length - CAP).toLocaleString()} more
+            </li>
           )}
         </ul>
-      )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

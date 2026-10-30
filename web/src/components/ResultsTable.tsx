@@ -1,77 +1,100 @@
 import { useMemo, useState } from 'react';
 
-import { ArrowDown, ArrowUp, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, ExternalLink, Search } from 'lucide-react';
 
 import type { PageRow } from '../api';
+import { usePagination } from '../hooks/usePagination';
 import { scoreTextColour } from '../lib/colours';
+import { downloadCsv, toCsv } from '../lib/csv';
+import { pageStatusLabel } from '../lib/status';
+import { hostSlug, pathOf, sectionOf } from '../lib/url';
 import { Pager } from './ui/Pager';
-import { SegButton } from './ui/SegButton';
+import { SectionDot } from './ui/SectionDot';
+import { StatusChip } from './ui/StatusChip';
+import { Button } from './ui/button';
+import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
-type Filter = 'all' | 'rotten' | 'healthy';
-type SortKey = 'depth' | 'seo';
+type Filter = 'all' | 'healthy' | 'rotten';
+type SortKey = 'depth' | 'seo' | 'response';
+const SORT_LABEL: Record<SortKey, string> = { depth: 'Depth', seo: 'SEO', response: 'Response' };
 type SortDir = 'asc' | 'desc';
 
 const PAGE_SIZE = 20;
+const FILTER_LABEL: Record<Filter, string> = { all: 'All', healthy: 'Healthy', rotten: 'Broken' };
 
-// flat hairline table; row click opens the SEO drawer
 export function ResultsTable({
   rows,
   onSelect,
+  colourFor,
+  siteUrl,
+  foundOn,
 }: {
   rows: PageRow[];
   onSelect: (url: string) => void;
+  colourFor: (section: string) => string;
+  siteUrl: string;
+  foundOn: Map<string, string>;
 }) {
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('depth');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [page, setPage] = useState(1);
 
   const counts = useMemo(() => {
     const rotten = rows.filter((r) => !r.is_alive).length;
     return { all: rows.length, healthy: rows.length - rotten, rotten };
   }, [rows]);
 
-  const filtered = useMemo(() => {
-    let r = rows;
-    if (filter === 'rotten') {
-      r = r.filter((x) => !x.is_alive);
-    } else if (filter === 'healthy') {
-      r = r.filter((x) => x.is_alive);
-    }
-    const q = query.trim().toLowerCase();
-    if (q) {
-      r = r.filter((x) => x.url.toLowerCase().includes(q));
-    }
-    return r;
-  }, [rows, filter, query]);
+  let filtered = rows;
+  if (filter === 'rotten') {
+    filtered = filtered.filter((x) => !x.is_alive);
+  } else if (filter === 'healthy') {
+    filtered = filtered.filter((x) => x.is_alive);
+  }
+  const q = query.trim().toLowerCase();
+  if (q) {
+    filtered = filtered.filter((x) => x.url.toLowerCase().includes(q));
+  }
 
-  const sorted = useMemo(() => {
-    const dir = sortDir === 'asc' ? 1 : -1;
-    return [...filtered].sort((a, b) => {
-      if (sortKey === 'seo') {
-        // no-score pages always sink to the bottom, regardless of direction
-        if (a.seo_score === null) {
-          return b.seo_score === null ? 0 : 1;
-        }
-        if (b.seo_score === null) {
-          return -1;
-        }
-        return (a.seo_score - b.seo_score) * dir;
+  const dir = sortDir === 'asc' ? 1 : -1;
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortKey === 'seo') {
+      // no-score pages sink to the bottom in either direction
+      if (a.seo_score === null) {
+        return b.seo_score === null ? 0 : 1;
       }
-      return (a.depth - b.depth) * dir;
-    });
-  }, [filtered, sortKey, sortDir]);
+      if (b.seo_score === null) {
+        return -1;
+      }
+      return (a.seo_score - b.seo_score) * dir;
+    }
+    if (sortKey === 'response') {
+      return (a.response_time - b.response_time) * dir;
+    }
+    return (a.depth - b.depth) * dir;
+  });
 
-  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const current = Math.min(page, pageCount);
-  const paged = useMemo(
-    () => sorted.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE),
-    [sorted, current],
-  );
+  function exportCsv() {
+    const csv = toCsv(
+      ['url', 'status', 'seo_score', 'depth', 'response_ms', 'first_found_on', 'wayback_copy'],
+      sorted.map((r) => [
+        r.url,
+        pageStatusLabel(r.is_alive, r.status_code, r.error_type),
+        r.seo_score,
+        r.depth,
+        r.response_time,
+        foundOn.get(r.url) ?? '',
+        r.archive_url,
+      ]),
+    );
+    downloadCsv(`linktrace-${hostSlug(siteUrl)}-pages.csv`, csv);
+  }
 
-  // reset to page 1 when filter/search/sort changes the result set
-  function selectFilter(f: Filter) {
+  const { page, setPage, paged } = usePagination(sorted, PAGE_SIZE);
+
+  function pickFilter(f: Filter) {
     setFilter(f);
     setPage(1);
   }
@@ -81,182 +104,151 @@ export function ResultsTable({
     setPage(1);
   }
 
-  function selectSort(key: SortKey) {
-    setSortKey(key);
+  function pickSort(k: SortKey) {
+    if (k === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(k);
+      // response starts slowest-first, to find slow pages
+      setSortDir(k === 'response' ? 'desc' : 'asc');
+    }
     setPage(1);
   }
 
-  function toggleDir() {
-    setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    setPage(1);
-  }
-
-  if (rows.length === 0) {
-    return null;
-  }
+  const DirIcon = sortDir === 'asc' ? ArrowUp : ArrowDown;
 
   return (
-    <section className="border border-ink-500/70 bg-ink-700/40">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-500/70 px-6 py-4">
-        <div className="flex items-baseline gap-3">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-ink-300">
-            pages
-          </span>
-          <span className="display text-2xl font-light tabular-nums">{rows.length}</span>
-        </div>
-        <div className="flex flex-1 flex-wrap items-center justify-start gap-3 sm:justify-end">
-          <div className="relative w-full max-w-xs sm:w-64">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-ink-400"
-              aria-hidden="true"
-            />
-            <input
+    <section className="panel">
+      <header className="panel-head">
+        <ToggleGroup
+          type="single"
+          value={filter}
+          onValueChange={(v) => v && pickFilter(v as Filter)}
+          aria-label="Filter pages"
+        >
+          {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
+            <ToggleGroupItem key={f} value={f} count={counts[f]}>
+              {FILTER_LABEL[f]}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <InputGroup className="sm:w-56">
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
               type="search"
+              aria-label="Search pages by URL"
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
-              placeholder="search endpoint"
-              className="w-full border border-ink-500/70 bg-ink-800 py-1.5 pl-9 pr-3 font-mono text-xs text-paper placeholder:text-ink-400 focus:border-accent focus:outline-none"
+              placeholder="Search URLs"
             />
-          </div>
-          <div className="flex items-center">
-            <span className="mr-2 font-mono text-[10px] uppercase tracking-widest text-ink-300">
-              sort
-            </span>
-            {(['depth', 'seo'] as SortKey[]).map((k) => (
-              <SegButton
-                key={k}
-                variant="sort"
-                active={sortKey === k}
-                onClick={() => selectSort(k)}
-              >
-                {k}
-              </SegButton>
+          </InputGroup>
+          {/* clicking the active key again flips the direction */}
+          <ToggleGroup
+            type="single"
+            value={sortKey}
+            onValueChange={(v) => pickSort((v || sortKey) as SortKey)}
+            aria-label="Sort pages"
+          >
+            {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
+              <ToggleGroupItem key={k} value={k}>
+                {SORT_LABEL[k]}
+                {sortKey === k && (
+                  <DirIcon
+                    className="size-3.5"
+                    strokeWidth={2.5}
+                    aria-label={sortDir === 'asc' ? 'ascending' : 'descending'}
+                  />
+                )}
+              </ToggleGroupItem>
             ))}
-            <button
-              onClick={toggleDir}
-              aria-label={sortDir === 'asc' ? 'sort ascending' : 'sort descending'}
-              className="-ml-px border border-ink-500/70 px-2 py-1.5 text-ink-300 transition hover:bg-ink-600/40 hover:text-paper"
-            >
-              {sortDir === 'asc' ? (
-                <ArrowUp className="size-3.5" aria-hidden="true" />
-              ) : (
-                <ArrowDown className="size-3.5" aria-hidden="true" />
-              )}
-            </button>
-          </div>
-          <div className="flex">
-            {(['all', 'healthy', 'rotten'] as Filter[]).map((f) => (
-              <SegButton
-                key={f}
-                active={filter === f}
-                onClick={() => selectFilter(f)}
-                count={counts[f]}
-              >
-                {f}
-              </SegButton>
-            ))}
-          </div>
+          </ToggleGroup>
+          <Button
+            variant="secondary"
+            onClick={exportCsv}
+            disabled={sorted.length === 0}
+            title="Download the pages shown as CSV"
+          >
+            <Download />
+            CSV
+          </Button>
         </div>
       </header>
 
-      <div className="overflow-x-auto">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th className="pl-6">url</th>
-              <th>status</th>
-              <th>depth</th>
-              <th>resp</th>
-              <th>seo</th>
-              <th className="pr-6">archive</th>
-            </tr>
-          </thead>
-          <tbody>
+      {sorted.length === 0 ? (
+        <p className="text-ink-3 text-body px-6 py-10 text-center">No pages match.</p>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pl-5 sm:pl-8">Page</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Depth</TableHead>
+              <TableHead className="text-right">Response</TableHead>
+              <TableHead className="text-right">SEO</TableHead>
+              <TableHead className="pr-5 sm:pr-8">Archive</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {paged.map((r) => (
-              <tr key={r.url} onClick={() => onSelect(r.url)} className="cursor-pointer">
-                <td className="max-w-md truncate pl-6">
-                  <span className="font-mono text-xs text-paper">{r.url}</span>
-                </td>
-                <td>
-                  <StatusBadge alive={r.is_alive} code={r.status_code} error={r.error_type} />
-                </td>
-                <td className="font-mono text-xs text-ink-300">{r.depth}</td>
-                <td className="font-mono text-xs text-ink-300">
-                  {r.response_time > 0 ? `${r.response_time}ms` : '—'}
-                </td>
-                <td>
-                  <SeoScore score={r.seo_score} />
-                </td>
-                <td className="pr-6">
+              <TableRow
+                key={r.url}
+                onClick={() => onSelect(r.url)}
+                onKeyDown={(e) => {
+                  if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    onSelect(r.url);
+                  }
+                }}
+                tabIndex={0}
+                aria-label={`Open audit for ${r.url}`}
+                className="focus-visible:bg-sunken cursor-pointer focus-visible:-outline-offset-2"
+              >
+                <TableCell className="max-w-md pl-5 sm:pl-8">
+                  <span className="flex items-center gap-2.5" title={r.url}>
+                    <SectionDot colour={colourFor(sectionOf(r.url))} />
+                    <span className="text-label truncate font-mono">{pathOf(r.url)}</span>
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <StatusChip alive={r.is_alive} code={r.status_code} error={r.error_type} />
+                </TableCell>
+                <TableCell className="text-ink-2 text-label text-right font-mono">
+                  {r.depth}
+                </TableCell>
+                <TableCell className="text-ink-2 text-label text-right font-mono whitespace-nowrap">
+                  {r.response_time > 0 ? `${r.response_time.toLocaleString()} ms` : 'None'}
+                </TableCell>
+                <TableCell
+                  className={`text-label text-right font-mono font-medium ${scoreTextColour(r.seo_score)}`}
+                >
+                  {r.seo_score ?? 'n/a'}
+                </TableCell>
+                <TableCell className="pr-5 sm:pr-8">
                   {r.archive_url ? (
                     <a
                       href={r.archive_url}
                       target="_blank"
                       rel="noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="font-mono text-[11px] uppercase tracking-widest text-accent hover:text-accent-soft"
+                      className="tap-area text-link-600 hover:text-link-700 text-label inline-flex items-center gap-1 font-medium whitespace-nowrap hover:underline"
                     >
-                      wayback ↗
+                      Wayback
+                      <ExternalLink className="size-3" strokeWidth={2.25} />
                     </a>
                   ) : (
-                    <span className="text-xs text-ink-400">—</span>
+                    <span className="text-ink-3 text-label">None</span>
                   )}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
-
-      {pageCount > 1 && (
-        <footer className="flex items-center justify-between gap-3 border-t border-ink-500/70 px-6 py-3">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-ink-300">
-            {(current - 1) * PAGE_SIZE + 1}–{Math.min(current * PAGE_SIZE, sorted.length)} of{' '}
-            {sorted.length}
-          </span>
-          <div className="flex items-center gap-5">
-            <Pager bordered current={current} pageCount={pageCount} onPage={setPage} />
-          </div>
-        </footer>
+          </TableBody>
+        </Table>
       )}
+
+      <Pager page={page} total={sorted.length} size={PAGE_SIZE} onPage={setPage} />
     </section>
-  );
-}
-
-function StatusBadge({ alive, code, error }: { alive: boolean; code: number; error: string }) {
-  if (alive) {
-    return (
-      <span className="chip border-emerald-400/30 bg-emerald-500/5 text-emerald-300">
-        <Dot tone="emerald" />
-        <span className="font-mono uppercase tracking-widest">{code || 200}</span>
-      </span>
-    );
-  }
-  return (
-    <span className="chip border-rose-400/30 bg-rose-500/5 text-rose-300">
-      <Dot tone="rose" />
-      <span className="font-mono uppercase tracking-widest">{error || `http_${code}`}</span>
-    </span>
-  );
-}
-
-function SeoScore({ score }: { score: number | null }) {
-  if (score === null) {
-    return <span className="text-xs text-ink-400">—</span>;
-  }
-  return (
-    <span className={`display text-lg font-light tabular-nums ${scoreTextColour(score)}`}>
-      {score}
-    </span>
-  );
-}
-
-function Dot({ tone }: { tone: 'emerald' | 'rose' }) {
-  return (
-    <span
-      className={`inline-block h-1.5 w-1.5 rounded-full ${
-        tone === 'emerald' ? 'bg-emerald-400' : 'bg-rose-400'
-      }`}
-    />
   );
 }

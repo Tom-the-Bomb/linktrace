@@ -1,28 +1,37 @@
-import { forwardRef } from 'react';
+import type { CSSProperties, Ref } from 'react';
 
 interface Props {
+  ref?: Ref<HTMLDivElement>;
+  style?: CSSProperties;
   visible: boolean;
   path: string;
   detail: string;
   detailClass?: string;
-  // fixed for the landing backdrop, absolute inside the graph container
-  position?: 'fixed' | 'absolute';
+  note?: string[];
 }
 
-// pointer-following tooltip (path left, value right); caller writes position via the ref to avoid re-renders
-export const NodeTooltip = forwardRef<HTMLDivElement, Props>(function NodeTooltip(
-  { visible, path, detail, detailClass = '', position = 'absolute' },
-  ref,
-) {
+// callers position it via style, or via the ref to skip a re-render per pointer move
+export function NodeTooltip({ ref, style, visible, path, detail, detailClass = '', note }: Props) {
   return (
     <div
       ref={ref}
-      className={`pointer-events-none ${position} left-0 top-0 z-30 flex items-center gap-3 border-l border-accent/25 bg-ink-800/60 px-3 py-1.5 font-mono text-[11px] backdrop-blur-sm transition-opacity duration-150 ${
+      style={style}
+      aria-hidden="true"
+      className={`bg-ink shadow-lift text-code pointer-events-none absolute top-0 left-0 z-30 w-max max-w-65 rounded-lg px-2.5 py-1.5 font-mono text-white transition-opacity duration-150 ${
         visible ? 'opacity-100' : 'opacity-0'
       }`}
     >
-      <span className="text-ink-200 opacity-60">{path}</span>
-      <span className={`tabular-nums opacity-40 ${detailClass}`}>{detail}</span>
+      <div className="flex items-center gap-3">
+        <span className="truncate">{path}</span>
+        <span className={`shrink-0 font-medium ${detailClass}`}>{detail}</span>
+      </div>
+      {note && note.length > 0 && (
+        <div className="mt-0.5 font-sans leading-snug text-white/60">
+          {note.map((seg) => (
+            <div key={seg}>{seg}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
-});
+}

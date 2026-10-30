@@ -1,142 +1,239 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@theme {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, monospace;
 
-@layer base {
-  html {
-    color-scheme: dark;
-  }
-  body {
-    background: #06080f;
-    color: theme('colors.paper');
-    min-height: 100dvh;
-    font-feature-settings: 'ss01', 'cv11';
-  }
-  /* the display serif gets a subtle italic-like axis when used at big sizes */
-  .display {
-    font-family: theme('fontFamily.display');
-    font-optical-sizing: auto;
-    font-variation-settings:
-      'opsz' 100,
-      'SOFT' 100,
-      'WONK' 0;
-    letter-spacing: -0.02em;
-  }
+  --text-code: 0.6875rem;
+  --text-caption: 0.75rem;
+  --text-label: 0.8125rem;
+  --text-body: 0.9375rem;
+  --text-lead: 1.0625rem;
+  --text-headline: 1.75rem;
+  --text-closing: 2.5rem;
+  --text-display: min(2.75rem, 14vw); /* the vw cap keeps it on a phone at large text sizes */
+  --text-closing-lg: 3.5rem;
+  --text-display-lg: min(4rem, 14vw);
+  --text-stat: min(4.5rem, 19vw);
+  --text-stat--line-height: 1;
 
-  /* slow drifting blobs for the hero, staggered durations + offsets so they never align */
-  @keyframes blob-drift-a {
-    0%,
-    100% {
-      transform: translate(0, 0) scale(1);
-    }
-    33% {
-      transform: translate(40px, -30px) scale(1.08);
-    }
-    66% {
-      transform: translate(-30px, 50px) scale(0.95);
-    }
-  }
-  @keyframes blob-drift-b {
-    0%,
-    100% {
-      transform: translate(0, 0) scale(1);
-    }
-    50% {
-      transform: translate(-60px, 40px) scale(1.1);
-    }
-  }
-  @keyframes blob-drift-c {
-    0%,
-    100% {
-      transform: translate(0, 0) scale(1);
-    }
-    33% {
-      transform: translate(-40px, -50px) scale(1.05);
-    }
-    66% {
-      transform: translate(50px, 30px) scale(0.92);
-    }
-  }
-  .bg-blob-a {
-    animation: blob-drift-a 22s ease-in-out infinite;
-  }
-  .bg-blob-b {
-    animation: blob-drift-b 28s ease-in-out infinite;
-  }
-  .bg-blob-c {
-    animation: blob-drift-c 25s ease-in-out infinite;
-  }
+  --color-canvas: #fafafa;
+  --color-panel: #ffffff;
+  --color-sunken: #f5f5f5;
 
-  /* respect users who don't want motion */
-  @media (prefers-reduced-motion: reduce) {
-    .bg-blob-a,
-    .bg-blob-b,
-    .bg-blob-c {
-      animation: none;
-    }
-  }
+  --color-line: #eaeaea;
+  --color-line-strong: #d4d4d4;
 
-  /* blinking cursor for the typing placeholder. steps() gives a true on/off blink
-     (no fade), matching a real terminal cursor. */
-  @keyframes cursor-blink {
-    0%,
-    49% {
+  --color-ink-2: #4d4d4d;
+  --color-ink-3: #666666;
+  --color-ink-4: #a1a1a1;
+  --color-ink: #171717;
+  --color-ink-hover: #383838;
+
+  --color-link-100: #d9e8ff;
+  --color-link-500: #3b8cff;
+  --color-link-600: #0068d6;
+  --color-link-700: #0054ad;
+
+  --color-ok-bg: #e9f8ee;
+  --color-ok-fg: #107d3e;
+  --color-ok-dot: #2bb35e;
+
+  --color-warn-bg: #fff4d6;
+  --color-warn-fg: #8a5300;
+  --color-warn-dot: #f5a623;
+
+  --color-bad-bg: #ffebee;
+  --color-bad-fg: #c50f1f;
+  --color-bad-dot: #e5484d;
+  --color-bad-hover: #a00c19;
+
+  --radius-panel: 12px;
+  --radius-control: 6px;
+
+  --shadow-lift:
+    0 0 0 1px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04),
+    0 16px 40px -12px rgba(0, 0, 0, 0.16);
+  --shadow-control: 0 0 0 1px var(--color-line);
+  --shadow-control-hover: 0 0 0 1px var(--color-line-strong);
+  --shadow-control-focus: 0 0 0 1px var(--color-ink-4), 0 0 0 4px rgba(0, 0, 0, 0.06);
+  --shadow-segment: 0 0 0 1px var(--color-line), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-key: 0 0 0 1px var(--color-line-strong), 0 1px 0 var(--color-line-strong);
+
+  --tracking-display: -0.05em;
+  --tracking-headline: -0.04em;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-tick: tick 360ms var(--ease-out-expo);
+  --animate-cursor-blink: cursor-blink 1.06s step-end infinite;
+
+  @keyframes tick {
+    from {
+      transform: translateY(35%);
+      opacity: 0.35;
+    }
+    to {
+      transform: none;
       opacity: 1;
     }
-    50%,
-    100% {
+  }
+  @keyframes cursor-blink {
+    50% {
       opacity: 0;
     }
   }
-  .cursor-blink {
-    animation: cursor-blink 1.06s steps(2, jump-none) infinite;
+}
+
+@layer base {
+  /* Tailwind 4 defaults borders to currentcolor and buttons to the arrow cursor */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-line);
+  }
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  html {
+    color-scheme: light;
+  }
+  /* keeps tabbed-to controls clear of the sticky report header */
+  html:has(header.sticky) {
+    scroll-padding-top: 10rem;
+  }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    text-underline-offset: 4px;
+  }
+  ::selection {
+    background: var(--color-link-100);
+    color: var(--color-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-link-500);
+    outline-offset: 2px;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /* spinners keep turning: the only sign work is still in progress */
+    *:not([data-slot='spinner']),
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
-@layer components {
-  /* card: a single hairline rule + soft shadow, no heavy borders, no rounded squircles */
-  .card {
-    @apply relative border border-ink-500/70 bg-ink-700/60 shadow-card backdrop-blur-sm;
+@utility frame {
+  @apply mx-auto w-full max-w-300 border-x;
+}
+
+@utility cross {
+  /* bars sit 5px in; -6px lands them on hairlines drawn just before the anchor */
+  @apply text-ink-4 pointer-events-none absolute z-10;
+  width: 11px;
+  height: 11px;
+  transform: translate(-6px, -6px);
+  background:
+    linear-gradient(currentColor, currentColor) center / 1px 100% no-repeat,
+    linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat;
+}
+
+@utility cross-end {
+  /* the right border sits just after the row's edge */
+  transform: translate(-5px, -6px);
+}
+
+@utility panel {
+  @apply bg-panel relative border-t;
+  &::before {
+    content: '';
+    @apply cross top-0 left-0;
   }
-  .panel {
-    @apply border-y border-ink-500/70 bg-ink-700/40;
+  &::after {
+    content: '';
+    @apply cross cross-end top-0 left-full;
   }
-  .hairline {
-    @apply border-t border-ink-500/70;
+}
+
+@utility panel-head {
+  @apply gutter flex flex-wrap items-center justify-between gap-3 border-b py-3.5;
+}
+
+@utility page-title {
+  @apply text-headline tracking-headline leading-tight font-semibold sm:text-4xl sm:leading-10;
+}
+
+@utility section-title {
+  @apply tracking-headline sm:text-headline text-2xl leading-8 font-semibold;
+}
+
+@utility gutter {
+  @apply px-5 sm:px-8;
+}
+
+@utility lead {
+  @apply text-ink-2 text-lead leading-relaxed;
+}
+
+/* 24px hit area for small links without shifting layout */
+@utility tap-area {
+  @apply -my-1 py-1;
+}
+
+/* forced colours drop shadows and fills, so controls and layers get an edge and selection uses
+   Highlight. Unlayered to beat outline-none, and :where so the focus rule still wins */
+@media (forced-colors: active) {
+  :where(button, kbd, input:not([role='group'] input), [role='group']:has(input)) {
+    outline: 1px solid;
+    outline-offset: -1px;
   }
-  .eyebrow {
-    @apply font-mono text-[10px] uppercase tracking-widest text-accent;
+  :is(button, input):focus-visible,
+  [role='group']:has(input:focus-visible) {
+    outline-width: 2px;
+    outline-offset: 2px;
   }
-  .section-num {
-    @apply font-mono text-[10px] uppercase tracking-widest text-ink-300;
+  /* border, as Radix sets an inline outline: none on menus */
+  :is([role='menu'], [role='dialog'], [role='alertdialog']) {
+    border: 1px solid;
   }
-  .chip {
-    @apply inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[11px] font-medium;
+  :is(
+    [aria-selected='true'],
+    [aria-checked='true'],
+    [aria-pressed='true'],
+    [role='menuitem']:focus
+  ) {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+    & * {
+      color: inherit;
+    }
   }
-  /* standard text input: hairline border, mono text, accent focus ring */
-  .input {
-    @apply border border-ink-500 bg-ink-800 font-mono text-paper placeholder:text-ink-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40;
-  }
-  /* low-emphasis mono action: lights up to accent on hover */
-  .btn-ghost {
-    @apply font-mono text-[10px] uppercase tracking-widest text-ink-300 transition hover:text-accent;
-  }
-  /* tables stay flat, hairline rows, lowercase tracked headers */
-  .data-table {
-    @apply min-w-full text-sm;
-  }
-  .data-table thead tr {
-    @apply border-b border-ink-500/70 text-left text-[10px] uppercase tracking-widest text-ink-300;
-  }
-  .data-table thead th {
-    @apply py-3 pr-3 font-mono font-normal;
-  }
-  .data-table tbody tr {
-    @apply border-b border-ink-500/40 transition-colors last:border-0 hover:bg-ink-600/40;
-  }
-  .data-table tbody td {
-    @apply py-3 pr-3;
+  :is([aria-selected='true'], [aria-checked='true'], [aria-pressed='true']):focus-visible {
+    outline-color: CanvasText;
   }
 }

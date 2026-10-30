@@ -1,143 +1,33 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy } from 'react';
 
-import { User } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import { useAuth } from '../context/AuthContext';
-import { errMessage } from '../lib/format';
-import { ConfirmDialog } from './ConfirmDialog';
+import { Button } from './ui/button';
 
-// shared base for dropdown menu items; each appends its own text + hover colour
-const menuItem =
-  'block w-full px-4 py-2.5 text-left font-mono text-[11px] uppercase tracking-widest transition';
+// lazy so anonymous visitors don't download it
+const AccountMenu = lazy(() => import('./AccountMenu'));
 
-// top-right widget: log in/register link when anonymous, username menu when logged in
 export function AuthBar() {
-  const { user, loading, logout, deleteAccount } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const historyOpen = location.pathname === '/history';
+  const { user, loading } = useAuth();
 
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  // dismiss the dropdown on any click outside its container
-  useEffect(() => {
-    if (!menuOpen) {
-      return;
-    }
-    const onDocClick = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [menuOpen]);
-
+  // button-sized so the nav doesn't jump when auth resolves
+  const placeholder = <span className="inline-block h-9 w-17" aria-hidden="true" />;
   if (loading) {
-    return null;
+    return placeholder;
   }
 
   if (!user) {
     return (
-      <button onClick={() => navigate('/auth')} className="btn-ghost">
-        log in / register
-      </button>
+      <Button variant="secondary" className="px-3.5" asChild>
+        <Link to="/auth">Log in</Link>
+      </Button>
     );
   }
 
-  const close = () => setMenuOpen(false);
-
-  // on success user becomes null, re-rendering logged-out and unmounting the dialog
-  async function onConfirmDeleteAccount() {
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      await deleteAccount();
-      setConfirmDelete(false);
-      navigate('/');
-    } catch (e) {
-      setDeleteError(errMessage(e));
-      setDeleting(false);
-    }
-  }
-
   return (
-    <>
-      <div ref={containerRef} className="relative">
-        <button
-          onClick={() => setMenuOpen((o) => !o)}
-          className={`flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.22em] transition ${
-            menuOpen ? 'text-accent' : 'text-ink-300 hover:text-accent'
-          }`}
-        >
-          <User className="h-3 w-3" strokeWidth={2} />
-          <span>{user.username}</span>
-        </button>
-
-        {menuOpen && (
-          <div className="absolute right-0 top-full z-40 mt-3 min-w-[180px] border border-ink-500/70 bg-ink-800 shadow-card">
-            <button
-              onClick={() => {
-                navigate(historyOpen ? '/' : '/history');
-                close();
-              }}
-              className={`${menuItem} text-ink-300 hover:bg-ink-700 hover:text-accent`}
-            >
-              {historyOpen ? 'back to crawl' : 'history'}
-            </button>
-            <div className="border-t border-ink-500/70" />
-            <button
-              onClick={async () => {
-                await logout();
-                close();
-                navigate('/');
-              }}
-              className={`${menuItem} text-ink-300 hover:bg-ink-700 hover:text-rose-300`}
-            >
-              log out
-            </button>
-            <div className="border-t border-ink-500/70" />
-            <button
-              onClick={() => {
-                setConfirmDelete(true);
-                close();
-              }}
-              className={`${menuItem} text-rose-400 hover:bg-rose-500/10 hover:text-rose-300`}
-            >
-              delete account
-            </button>
-          </div>
-        )}
-      </div>
-
-      {confirmDelete && (
-        <ConfirmDialog
-          eyebrow="delete account"
-          title="Delete your account?"
-          message={
-            <>
-              This permanently deletes your account{' '}
-              <span className="font-mono text-paper">{user.username}</span>, every crawl
-              you&rsquo;ve run and all of their results, and stops any crawls still in progress.
-              This can&rsquo;t be undone.
-            </>
-          }
-          confirmLabel="delete account"
-          busyLabel="deleting…"
-          busy={deleting}
-          error={deleteError}
-          onConfirm={onConfirmDeleteAccount}
-          onCancel={() => {
-            setConfirmDelete(false);
-            setDeleteError(null);
-          }}
-        />
-      )}
-    </>
+    <Suspense fallback={placeholder}>
+      <AccountMenu user={user} />
+    </Suspense>
   );
 }

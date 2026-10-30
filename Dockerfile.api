@@ -1,19 +1,14 @@
-# ---- build stage ----
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 
-# Cache deps first so code changes don't re-download modules.
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-# CGO_ENABLED=0 -> fully static binary (all deps are pure Go), runs on a minimal base.
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
 
-# ---- run stage ----
-FROM alpine:3.20
-# ca-certificates: the API does outbound HTTPS (domain audit / archive lookups).
-# tini: clean signal handling for graceful shutdown.
+FROM alpine:3.24
+# ca-certificates: the domain audit makes outbound HTTPS calls
 RUN apk add --no-cache ca-certificates tini
 COPY --from=build /out/api /usr/local/bin/api
 EXPOSE 8080

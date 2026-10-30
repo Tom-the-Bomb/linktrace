@@ -1,5 +1,3 @@
-// Package checker fetches a URL and classifies the outcome as alive or a specific kind of
-// rot (DNS, timeout, SSL, soft-404, 4xx/5xx, redirect loop). Helpers live in utils.go.
 package checker
 
 import (
@@ -11,7 +9,6 @@ import (
 	"github.com/Tom-the-Bomb/linktrace/internal/httpx"
 )
 
-// type of rot
 const (
 	ErrTimeout      = "timeout"
 	ErrDNS          = "dns_failure"
@@ -22,68 +19,43 @@ const (
 	ErrSoft404      = "soft_404"
 	ErrHTTP4xx      = "http_4xx"
 	ErrServer5xx    = "server_error"
-	ErrBlocked      = "blocked" // anti-bot wall (429, or 403/503 challenge), not real rot
+	ErrBlocked      = "blocked"
 	ErrUnknown      = "unknown"
 )
 
 const (
-	maxRedirects = 10      // give up past this many hops (redirect loop)
-	maxBodyBytes = 1 << 20 // 1 MB cap on the body kept for SEO analysis
+	timeout      = 10 * time.Second
+	maxRedirects = 10
+	maxBodyBytes = 1 << 20
 )
 
 type CheckResult struct {
-	StatusCode    int
-	ResponseTime  int
-	IsAlive       bool
-	ErrorType     string
-	RedirectChain []string
-	ContentType   string
-	Body          []byte
-	FinalURL      string
-	RetryAfter    time.Duration // parsed Retry-After header on a 429 (0 if absent/unparseable)
+	StatusCode   int
+	ResponseTime int
+	IsAlive      bool
+	ErrorType    string
+	Body         []byte
+	FinalURL     string
+	RetryAfter   time.Duration
 }
 
-// holds only the per-request timeout; each Check builds its own client so the
-// CheckRedirect hook can record that request's redirect chain without shared state.
-type Checker struct {
-	timeout time.Duration
-}
-
-// returns a Checker whose requests time out after the given duration.
-func New(timeout time.Duration) *Checker {
-	return &Checker{timeout: timeout}
-}
-
-// fetches rawURL and returns its liveness + classified error type. For healthy HTML it
-// also returns the response body (capped at maxBodyBytes) for downstream SEO analysis.
-func (c *Checker) Check(rawURL string) CheckResult {
+// builds a client per call so the redirect hook's loop flag isn't shared.
+func Check(rawURL string) CheckResult {
 	start := time.Now()
 	res := CheckResult{FinalURL: rawURL}
 
-	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
-	if err != nil {
-		res.ErrorType = ErrUnknown // malformed URL / bad scheme, not a DNS failure
-		return res
-	}
-	httpx.SetBrowserHeaders(req)
-
-	// looped is set when the hop limit is hit. ErrUseLastResponse is deliberate: returning a real
-	// error here would discard the response (and the chain) that the report wants to show.
-	var chain []string
+	// ErrUseLastResponse keeps the last response, where a real error would discard it.
 	var looped bool
-	client := &http.Client{
-		Timeout: c.timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			chain = append(chain, req.URL.String())
-			if len(via) >= maxRedirects {
-				looped = true
-				return http.ErrUseLastResponse
-			}
-			return nil
-		},
+	client := httpx.NewClient(timeout, true)
+	client.CheckRedirect = func(_ *http.Request, via []*http.Request) error {
+		if len(via) >= maxRedirects {
+			looped = true
+			return http.ErrUseLastResponse
+		}
+		return nil
 	}
 
-	resp, err := client.Do(req)
+	resp, err := httpx.Get(client, rawURL)
 	res.ResponseTime = int(time.Since(start).Milliseconds())
 	if err != nil {
 		res.ErrorType = classifyNetworkError(err)
@@ -92,15 +64,12 @@ func (c *Checker) Check(rawURL string) CheckResult {
 	defer resp.Body.Close()
 
 	res.StatusCode = resp.StatusCode
-	res.ContentType = resp.Header.Get("Content-Type")
 	res.FinalURL = resp.Request.URL.String()
-	res.RedirectChain = chain
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 
 	switch {
-	// checked before the status buckets: the surfaced response is the last 3xx of the chain,
-	// which would otherwise fall through to the 2xx/3xx branch and be recorded as alive
+	// first: the surfaced response is the chain's last 3xx, which would otherwise count as alive
 	case looped:
 		res.ErrorType = ErrRedirectLoop
 	case looksBlocked(resp.StatusCode, resp.Header, body):
@@ -110,14 +79,14 @@ func (c *Checker) Check(rawURL string) CheckResult {
 		res.ErrorType = ErrServer5xx
 	case resp.StatusCode >= 400:
 		res.ErrorType = ErrHTTP4xx
-	default: // 2xx/3xx
-		isHTML := strings.Contains(res.ContentType, "text/html")
+	default:
+		isHTML := strings.Contains(resp.Header.Get("Content-Type"), "text/html")
 		if isHTML && isSoft404(body) {
 			res.ErrorType = ErrSoft404
 		} else {
 			res.IsAlive = true
 			if isHTML {
-				res.Body = body // kept for downstream SEO analysis
+				res.Body = body
 			}
 		}
 	}

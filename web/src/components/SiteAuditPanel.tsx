@@ -1,115 +1,132 @@
+import { Check, X } from 'lucide-react';
+
 import type { SiteAudit, SiteSEO } from '../api';
-import { pct } from '../lib/colours';
+import { type Tone, pct, toneColour } from '../lib/colours';
 import { SectionHeader } from './SectionHeader';
 import { DataRow } from './ui/DataRow';
 
-// domain checks (robots, sitemap, https, www) + site-wide SEO roll-ups
 export function SiteAuditPanel({ audit, seo }: { audit: SiteAudit; seo: SiteSEO | null }) {
   return (
     <section>
-      <SectionHeader number="05" title="Site health" subtitle="Domain-level signals" />
+      <SectionHeader
+        title="Site health"
+        subtitle="Domain checks, plus SEO totals across every audited page."
+      />
 
-      <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
-        <div className="lg:col-span-5">
-          <ul className="divide-y divide-ink-500/60 border-y border-ink-500/60">
-            <Check ok={audit.robots_found} label="robots.txt found" />
-            <Check ok={!audit.robots_disallow_all} label="robots.txt allows crawling" />
-            <Check
+      <div className="panel grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <div className="p-5 sm:p-8">
+          <h3 className="text-body font-semibold tracking-tight">Domain</h3>
+          <ul className="mt-2 divide-y">
+            <CheckRow ok={audit.robots_found} label="robots.txt found" />
+            <CheckRow ok={!audit.robots_disallow_all} label="robots.txt allows crawling" />
+            <CheckRow
               ok={audit.sitemap_found}
               label={
                 audit.sitemap_found
-                  ? `sitemap.xml (${audit.sitemap_url_count} urls)`
-                  : 'no sitemap.xml'
+                  ? `sitemap.xml found (${audit.sitemap_url_count.toLocaleString()} URLs)`
+                  : 'sitemap.xml found'
               }
             />
-            <Check ok={audit.is_https} label="https available" />
-            <Check ok={audit.https_redirect} label="http to https redirect" />
-            <Check ok={audit.cert_valid} label="tls certificate valid" />
-            <Check
+            <CheckRow ok={audit.is_https} label="HTTPS available" />
+            <CheckRow ok={audit.https_redirect} label="HTTP redirects to HTTPS" />
+            <CheckRow ok={audit.cert_valid} label="TLS certificate valid" />
+            <CheckRow
               ok={audit.www_canonical === 'www' || audit.www_canonical === 'apex'}
-              label={`www canonicalization: ${audit.www_canonical}`}
+              label={`www canonicalisation: ${audit.www_canonical}`}
             />
             {audit.crawl_delay > 0 && (
-              <DataRow label="crawl-delay">
-                <span className="text-ink-300">{audit.crawl_delay}s</span>
+              <DataRow label="Crawl-delay">
+                <span className="text-ink-2 text-label font-mono">{audit.crawl_delay}s</span>
               </DataRow>
             )}
           </ul>
         </div>
 
         {seo && seo.pages_audited > 0 && (
-          <aside className="lg:col-span-7">
-            <span className="eyebrow">site-wide seo · {seo.pages_audited} pages</span>
-            <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+          <div className="bg-sunken/50 border-t p-5 sm:p-8 lg:border-t-0 lg:border-l">
+            <h3 className="text-body font-semibold tracking-tight">
+              Across <span className="tabular-nums">{seo.pages_audited.toLocaleString()}</span>{' '}
+              audited {seo.pages_audited === 1 ? 'page' : 'pages'}
+            </h3>
+            <ul className="mt-2 grid grid-cols-1 gap-x-8 divide-y sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-1 xl:grid-cols-2 sm:[&>li]:border-b">
               <Stat
-                label="duplicate title groups"
+                label="Duplicate title groups"
                 value={seo.duplicate_title_sets}
                 bad={seo.duplicate_title_sets > 0}
               />
               <PctStat
-                label="missing meta desc"
+                label="Missing meta description"
                 count={seo.missing_meta_desc}
                 total={seo.pages_audited}
                 badAbove={0.3}
               />
               <PctStat
-                label="have canonical"
+                label="Have a canonical"
                 count={seo.with_canonical}
                 total={seo.pages_audited}
                 goodAbove={0.7}
               />
               <PctStat
-                label="noindex pages"
+                label="Set to noindex"
                 count={seo.noindex_pages}
                 total={seo.pages_audited}
                 badAbove={0.05}
               />
               <PctStat
-                label="json-ld coverage"
+                label="Structured data (JSON-LD)"
                 count={seo.with_jsonld}
                 total={seo.pages_audited}
                 goodAbove={0.4}
               />
               <PctStat
-                label="open graph"
+                label="Open Graph tags"
                 count={seo.with_open_graph}
                 total={seo.pages_audited}
                 goodAbove={0.6}
               />
               <PctStat
-                label="twitter cards"
+                label="Twitter cards"
                 count={seo.with_twitter_cards}
                 total={seo.pages_audited}
                 goodAbove={0.6}
               />
               <PctStat
-                label="viewport meta"
+                label="Viewport meta"
                 count={seo.with_viewport}
                 total={seo.pages_audited}
                 goodAbove={0.95}
               />
-              <Stat label="multiple h1" value={seo.multiple_h1} bad={seo.multiple_h1 > 0} />
-              <Stat label="missing h1" value={seo.missing_h1} bad={seo.missing_h1 > 0} />
+              <Stat label="Multiple h1s" value={seo.multiple_h1} bad={seo.multiple_h1 > 0} />
+              <Stat label="Missing h1" value={seo.missing_h1} bad={seo.missing_h1 > 0} />
             </ul>
-          </aside>
+          </div>
         )}
       </div>
     </section>
   );
 }
 
-function Check({ ok, label }: { ok: boolean; label: string }) {
+function CheckRow({ ok, label }: { ok: boolean; label: string }) {
+  const Icon = ok ? Check : X;
   return (
-    <DataRow label={label}>
-      <span className={ok ? 'text-emerald-300' : 'text-rose-300'}>{ok ? '● ok' : '○ no'}</span>
-    </DataRow>
+    <li className="flex items-center gap-3 py-2.5 text-sm">
+      <span
+        className={`rounded-control flex size-5 shrink-0 items-center justify-center ${ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}
+      >
+        <Icon className="size-3.5" strokeWidth={3} />
+      </span>
+      <span>{label}</span>
+      <span className="sr-only">{ok ? 'passed' : 'failed'}</span>
+    </li>
   );
 }
 
 function Stat({ label, value, bad }: { label: string; value: number; bad?: boolean }) {
   return (
-    <DataRow compact label={label}>
-      <span className={`tabular-nums ${bad ? 'text-rose-300' : 'text-ink-300'}`}>{value}</span>
+    <DataRow label={label}>
+      <span className={`text-label font-mono font-medium ${bad ? 'text-bad-fg' : 'text-ink-2'}`}>
+        {value.toLocaleString()}
+      </span>
     </DataRow>
   );
 }
@@ -128,17 +145,20 @@ function PctStat({
   badAbove?: number;
 }) {
   const ratio = total > 0 ? count / total : 0;
-  let colour = 'text-ink-300';
+  let tone: Tone | undefined;
   if (goodAbove !== undefined) {
-    colour = ratio >= goodAbove ? 'text-emerald-300' : 'text-amber-300';
+    tone = ratio >= goodAbove ? 'ok' : 'warn';
   }
   if (badAbove !== undefined) {
-    colour = ratio > badAbove ? 'text-rose-300' : 'text-emerald-300';
+    tone = ratio > badAbove ? 'bad' : 'ok';
   }
   return (
-    <DataRow compact label={label}>
-      <span className={`tabular-nums ${colour}`}>
-        {count}/{total} <span className="text-ink-400">({pct(count, total)}%)</span>
+    <DataRow label={label}>
+      <span className="text-label font-mono">
+        <span className={`font-medium ${toneColour(tone)}`}>{pct(count, total)}%</span>{' '}
+        <span className="text-ink-3">
+          {count.toLocaleString()}/{total.toLocaleString()}
+        </span>
       </span>
     </DataRow>
   );

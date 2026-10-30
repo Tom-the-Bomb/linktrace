@@ -1,15 +1,5 @@
-// Shared display helpers: human date/time formatting and error-message extraction.
-
-// ISO timestamp -> localized date (+ time if withTime); '-' if empty, raw string if unparseable.
 export function formatDate(iso: string, withTime = false): string {
-  if (!iso) {
-    return '-';
-  }
-  const date = new Date(iso);
-  if (isNaN(date.getTime())) {
-    return iso;
-  }
-  return date.toLocaleString(undefined, {
+  return new Date(iso).toLocaleString(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -17,7 +7,6 @@ export function formatDate(iso: string, withTime = false): string {
   });
 }
 
-// pulls a string message out of an unknown caught value.
 export function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }

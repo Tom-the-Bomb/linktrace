@@ -1,30 +1,37 @@
 import type { CrawlStats } from '../api';
 import { SectionHeader } from './SectionHeader';
-import { StatTile } from './ui/StatTile';
 
-// crawl performance, computed from page_results (no separate telemetry table)
 export function CrawlStatsPanel({ stats }: { stats: CrawlStats }) {
   const errorPct = (stats.error_rate * 100).toFixed(1);
   const mins = Math.floor(stats.duration_seconds / 60);
   const secs = stats.duration_seconds % 60;
   const duration = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
+  const items: { label: string; value: string; hint?: string; bad?: boolean }[] = [
+    { label: 'Pages', value: stats.total_pages.toLocaleString() },
+    { label: 'Requests', value: stats.total_requests.toLocaleString(), hint: 'incl. retries' },
+    { label: 'Avg response', value: `${stats.avg_response_ms.toLocaleString()} ms` },
+    { label: 'Slowest response', value: `${stats.max_response_ms.toLocaleString()} ms` },
+    { label: 'Error rate', value: `${errorPct}%`, bad: stats.error_rate > 0.1 },
+    { label: 'Duration', value: duration },
+  ];
+
   return (
     <section>
-      <SectionHeader number="06" title="Crawl performance" subtitle="How the run went" />
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        <StatTile bordered label="pages" value={stats.total_pages} />
-        <StatTile bordered label="requests" value={stats.total_requests} hint="incl. retries" />
-        <StatTile bordered label="avg response" value={`${stats.avg_response_ms}ms`} />
-        <StatTile bordered label="max response" value={`${stats.max_response_ms}ms`} />
-        <StatTile
-          bordered
-          label="error rate"
-          value={`${errorPct}%`}
-          tone={stats.error_rate > 0.1 ? 'bad' : 'ok'}
-        />
-        <StatTile bordered label="duration" value={duration} />
-      </div>
+      <SectionHeader title="Crawl stats" />
+      <dl className="panel grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 xl:divide-x sm:max-xl:[&>div:nth-child(-n+3)]:border-b max-sm:[&>div:nth-child(-n+4)]:border-b">
+        {items.map((it) => (
+          <div key={it.label} className="gutter py-5">
+            <dt className="text-ink-3 text-label font-medium">{it.label}</dt>
+            <dd
+              className={`mt-1 text-xl font-semibold tracking-tight tabular-nums ${it.bad ? 'text-bad-fg' : ''}`}
+            >
+              {it.value}
+            </dd>
+            {it.hint && <dd className="text-ink-3 text-xs">{it.hint}</dd>}
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }

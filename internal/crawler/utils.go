@@ -5,33 +5,31 @@ import (
 	"strings"
 )
 
-// path prefixes for framework/asset internals, never enqueued (saves crawl budget for real pages).
 var skipPrefixes = []string{
-	"/cdn-cgi/",     // cloudflare
-	"/.well-known/", // ietf metadata
-	"/wp-admin/",    // wordpress backend
-	"/wp-includes/", // wordpress framework files
-	"/wp-json/",     // wordpress REST
-	"/_next/",       // next.js build assets
-	"/__next/",      // next.js internals
-	"/_nuxt/",       // nuxt build assets
-	"/__nuxt/",      // nuxt internals
-	"/_astro/",      // astro build assets
-	"/__svelte/",    // svelte internals
-	"/__sveltekit/", // sveltekit internals
-	"/_app/",        // sveltekit app routes
-	"/assets/",      // generic build output
-	"/static/",      // generic static
-	"/_static/",     // generic static
-	"/_image",       // framework image proxies
-	"/api/",         // REST/RPC endpoints, not user-facing pages
-	"/feed",         // rss/atom feeds
-	"/rss",          // rss feed root
-	"/sitemap",      // sitemap.xml + variants
-	"/admin/",       // generic admin
+	"/cdn-cgi/",
+	"/.well-known/",
+	"/wp-admin/",
+	"/wp-includes/",
+	"/wp-json/",
+	"/_next/",
+	"/__next/",
+	"/_nuxt/",
+	"/__nuxt/",
+	"/_astro/",
+	"/__svelte/",
+	"/__sveltekit/",
+	"/_app/",
+	"/assets/",
+	"/static/",
+	"/_static/",
+	"/_image",
+	"/api/",
+	"/feed/",
+	"/rss/",
+	"/sitemap/",
+	"/admin/",
 }
 
-// non-HTML file extensions, never enqueued.
 var skipExtensions = []string{
 	".css", ".js", ".mjs", ".map",
 	".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".bmp",
@@ -41,7 +39,6 @@ var skipExtensions = []string{
 	".xml", ".json", ".txt", ".csv",
 }
 
-// reports whether a path is a framework/asset route or non-HTML file.
 func isUnwantedPath(path string) bool {
 	lower := strings.ToLower(path)
 	for _, p := range skipPrefixes {
@@ -57,7 +54,6 @@ func isUnwantedPath(path string) bool {
 	return false
 }
 
-// content-irrelevant query params (tracking/session/click IDs), stripped during normalization.
 var trackingParams = map[string]bool{
 	"utm_source":   true,
 	"utm_medium":   true,
@@ -82,17 +78,11 @@ var trackingParams = map[string]bool{
 	"sessionid":    true,
 }
 
-// collapses same-page URL variants: lowercase host, no fragment, trimmed trailing
-// slash (except root), tracking params removed and the rest sorted. dropQuery drops the query.
 func canonicalize(u *url.URL, dropQuery bool) string {
 	u.Host = strings.ToLower(u.Host)
 	u.Fragment = ""
-
 	if u.Path == "" {
 		u.Path = "/"
-	}
-	if len(u.Path) > 1 && strings.HasSuffix(u.Path, "/") {
-		u.Path = strings.TrimRight(u.Path, "/")
 	}
 
 	if dropQuery {
@@ -111,17 +101,15 @@ func canonicalize(u *url.URL, dropQuery bool) string {
 	return u.String()
 }
 
-// turns an href into a canonical same-host page URL, or "" if off-host,
-// non-http(s), or an asset/framework path.
-func resolve(base *url.URL, href string) string {
-	u, err := base.Parse(href)
+func resolve(base *url.URL, host, href string) string {
+	u, err := base.Parse(strings.TrimSpace(href))
 	if err != nil {
 		return ""
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return ""
 	}
-	if !strings.EqualFold(u.Host, base.Host) {
+	if !strings.EqualFold(u.Host, host) {
 		return ""
 	}
 	if isUnwantedPath(u.Path) {
@@ -130,7 +118,6 @@ func resolve(base *url.URL, href string) string {
 	return canonicalize(u, false)
 }
 
-// removes duplicate URLs, preserving first-seen order.
 func dedupe(in []string) []string {
 	seen := map[string]bool{}
 	var out []string

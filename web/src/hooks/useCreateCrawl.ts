@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom';
 import { createCheck } from '../api';
 import { errMessage } from '../lib/format';
 
-// submit a URL, create a job, navigate to its report; shared by all new-crawl forms
 export function useCreateCrawl() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
@@ -15,8 +14,8 @@ export function useCreateCrawl() {
     setError(null);
     setSubmitting(true);
     try {
-      const { job_id } = await createCheck(url);
-      navigate(`/jobs/${job_id}`);
+      const { job_id, joined } = await createCheck(url);
+      await navigate(`/jobs/${job_id}`, { state: { joined: !!joined } });
     } catch (err) {
       setError(errMessage(err));
     } finally {

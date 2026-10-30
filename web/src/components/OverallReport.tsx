@@ -1,133 +1,129 @@
-import type { Report } from '../api';
-import { scoreStrokeColour, scoreTextColour } from '../lib/colours';
-import { SectionHeader } from './SectionHeader';
-import { StatTile } from './ui/StatTile';
+import { TriangleAlert } from 'lucide-react';
 
-// gauge + headline metric left, stats + issues right
+import type { Report } from '../api';
+import { pct, scoreTierBadge } from '../lib/colours';
+import { SectionHeader } from './SectionHeader';
+import { ScoreScale } from './ui/ScoreScale';
+import { Badge } from './ui/badge';
+
 export function OverallReport({ report }: { report: Report }) {
-  const { total_pages, healthy, rotten, avg_seo_score, top_issues } = report.overall;
-  const rottenPct = total_pages > 0 ? Math.round((rotten / total_pages) * 100) : 0;
-  const healthyPct = total_pages > 0 ? Math.round((healthy / total_pages) * 100) : 0;
+  const { total_pages, rotten, avg_seo_score, top_issues } = report.overall;
+  // the average is 0, not absent, when no page was audited
+  const audited = !!report.site_seo?.pages_audited;
+  const tier = scoreTierBadge(avg_seo_score);
+  const rottenPct = pct(rotten, total_pages);
 
   return (
     <section>
-      <SectionHeader
-        number="02"
-        title="The verdict"
-        subtitle="Score, totals, recurring problems."
-      />
-
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
-        {/* featured score + verdict */}
-        <div className="lg:col-span-7">
-          <div className="flex items-center gap-6 sm:gap-10">
-            <ScoreGauge score={avg_seo_score} />
+      <SectionHeader title="Summary" />
+      <div className="panel grid lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+        <div className="p-5 sm:p-8">
+          <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
             <div>
-              <span className="eyebrow">avg SEO score</span>
-              <p className="display mt-4 text-2xl font-light leading-snug">
-                {scoreVerdict(avg_seo_score)}
+              <p className="text-ink-3 text-label font-medium">Broken pages</p>
+              <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
+                <span
+                  className={`tracking-display text-stat font-semibold tabular-nums ${rotten > 0 ? 'text-bad-fg' : 'text-ok-fg'}`}
+                >
+                  {rotten.toLocaleString()}
+                </span>
+                <span className="text-ink-3 text-xl font-semibold tabular-nums">
+                  of {total_pages.toLocaleString()}
+                </span>
+              </p>
+              <BrokenBar pct={rottenPct} />
+              <p className="text-ink-3 text-label mt-1.5">
+                {rotten === 0 ? (
+                  'No broken pages'
+                ) : (
+                  <>
+                    <span className="text-caption font-mono">
+                      {rottenPct < 1 ? '<1' : rottenPct}%
+                    </span>{' '}
+                    of checked pages
+                  </>
+                )}
               </p>
             </div>
+            {audited && (
+              <div>
+                <p className="text-ink-3 text-label font-medium">Average SEO score</p>
+                <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
+                  <span className="tracking-display text-stat font-semibold tabular-nums">
+                    {avg_seo_score}
+                  </span>
+                  <span className="text-ink-3 text-xl font-semibold">/100</span>
+                  <Badge variant={tier.tone} className="ml-1 self-center">
+                    {tier.label}
+                  </Badge>
+                </p>
+                <ScoreScale score={avg_seo_score} />
+              </div>
+            )}
           </div>
-
-          <div className="hairline mt-10 grid grid-cols-3 gap-4 pt-8">
-            <StatTile label="pages" value={total_pages} />
-            <StatTile label="healthy" value={`${healthy}`} hint={`${healthyPct}%`} tone="ok" />
-            <StatTile label="rotten" value={`${rotten}`} hint={`${rottenPct}%`} tone="bad" />
-          </div>
+          <p className="text-lead mt-6 border-t pt-5 leading-snug font-semibold tracking-tight">
+            <span>{linkVerdict(rotten, rottenPct)}</span>{' '}
+            <span className="text-ink-2 font-normal">{audited && scoreVerdict(avg_seo_score)}</span>
+          </p>
         </div>
 
-        {/* recurring issues column */}
-        <aside className="border-t border-ink-500/60 pt-8 lg:col-span-5 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
-          <span className="eyebrow">recurring issues</span>
+        <div className="bg-sunken/50 border-t p-5 sm:p-8 lg:border-t-0 lg:border-l">
+          <h3 className="text-body font-semibold tracking-tight">Most common SEO issues</h3>
           {top_issues.length === 0 ? (
-            <p className="mt-6 font-mono text-xs text-ink-300">No recurring issues detected.</p>
+            <p className="text-ink-2 text-body mt-3">No recurring issues found.</p>
           ) : (
-            <ol className="mt-6 space-y-3">
-              {top_issues.map((iss, i) => (
-                <li key={iss} className="flex items-baseline gap-4">
-                  <span className="display text-xl font-light text-accent">
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-                  <span className="text-sm leading-relaxed text-paper/90">{iss}</span>
+            <ul className="mt-3 divide-y">
+              {top_issues.map((iss) => (
+                <li key={iss} className="text-body flex items-start gap-3 py-2.5 leading-snug">
+                  <TriangleAlert
+                    className="text-warn-dot mt-0.5 size-4 shrink-0"
+                    strokeWidth={2.25}
+                  />
+                  <span>{iss}</span>
                 </li>
               ))}
-            </ol>
+            </ul>
           )}
-        </aside>
+        </div>
       </div>
     </section>
   );
 }
 
-function scoreVerdict(s: number) {
-  if (s >= 85) {
-    return 'Strong. The basics are in place across most pages.';
-  }
-  if (s >= 65) {
-    return 'Decent. A handful of recurring fixes would lift this site significantly.';
-  }
-  if (s >= 40) {
-    return 'Mixed. Several pages need real work before they read well to search.';
-  }
-  return 'Rough. Foundational SEO is missing across the site.';
-}
-
-function ScoreGauge({ score }: { score: number }) {
-  const size = 180;
-  const stroke = 2;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const clamped = Math.max(0, Math.min(100, score));
-  const dash = (clamped / 100) * c;
-
-  const strokeColour = scoreStrokeColour(score);
-  const fill = scoreTextColour(score);
-
+function BrokenBar({ pct: p }: { pct: number }) {
   return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          strokeWidth={stroke}
-          className="stroke-ink-500"
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          strokeWidth={stroke}
-          strokeDasharray={`${dash} ${c}`}
-          className={`${strokeColour} transition-[stroke-dasharray] duration-700`}
-        />
-        {/* tick marks every 10% */}
-        {Array.from({ length: 20 }).map((_, i) => {
-          const a = (i / 20) * Math.PI * 2;
-          const x1 = size / 2 + Math.cos(a) * (r - 8);
-          const y1 = size / 2 + Math.sin(a) * (r - 8);
-          const x2 = size / 2 + Math.cos(a) * (r - 14);
-          const y2 = size / 2 + Math.sin(a) * (r - 14);
-          return (
-            <line
-              key={i}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              strokeWidth={1}
-              className="stroke-ink-500"
-            />
-          );
-        })}
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className={`display text-6xl font-light tabular-nums ${fill}`}>{score}</span>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-ink-300">/ 100</span>
-      </div>
+    <div
+      className="bg-ok-dot/80 mt-4 h-2 overflow-hidden rounded-full forced-color-adjust-none"
+      aria-hidden="true"
+    >
+      <div
+        className="bg-bad-dot ease-out-expo h-full transition-[width] duration-700"
+        style={{ width: `${p > 0 ? Math.max(p, 1.5) : 0}%` }}
+      />
     </div>
   );
+}
+
+function linkVerdict(rotten: number, rottenPct: number) {
+  if (rotten === 0) {
+    return 'No pages are broken.';
+  }
+  const pages = `${rotten.toLocaleString()} ${rotten === 1 ? 'page is' : 'pages are'} broken`;
+  if (rottenPct < 1) {
+    return `${pages} (under 1% of the site).`;
+  }
+  return `${pages} (${rottenPct}% of the site).`;
+}
+
+function scoreVerdict(s: number) {
+  if (s >= 85) {
+    return 'Most pages have the SEO basics in place.';
+  }
+  if (s >= 65) {
+    return 'SEO is decent, and fixing a few recurring issues would raise the score.';
+  }
+  if (s >= 40) {
+    return 'SEO is mixed, and several pages need work.';
+  }
+  return 'SEO is weak, since basic tags are missing from most of the site.';
 }

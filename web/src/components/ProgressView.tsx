@@ -1,124 +1,238 @@
-import { Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+
+import { Check, ExternalLink, Link, RotateCw, Trash2 } from 'lucide-react';
 
 import type { Status } from '../api';
-import { type Tone, toneColour } from '../lib/colours';
+import { pct } from '../lib/colours';
+import { formatDate } from '../lib/format';
 import { isTerminalStatus } from '../lib/status';
-import { SectionHeader } from './SectionHeader';
+import { hostOf } from '../lib/url';
+import { JobStatusChip } from './ui/StatusChip';
+import { Button } from './ui/button';
+import { Spinner } from './ui/spinner';
 
-// live crawl progress: segmented bar + percentage, stats on the side; onDelete renders a trash button
 export function ProgressView({
   status,
   onDelete,
+  onRecrawl,
+  recrawling,
 }: {
   status: Status | null;
   onDelete?: () => void;
+  onRecrawl: () => void;
+  recrawling: boolean;
 }) {
-  if (!status) {
-    return null;
+  const delta = useCheckedDelta(status);
+  const [copied, setCopied] = useState(false);
+
+  // reports are public by id, so the page url is the share link
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard blocked; the address bar still has the link
+    }
   }
-  const { discovered, checked, healthy, rotten, status: state, url } = status;
-  const pending = Math.max(0, discovered - checked);
+
+  if (!status) {
+    return <ProgressSkeleton />;
+  }
+  const { discovered, checked, healthy, rotten, status: state, url, created_at } = status;
   const isDone = isTerminalStatus(state);
-  const pct = discovered > 0 ? (checked / discovered) * 100 : 0;
-  const seg = (n: number) => (discovered > 0 ? (n / discovered) * 100 : 0);
+  // keeps a bar so an unfinished crawl's gap stays visible
+  const shortOfDone = isDone && checked < discovered;
 
   return (
     <section>
-      <SectionHeader
-        number="01"
-        title={state === 'stopped' ? 'Crawl stopped' : isDone ? 'Crawl complete' : 'Crawling'}
-        right={
-          <div className="flex items-center gap-3">
-            {url && <span className="hidden text-xs italic text-ink-300 sm:inline">{url}</span>}
-            {onDelete && (
-              <button
-                onClick={onDelete}
-                aria-label="Delete crawl"
-                title="Delete crawl"
-                className="text-ink-400 transition hover:text-rose-300"
-              >
-                <Trash2 className="h-4 w-4" strokeWidth={2} />
-              </button>
-            )}
-          </div>
-        }
-      />
-
-      <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
-        {/* big featured progress */}
-        <div className="lg:col-span-8">
-          <div className="flex items-baseline justify-between">
-            <div className="flex items-baseline gap-3">
-              <span className="display text-7xl font-light tabular-nums sm:text-8xl">
-                {Math.round(pct)}
-              </span>
-              <span className="display text-3xl font-light text-ink-300">%</span>
-            </div>
-            <StatusBadge status={state} pulse={!isDone} />
-          </div>
-
-          <div className="mt-6 flex h-1 w-full overflow-hidden bg-ink-700">
-            <div
-              className="h-full bg-emerald-400 transition-all"
-              style={{ width: `${seg(healthy)}%` }}
-            />
-            <div
-              className="h-full bg-rose-500 transition-all"
-              style={{ width: `${seg(rotten)}%` }}
-            />
-            <div
-              className="h-full bg-ink-500 transition-all"
-              style={{ width: `${seg(pending)}%` }}
-            />
-          </div>
-          <div className="mt-3 flex justify-between font-mono text-[10px] uppercase tracking-widest text-ink-300">
-            <span>
-              {checked} <span className="text-ink-400">/</span> {discovered} checked
+      <div className="gutter flex flex-wrap items-start justify-between gap-3 py-8 sm:pt-10">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="page-title truncate">{hostOf(url)}</h1>
+            {/* announces the change when the crawl finishes or stops */}
+            <span role="status" className="flex">
+              <JobStatusChip status={state} />
             </span>
-            <span>{isDone ? 'done' : `${pending} in flight`}</span>
+          </div>
+          <p className="text-ink-3 mt-1 text-sm tabular-nums">
+            {isDone && (
+              <>
+                Checked {checked.toLocaleString()} of the {discovered.toLocaleString()}{' '}
+                {discovered === 1 ? 'page' : 'pages'} found.{' '}
+              </>
+            )}
+            Started {formatDate(created_at, true)}.
+          </p>
+        </div>
+        {/* offsets the buttons' padding so icons line up with the content edges */}
+        <div className="-mx-2 flex flex-wrap items-center gap-1">
+          {isDone && (
+            <Button variant="ghost" size="quiet" onClick={onRecrawl} disabled={recrawling}>
+              {recrawling ? <Spinner aria-hidden="true" /> : <RotateCw />}
+              Crawl again
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="quiet"
+            onClick={copyLink}
+            aria-live="polite"
+            title="Anyone with the link can view this report"
+          >
+            {copied ? <Check className="text-ok-fg" strokeWidth={2.25} /> : <Link />}
+            {copied ? 'Link copied' : 'Copy link'}
+          </Button>
+          <Button variant="ghost" size="quiet" asChild>
+            <a href={url} target="_blank" rel="noreferrer">
+              <ExternalLink />
+              Open site
+            </a>
+          </Button>
+          {onDelete && (
+            <Button
+              variant="ghost"
+              size="quiet"
+              onClick={onDelete}
+              className="hover:bg-bad-bg hover:text-bad-fg"
+            >
+              <Trash2 />
+              Delete
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {shortOfDone && (
+        <div className="gutter -mt-4 pb-8">
+          <Bar discovered={discovered} healthy={healthy} rotten={rotten} />
+        </div>
+      )}
+
+      {/* without interpolate-size support it fades instead of folding */}
+      <div
+        className={`panel transition-[height,opacity,display] transition-discrete duration-400 ease-in-out [interpolate-size:allow-keywords] ${isDone ? 'hidden h-0 overflow-hidden opacity-0' : ''}`}
+      >
+        <div className="gutter py-5">
+          <div className="flex items-baseline justify-between gap-4">
+            <p className="text-body font-medium">
+              Checking <span className="tabular-nums">{checked.toLocaleString()}</span>
+              <span className="text-ink-3"> of </span>
+              <span className="tabular-nums">{discovered.toLocaleString()}</span>{' '}
+              {discovered === 1 ? 'page' : 'pages'} found
+            </p>
+            <span className="text-ink-2 font-mono text-sm">{pct(checked, discovered)}%</span>
+          </div>
+          <div className="mt-3">
+            <Bar discovered={discovered} healthy={healthy} rotten={rotten} />
           </div>
         </div>
-
-        {/* stat list */}
-        <div className="lg:col-span-4">
-          <dl className="divide-y divide-ink-500/60 border-y border-ink-500/60">
-            <StatRow label="discovered" value={discovered} />
-            <StatRow label="checked" value={checked} />
-            <StatRow label="healthy" value={healthy} tone="ok" />
-            <StatRow label="rotten" value={rotten} tone="bad" />
-          </dl>
-        </div>
+        <dl className="[&>div]:gutter grid grid-cols-2 border-t sm:grid-cols-4 [&>div]:py-4 sm:[&>div:not(:last-child)]:border-r max-sm:[&>div:nth-child(-n+2)]:border-b [&>div:nth-child(odd)]:border-r">
+          <Count label="Found" value={discovered} />
+          <Count
+            label="Checked"
+            value={checked}
+            note={delta > 0 ? `+${delta.toLocaleString()}` : undefined}
+          />
+          <Count label="Healthy" value={healthy} dot="bg-ok-dot" />
+          <Count label="Broken" value={rotten} dot="bg-bad-dot" tone="text-bad-fg" />
+        </dl>
+        <p className="text-ink-3 text-label gutter border-t py-3">
+          Progress updates live, and the full report appears when the crawl finishes.
+        </p>
       </div>
     </section>
   );
 }
 
-function StatRow({ label, value, tone }: { label: string; value: number; tone?: Tone }) {
+function Bar({
+  discovered,
+  healthy,
+  rotten,
+}: {
+  discovered: number;
+  healthy: number;
+  rotten: number;
+}) {
+  const seg = (n: number) => (discovered > 0 ? (n / discovered) * 100 : 0);
   return (
-    <div className="flex items-baseline justify-between py-4">
-      <dt className="font-mono text-[10px] uppercase tracking-widest text-ink-300">{label}</dt>
-      <dd className={`display text-3xl font-light tabular-nums ${toneColour(tone)}`}>{value}</dd>
+    <div
+      className="bg-sunken ring-line flex h-2.5 gap-0.5 overflow-hidden rounded-full ring-1 forced-color-adjust-none ring-inset"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={pct(healthy + rotten, discovered)}
+      aria-label="Crawl progress"
+    >
+      <div
+        className="bg-ok-dot ease-out-expo h-full transition-[width] duration-700"
+        style={{ width: `${seg(healthy)}%` }}
+      />
+      <div
+        className="bg-bad-dot ease-out-expo h-full transition-[width] duration-700"
+        style={{ width: `${seg(rotten)}%` }}
+      />
     </div>
   );
 }
 
-function StatusBadge({ status, pulse }: { status: string; pulse: boolean }) {
-  const tone: Record<string, string> = {
-    pending: 'border-ink-400 text-ink-300',
-    crawling: 'border-accent/60 text-accent',
-    complete: 'border-emerald-400/60 text-emerald-300',
-    failed: 'border-rose-400/60 text-rose-300',
-    stopped: 'border-ink-400 text-ink-200',
-  };
+// keyed on the status object, which every poll replaces, so a stalled crawl drops to 0
+function useCheckedDelta(status: Status | null): number {
+  const prev = useRef<Status | null>(null);
+  const [delta, setDelta] = useState(0);
+  useEffect(() => {
+    if (!status) {
+      return;
+    }
+    // skips the first poll, which would read as "+everything"
+    const last = prev.current;
+    const live = last !== null && !isTerminalStatus(status.status);
+    setDelta(live ? Math.max(0, status.checked - last.checked) : 0);
+    prev.current = status;
+  }, [status]);
+  return delta;
+}
+
+function Count({
+  label,
+  value,
+  dot,
+  tone = 'text-ink',
+  note,
+}: {
+  label: string;
+  value: number;
+  dot?: string;
+  tone?: string;
+  note?: string;
+}) {
   return (
-    <span className={`chip ${tone[status] ?? tone.pending}`}>
-      {pulse && (
-        <span className="relative flex h-1.5 w-1.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-60" />
-          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
+    <div>
+      <dt className="text-ink-3 text-label flex items-center gap-1.5 font-medium">
+        {dot && <span className={`size-2 shrink-0 rounded-full forced-color-adjust-none ${dot}`} />}
+        {label}
+      </dt>
+      <dd className="mt-0.5 flex items-baseline gap-2">
+        {/* key on value so each change replays the tick */}
+        <span
+          key={value}
+          className={`animate-tick text-headline tracking-headline inline-block font-semibold tabular-nums ${tone}`}
+        >
+          {value.toLocaleString()}
         </span>
-      )}
-      <span className="font-mono uppercase tracking-widest">{status}</span>
-    </span>
+        {note && <span className="text-ok-fg text-code font-mono font-medium">{note}</span>}
+      </dd>
+    </div>
+  );
+}
+
+function ProgressSkeleton() {
+  return (
+    <section aria-busy="true" aria-label="Loading crawl">
+      <div className="gutter pt-10 pb-8">
+        <div className="rounded-control bg-line h-10 w-64 animate-pulse" />
+      </div>
+      <div className="panel h-42 animate-pulse" />
+    </section>
   );
 }

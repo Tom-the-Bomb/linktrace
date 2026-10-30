@@ -1,4 +1,3 @@
-// Package archive queries the Wayback Machine for the closest snapshot of a (usually rotten) URL.
 package archive
 
 import (
@@ -15,19 +14,13 @@ const (
 	maxBodyBytes = 1 << 20
 )
 
-// shared across lookups so connections to archive.org are pooled; its own timeout backstops the
-// per-request context.
 var client = httpx.NewClient(fetchTimeout, true)
 
-// queries the Wayback "available" API for the closest snapshot of rawURL.
-// Returns the snapshot URL, or "" if none exists.
+// returns "" with a nil error when no snapshot exists.
 func Available(rawURL string) (string, error) {
 	api := "https://archive.org/wayback/available?url=" + url.QueryEscape(rawURL)
 
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
-	defer cancel()
-
-	body, _, err := httpx.Fetch(ctx, client, api, maxBodyBytes)
+	body, _, err := httpx.Fetch(context.Background(), client, api, maxBodyBytes)
 	if err != nil {
 		return "", err
 	}

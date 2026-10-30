@@ -3,7 +3,6 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import * as api from '../api';
 import { AuthContext, type AuthState } from './AuthContext';
 
-// On mount, restores session from cookie via getMe; null means anonymous
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<api.Me | null>(null);
   const [loading, setLoading] = useState(true);
@@ -11,12 +10,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     api
       .getMe()
-      .then(setUser)
-      .catch(() => setUser(null))
+      .then((me) => setUser((cur) => cur ?? me))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  // memoised: a fresh object here re-renders every consumer on any parent render
   const value = useMemo<AuthState>(
     () => ({
       user,

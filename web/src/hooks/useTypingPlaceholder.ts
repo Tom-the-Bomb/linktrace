@@ -2,33 +2,28 @@ import { useEffect, useState } from 'react';
 
 const DEMO_DOMAINS = ['example.com', 'vercel.com', 'github.com', 'linear.app', 'nytimes.com'];
 
-// animates a rotating type-and-delete demo domain for the hero placeholder; active=false freezes it
 export function useTypingPlaceholder(active: boolean): string {
-  // pre-typed so first paint shows a domain, not an empty field
   const [text, setText] = useState(DEMO_DOMAINS[0]);
   useEffect(() => {
-    if (!active) {
+    if (!active || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       return;
     }
-    let cancelled = false;
     let domainIdx = 0;
     let charIdx = DEMO_DOMAINS[0].length;
     let phase: 'typing' | 'holding' | 'deleting' = 'holding';
     setText(DEMO_DOMAINS[0]);
 
+    let id: number;
     const tick = () => {
-      if (cancelled) {
-        return;
-      }
       const word = DEMO_DOMAINS[domainIdx];
-      let delay = 130; // typing speed
+      let delay = 130;
       if (phase === 'typing') {
         charIdx++;
         if (charIdx >= word.length) {
           phase = 'holding';
         }
       } else if (phase === 'holding') {
-        delay = 2800; // pause at full word
+        delay = 2800;
         phase = 'deleting';
       } else {
         charIdx--;
@@ -36,18 +31,15 @@ export function useTypingPlaceholder(active: boolean): string {
         if (charIdx <= 0) {
           domainIdx = (domainIdx + 1) % DEMO_DOMAINS.length;
           phase = 'typing';
-          delay = 2500; // pause when empty
+          delay = 2500;
         }
       }
       setText(word.slice(0, charIdx));
-      setTimeout(tick, delay);
+      id = window.setTimeout(tick, delay);
     };
 
-    const id = setTimeout(tick, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(id);
-    };
+    id = window.setTimeout(tick, 0);
+    return () => clearTimeout(id);
   }, [active]);
 
   return text;

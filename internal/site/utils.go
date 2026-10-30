@@ -2,71 +2,38 @@ package site
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/xml"
+	"errors"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Tom-the-Bomb/linktrace/internal/httpx"
+	"github.com/Tom-the-Bomb/linktrace/internal/robots"
 )
 
 const (
-	fetchTimeout    = 10 * time.Second // robots/sitemap GETs
-	probeTimeout    = 8 * time.Second  // HTTPS/www redirect probes
-	maxSitemapBytes = 5 << 20          // sitemaps can be big
+	// shared by robots and sitemap fetches so a huge sitemap index can't stall crawl creation
+	fetchDeadline   = 20 * time.Second
+	fetchTimeout    = 10 * time.Second
+	probeTimeout    = 8 * time.Second
+	maxSitemapBytes = 5 << 20
 )
 
-// reads /robots.txt, honouring only groups that target * or our UA.
-func fetchRobots(root *url.URL) (found, disallowAll bool, crawlDelay int, sitemaps []string) {
-	body, status := get(root.Scheme + "://" + root.Host + "/robots.txt")
+func fetchRobots(ctx context.Context, root *url.URL) (f robots.File, found bool) {
+	body, status := get(ctx, root.Scheme+"://"+root.Host+"/robots.txt")
+	if status >= 500 {
+		// RFC 9309: a robots.txt that errors means the whole site is off limits
+		return robots.File{Rules: []robots.Rule{{Path: "/"}}}, false
+	}
 	if status != http.StatusOK || body == "" {
-		return false, false, 0, nil
+		return robots.File{}, false
 	}
-	found = true
-	// applies tracks whether the current group targets us. Consecutive User-agent lines form one
-	// group, so within a run we OR rather than overwrite; the first rule line ends the run.
-	applies, inUARun := false, false
-	for _, raw := range strings.Split(body, "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, val, ok := cut(line)
-		if !ok {
-			continue
-		}
-		if key != "user-agent" && key != "sitemap" {
-			inUARun = false
-		}
-		switch key {
-		case "user-agent":
-			targetsUs := val == "*" || strings.Contains(strings.ToLower(val), "linktrace")
-			if inUARun {
-				applies = applies || targetsUs
-			} else {
-				applies, inUARun = targetsUs, true
-			}
-		case "disallow":
-			if applies && val == "/" {
-				disallowAll = true
-			}
-		case "crawl-delay":
-			if applies {
-				if n, err := strconv.Atoi(val); err == nil {
-					crawlDelay = n
-				}
-			}
-		case "sitemap":
-			sitemaps = append(sitemaps, val) // global directive, applies regardless of UA group
-		}
-	}
-	return found, disallowAll, crawlDelay, sitemaps
+	return robots.Parse(body, "linktrace"), true
 }
 
-// sitemap.xml comes in two shapes: a <urlset> of <url><loc>, or a <sitemapindex>
-// pointing at more sitemaps. We recurse one level for an index.
 type sitemapXML struct {
 	URLs []struct {
 		Loc string `xml:"loc"`
@@ -76,86 +43,79 @@ type sitemapXML struct {
 	} `xml:"sitemap"`
 }
 
-// downloads and parses a sitemap, recursing one level into a sitemap index,
-// returning whether it was found and the (capped) list of page URLs.
-func fetchSitemap(sitemapURL string, depth int) (bool, []string) {
-	body, status := get(sitemapURL)
+func fetchSitemap(ctx context.Context, sitemapURL string, depth int) ([]string, bool) {
+	body, status := get(ctx, sitemapURL)
 	if status != http.StatusOK || body == "" {
-		return false, nil
+		return nil, false
 	}
 	var doc sitemapXML
-	if err := xml.Unmarshal([]byte(body), &doc); err != nil {
-		return false, nil
+	// a sitemap cut off at maxSitemapBytes still yields the entries before the cut
+	if err := xml.Unmarshal([]byte(body), &doc); err != nil && len(doc.URLs)+len(doc.Sitemaps) == 0 {
+		return nil, false
 	}
 
 	var urls []string
 	for _, u := range doc.URLs {
-		if loc := strings.TrimSpace(u.Loc); loc != "" {
+		if loc := strings.TrimSpace(u.Loc); isWebURL(loc) {
 			urls = append(urls, loc)
 			if len(urls) >= maxSitemapURLs {
-				return true, urls
+				return urls, true
 			}
 		}
 	}
-	// sitemap INDEX: recurse one level
-	if depth == 0 && len(doc.Sitemaps) > 0 {
+	if depth == 0 {
 		for _, child := range doc.Sitemaps {
+			if ctx.Err() != nil {
+				break
+			}
 			if loc := strings.TrimSpace(child.Loc); loc != "" {
-				_, more := fetchSitemap(loc, depth+1)
+				more, _ := fetchSitemap(ctx, loc, depth+1)
 				for _, u := range more {
 					urls = append(urls, u)
 					if len(urls) >= maxSitemapURLs {
-						return true, urls
+						return urls, true
 					}
 				}
 			}
 		}
 	}
-	return true, urls
+	return urls, true
 }
 
-// verifies the site serves HTTPS with a valid cert and redirects HTTP to HTTPS.
 func checkHTTPS(host string) (isHTTPS, httpsRedirect, certValid bool) {
 	noFollow := httpx.NewClient(probeTimeout, false)
 
-	// HTTP -> HTTPS redirect check
-	if resp, err := noFollow.Get("http://" + host); err == nil {
+	if resp, err := httpx.Get(noFollow, "http://"+host); err == nil {
 		defer resp.Body.Close()
 		if loc := resp.Header.Get("Location"); strings.HasPrefix(loc, "https://") {
 			httpsRedirect = true
 		}
 	}
 
-	// Go verifies the chain and hostname during the handshake, so reaching here means the cert
-	// is valid. A bad cert and an unreachable host both leave these false.
-	if resp, err := httpx.NewClient(probeTimeout, true).Get("https://" + host); err == nil {
+	resp, err := httpx.Get(httpx.NewClient(probeTimeout, true), "https://"+host)
+	if err == nil {
 		defer resp.Body.Close()
-		isHTTPS = true
-		certValid = true
 	}
-	return
+	var verifyErr *tls.CertificateVerificationError
+	certValid = err == nil
+	return certValid || errors.As(err, &verifyErr), httpsRedirect, certValid
 }
 
-// determines which form the site canonicalizes to.
-// "www" / "apex" means proper canonicalization; "both" means duplicate-content risk.
 func checkWWW(host string) string {
 	apex := strings.TrimPrefix(host, "www.")
 	wwwHost := "www." + apex
 
 	noFollow := httpx.NewClient(probeTimeout, false)
 
-	// land reports the host a form settles on, and whether it got there by redirecting. Both
-	// facts are needed: a form that redirects elsewhere is not canonical, while one that serves
-	// itself is — collapsing them to a bare host made every apex->www site look like "both".
 	land := func(rawURL, self string) (dest string, redirected bool) {
-		resp, err := noFollow.Get(rawURL)
+		resp, err := httpx.Get(noFollow, rawURL)
 		if err != nil {
 			return "", false
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
-			// only a cross-host redirect says where the canonical form lives; a relative or
-			// same-host Location is internal routing, so this form still serves itself
+			// only a cross-host redirect names the canonical form; a relative or same-host Location
+			// is internal routing
 			if loc, lerr := url.Parse(resp.Header.Get("Location")); lerr == nil && loc.Host != "" {
 				if h := strings.ToLower(loc.Host); h != self {
 					return h, true
@@ -171,11 +131,17 @@ func checkWWW(host string) string {
 
 	wwwDest, wwwRedirected := land("https://"+wwwHost, wwwHost)
 	apexDest, apexRedirected := land("https://"+apex, apex)
+	// a host with no www (or apex) record has nothing to disagree with
+	if wwwDest == "" {
+		wwwDest = apexDest
+	}
+	if apexDest == "" {
+		apexDest = wwwDest
+	}
 
 	switch {
 	case wwwDest == "" || apexDest == "":
 		return "inconsistent"
-	// both forms converge on one host: that host is the canonical form
 	case wwwDest == apexDest:
 		if wwwDest == wwwHost {
 			return "www"
@@ -183,8 +149,7 @@ func checkWWW(host string) string {
 		if wwwDest == apex {
 			return "apex"
 		}
-		return "inconsistent" // converge somewhere off-domain
-	// neither redirects, so each serves its own duplicate copy
+		return "inconsistent"
 	case !wwwRedirected && !apexRedirected:
 		return "both"
 	default:
@@ -192,22 +157,19 @@ func checkWWW(host string) string {
 	}
 }
 
-// fetches a URL (robots/sitemap) and returns its body and status, or ("", 0) on error.
-func get(rawURL string) (string, int) {
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+// has no timeout: the ctx in get bounds each fetch.
+var fetchClient = httpx.NewClient(0, true)
+
+func isWebURL(s string) bool {
+	return strings.HasPrefix(s, "https://") || strings.HasPrefix(s, "http://")
+}
+
+func get(ctx context.Context, rawURL string) (string, int) {
+	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
-	body, status, err := httpx.Fetch(ctx, http.DefaultClient, rawURL, maxSitemapBytes)
+	body, status, err := httpx.Fetch(ctx, fetchClient, rawURL, maxSitemapBytes)
 	if err != nil {
 		return "", 0
 	}
 	return string(body), status
-}
-
-// splits "Key: value" on the first ':'. Lowercases the key, trims both sides.
-func cut(line string) (key, val string, ok bool) {
-	i := strings.Index(line, ":")
-	if i < 0 {
-		return "", "", false
-	}
-	return strings.ToLower(strings.TrimSpace(line[:i])), strings.TrimSpace(line[i+1:]), true
 }

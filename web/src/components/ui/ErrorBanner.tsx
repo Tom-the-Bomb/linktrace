@@ -1,16 +1,18 @@
+import { CircleX } from 'lucide-react';
+
 interface Props {
   children: React.ReactNode;
-  // per-site padding/margin tweaks
   className?: string;
 }
 
-// rose left-rule error banner
 export function ErrorBanner({ children, className = '' }: Props) {
   return (
     <div
-      className={`border-l-2 border-rose-500 bg-rose-500/5 py-3 font-mono text-xs text-rose-200 ${className}`}
+      role="alert"
+      className={`rounded-control bg-bad-bg text-bad-fg flex items-start gap-2.5 px-4 py-3 text-sm font-medium ${className}`}
     >
-      {children}
+      <CircleX className="mt-0.5 size-4 shrink-0" strokeWidth={2.25} />
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }

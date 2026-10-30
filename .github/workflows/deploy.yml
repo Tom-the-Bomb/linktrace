@@ -1,6 +1,5 @@
 name: Deploy
 
-# Redeploy to the DigitalOcean droplet: SSH in, pull, rebuild the prod stack.
 on:
   push:
     branches: [main]
@@ -20,8 +19,6 @@ jobs:
           host: ${{ secrets.DROPLET_HOST }}
           username: ${{ secrets.DROPLET_USER }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
-          port: 22
-          script_stop: true # abort on the first failing command
           script: |
             set -euo pipefail
             cd linktrace

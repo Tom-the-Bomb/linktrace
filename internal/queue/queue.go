@@ -1,53 +1,42 @@
-// Package queue owns the RabbitMQ topology and typed publish/consume helpers: a work queue
-// with a dead-letter exchange, plus a results fanout bound to per-consumer queues (report,
-// archive, aggregate). The topology declaration lives in utils.go.
 package queue
 
 import (
-	"context"
 	"encoding/json"
+	"log"
 	"strconv"
-	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+
+	"github.com/Tom-the-Bomb/linktrace/internal/store"
 )
 
 const (
-	WorkQueuePrefix = "pages" // shard lanes are pages.0 .. pages.<ShardCount-1>
+	WorkQueuePrefix = "pages"
 	DeadFanout      = "pages_dlx"
 	DeadQueue       = "pages_dead"
 	ResultsEx       = "page_checked"
 	QReport         = "q.report"
 	QArchive        = "q.archive"
-	QAggregate      = "q.aggregate"
 )
 
-// ShardQueue is the queue name for work-queue lane i.
 func ShardQueue(i int) string { return WorkQueuePrefix + "." + strconv.Itoa(i) }
-
-// publishTimeout bounds each publish's broker round-trip.
-const publishTimeout = 5 * time.Second
 
 type PageJob struct {
 	JobID      string `json:"job_id"`
 	URL        string `json:"url"`
 	Depth      int    `json:"depth"`
 	RetryCount int    `json:"retry_count"`
-	Shard      int    `json:"shard"` // work-queue lane this job is pinned to
-	// CrawlDelay carries the site's robots.txt Crawl-delay (seconds, 0 = unset) so workers can
-	// throttle to it. Travels on the message rather than being re-read from Redis per page.
-	CrawlDelay int `json:"crawl_delay,omitempty"`
+	Shard      int    `json:"shard"`
+	// crawl-wide settings ride every message so workers needn't re-read them per page
+	CrawlDelay int    `json:"crawl_delay,omitempty"` // seconds
+	MaxPages   int    `json:"max_pages,omitempty"`
+	Site       string `json:"site,omitempty"` // crawler.SiteKey of the seed
 }
 
-// JSON-encoded result + SEO fields avoid importing store/seo here (would cycle)
 type PageChecked struct {
-	JobID   string          `json:"job_id"`
-	URL     string          `json:"url"`
-	Depth   int             `json:"depth"`
-	IsAlive bool            `json:"is_alive"`
-	Result  json.RawMessage `json:"result"`
-	SEO     json.RawMessage `json:"seo"`
-	Links   []string        `json:"links,omitempty"` // outbound internal links discovered on this page
+	store.PageResult `json:"result"`
+	SEO              *store.SEOAudit `json:"seo"` // nil unless the page is healthy HTML
+	Links            []string        `json:"links,omitempty"`
 }
 
 type Queue struct {
@@ -56,11 +45,7 @@ type Queue struct {
 	shards int
 }
 
-// dials RabbitMQ, opens a channel, and declares the topology (shards work-queue lanes).
 func New(url string, shards int) (*Queue, error) {
-	if shards < 1 {
-		shards = 1
-	}
 	conn, err := amqp.Dial(url)
 	if err != nil {
 		return nil, err
@@ -75,24 +60,28 @@ func New(url string, shards int) (*Queue, error) {
 		conn.Close()
 		return nil, err
 	}
+	go exitOnClose(conn.NotifyClose(make(chan *amqp.Error, 1)))
+	go exitOnClose(ch.NotifyClose(make(chan *amqp.Error, 1)))
 	return q, nil
 }
 
-// closes the connection (and its channels).
+// amqp.Dial doesn't reconnect, so a lost connection or channel exits and Docker restarts the process
+func exitOnClose(closed chan *amqp.Error) {
+	if err := <-closed; err != nil {
+		log.Fatalf("[queue] %v", err)
+	}
+}
+
 func (q *Queue) Close() error {
 	return q.conn.Close()
 }
 
-// jSON-marshals v and sends it to exchange/key as a persistent message.
 func (q *Queue) publish(exchange, key string, v any) error {
 	body, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), publishTimeout)
-	defer cancel()
-
-	return q.ch.PublishWithContext(ctx,
+	return q.ch.Publish(
 		exchange, key, false, false,
 		amqp.Publishing{
 			ContentType:  "application/json",
@@ -102,23 +91,16 @@ func (q *Queue) publish(exchange, key string, v any) error {
 	)
 }
 
-// enqueues a page onto its job's shard lane (pages.<shard>). Default exchange ("") +
-// routing key = queue name routes straight to that queue.
+// uses the default exchange, which routes by queue name.
 func (q *Queue) PublishPageJob(job PageJob) error {
-	shard := job.Shard
-	if shard < 0 || shard >= q.shards {
-		shard = 0
-	}
-	return q.publish("", ShardQueue(shard), job)
+	return q.publish("", ShardQueue(job.Shard), job)
 }
 
-// fans a checked-page result out to all result consumers (fanout ignores the key).
 func (q *Queue) PublishResult(r PageChecked) error {
 	return q.publish(ResultsEx, "", r)
 }
 
-// opens its own channel (per concurrency rule) with prefetch set for backpressure.
-// Manual ack throughout: caller acks via d.Ack(false) / d.Nack(false, requeue).
+// uses manual ack: the caller must Ack or Nack every delivery.
 func (q *Queue) Consume(queueName string, prefetch int) (<-chan amqp.Delivery, *amqp.Channel, error) {
 	ch, err := q.conn.Channel()
 	if err != nil {
@@ -141,5 +123,6 @@ func (q *Queue) Consume(queueName string, prefetch int) (<-chan amqp.Delivery, *
 		ch.Close()
 		return nil, nil, err
 	}
+	go exitOnClose(ch.NotifyClose(make(chan *amqp.Error, 1)))
 	return deliveries, ch, nil
 }
