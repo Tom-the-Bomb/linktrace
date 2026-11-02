@@ -1,10 +1,9 @@
 <div align="center">
   <img src="web/public/icon-round.png" alt="LinkTrace" width="88" />
   <h1>Linktrace</h1>
-  <p>A distributed site auditor</p>
 </div>
 
-Give it a domain and it crawls every page reachable from the homepage, then reports:
+A distributed site auditor. Enter a domain and it crawls every internal page reachable from the homepage, reporting:
 
 - broken links and why they broke (DNS, timeout, SSL, soft 404, 4xx/5xx, redirect loop, etc.)
 - an SEO score and a list of issues for every HTML page
@@ -84,7 +83,7 @@ Rerun the same command to redeploy (append `api`, `worker` or `caddy` to rebuild
 | `SHARD_COUNT`           | 5       | queue lanes (each crawl uses one, so a large crawl cannot block the others). Must match on the api and worker |
 | `ALLOW_PRIVATE_TARGETS` | false   | allows crawling localhost and LAN sites. Dev only, otherwise crawls can reach the server's own Redis and API  |
 
-Connection settings: `MYSQL_DSN`, `REDIS_ADDR`, `RABBIT_URL`, `HTTP_ADDR`, `COOKIE_SECURE`. Defaults point at the dev containers.
+Connection settings: `MYSQL_DSN`, `REDIS_ADDR`, `RABBIT_URL`, `HTTP_ADDR`, `COOKIE_SECURE` (Defaults point at the dev containers).
 
 ## Abuse limits
 
