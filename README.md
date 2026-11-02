@@ -1,14 +1,10 @@
 <div align="center">
   <img src="web/public/icon-round.png" alt="LinkTrace" width="88" />
-
-# LinkTrace
-
-**Healthy links. Higher rankings.**
-
+  <h1>Linktrace</h1>
+  <p>A distributed site auditor</p>
 </div>
 
-An open-source distributed site auditor. Give it a domain and it crawls outward from the homepage, following every internal
-link and auditing each page. It reports:
+Give it a domain and it crawls every page it can reach from the homepage. It reports:
 
 - broken links and why they broke: DNS, timeout, SSL, soft 404, 4xx/5xx, redirect loop and so on
 - an SEO score and list of issues for every HTML page
@@ -16,19 +12,19 @@ link and auditing each page. It reports:
 
 ## How it works
 
-- `cmd/api`: HTTP server that creates jobs and serves reports (orchestrator).
-- `cmd/worker`: the crawler, which fetches, classifies and audits each page and extracts its links. Each process runs a pool of goroutines; scale out by running more processes.
+- `cmd/api`: the HTTP server. Starts crawls and serves reports.
+- `cmd/worker`: the crawler. Fetches each page, audits it and queues its links. Run more workers to scale out.
 
 - RabbitMQ delivers pages to the workers and carries results back.
 - Redis holds live crawl state (progress counters, the seen set, per-domain rate limits) and sessions.
 - MySQL stores jobs, pages, results, the site graph and users.
 - Caddy serves `web/`, proxies `/api`, and does HTTPS.
 
-Frontend: React 19 + Tailwind 4, with UI primitives from [shadcn/ui](https://ui.shadcn.com). `/jobs/<id>` polls for live updates until the crawl finishes.
+Frontend: React 19 + Tailwind 4, with UI primitives from [shadcn/ui](https://ui.shadcn.com).
 
 ## API
 
-The site reaches these under `/api`. Everything is JSON.
+All under `/api`, all JSON.
 
 ```
 POST   /check                  start a crawl
@@ -58,7 +54,7 @@ cp .env.example .env
 npm --prefix web install
 
 make dev           # containers, then API :8080, worker and web :5173 in one terminal
-make dev LAN=1     # same, but the site is also reachable from your phone on the same network
+make dev LAN=1     # expose port
 ```
 
 ## Deploying
@@ -72,21 +68,26 @@ cp .env.production.example .env.production   # DOMAIN, ACME_EMAIL, passwords
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-Redeploy with the same command; append `api`, `worker` or `caddy` to rebuild just one.
-`.github/workflows/deploy.yml` redeploys over SSH on every push to `main` (needs the `DROPLET_*` secrets).
+Run it again to redeploy, with `api`, `worker` or `caddy` on the end to rebuild just that one. Pushes to `main` also
+redeploy over SSH ([deploy.yml](.github/workflows/deploy.yml), needs the `DROPLET_*` secrets).
 
 ## Config
 
-Worker limits: `WORKER_COUNT` (100), `MAX_PAGES` (10000), `MAX_DEPTH` (20), `MAX_PER_CATEGORY` (1000), `RATE_PER_MIN` (300 per target site). `ANON_MAX_PAGES` (500) caps crawls started without an account (api only).
+| Variable                | Default | What it does                                                                                                  |
+| ----------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
+| `WORKER_COUNT`          | 100     | fetch goroutines per worker                                                                                   |
+| `MAX_PAGES`             | 10000   | pages per crawl                                                                                               |
+| `ANON_MAX_PAGES`        | 500     | pages per crawl without an account                                                                            |
+| `MAX_DEPTH`             | 20      | clicks away from the homepage                                                                                 |
+| `MAX_PER_CATEGORY`      | 1000    | pages per first path segment, like `/blog`                                                                    |
+| `RATE_PER_MIN`          | 300     | requests per site per minute, shared by all crawls                                                            |
+| `SHARD_COUNT`           | 5       | queue lanes. Each crawl gets one, so a huge crawl can't block the rest. Set it the same on the api and worker |
+| `ALLOW_PRIVATE_TARGETS` | false   | lets you crawl localhost and LAN sites. Dev only, or crawls can reach your own Redis and API                  |
 
-`SHARD_COUNT` (5) is the number of work-queue lanes. Each crawl, however large, uses one lane, so it takes at most 1/`SHARD_COUNT` of the fetch goroutines and can't block other crawls. Set the same value on the api and the worker.
-
-Connections: `MYSQL_DSN`, `REDIS_ADDR`, `RABBIT_URL`, `HTTP_ADDR`, `COOKIE_SECURE`.
-
-`ALLOW_PRIVATE_TARGETS` (false) lets you crawl localhost and LAN sites in dev. Keep it off in production, otherwise a crawl could reach the API, Redis or the host itself.
-
-Defaults point at the dev containers; production values go in `.env.production`.
+Connections: `MYSQL_DSN`, `REDIS_ADDR`, `RABBIT_URL`, `HTTP_ADDR`, `COOKIE_SECURE`. The defaults point at the dev containers.
 
 ## Abuse limits
 
-Crawls without an account are capped at `ANON_MAX_PAGES`, and only one can run per site at a time (starting another just joins it). The crawler identifies itself as `LinkTraceBot` and follows robots.txt, including `Crawl-delay`. Requests are rate limited per IP, and login attempts per account.
+- Without an account, a crawl stops at `ANON_MAX_PAGES`, and a second crawl of the same site joins the first.
+- The crawler calls itself `LinkTraceBot` and follows robots.txt, including `Crawl-delay`.
+- API requests are rate limited per IP, and logins per account.
