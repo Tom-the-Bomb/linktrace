@@ -1,10 +1,9 @@
 <div align="center">
   <img src="web/public/icon-round.png" alt="LinkTrace" width="88" />
   <h1>Linktrace</h1>
-  <p>A distributed site auditor</p>
 </div>
 
-Page audit extensions only check the page you have open. Linktrace checks the whole site in one go, so you can find every broken link and SEO problem, and why it happened, before your visitors do.
+A distributed site auditor. Page audit extensions only check the page you have open. Linktrace checks the whole site in one go, so you can find every broken link and SEO problem, and why it happened, before your visitors do.
 
 ## Architecture
 
@@ -48,7 +47,7 @@ Set these as environment variables or in `.env`.
 | `SHARD_COUNT`           | 5       | queue lanes (each crawl uses one). Must match on the API and worker                 |
 | `ALLOW_PRIVATE_TARGETS` | false   | allows crawling localhost and LAN sites. Dev only, since it disables the SSRF guard |
 
-The connection settings (`MYSQL_DSN`, `REDIS_ADDR`, `RABBIT_URL`, `HTTP_ADDR`, `COOKIE_SECURE`) default to the dev containers.
+Connection settings: `MYSQL_DSN`, `REDIS_ADDR`, `RABBIT_URL`, `HTTP_ADDR`, `COOKIE_SECURE` (Defaults point at the dev containers).
 
 ## Deploying
 
