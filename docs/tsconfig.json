@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "nodenext",
+    "lib": ["esnext", "dom"],
+    "typeRoots": ["../web/node_modules/@types"],
+    "types": ["node"],
+    "paths": {
+      "playwright-core": ["../web/node_modules/playwright-core/index.d.ts"]
+    },
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  }
+}
